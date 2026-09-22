@@ -1,3 +1,7 @@
 {
-  "framework": "nextjs"
+  "routes": [
+    { "src": "/\\.well-known/.*", "dest": "/.well-known/$&" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
 }
