@@ -1,5 +1,0 @@
-{
-  "routes": [
-    { "src": "/\\.well-known/assetlinks\\.json", "dest": "/api/assetlinks" }
-  ]
-}
