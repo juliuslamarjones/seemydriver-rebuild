@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 
 export function middleware(req) {
-  if (req.nextUrl.pathname === '/.well-known/assetlinks.json') {
+  const path = req.nextUrl.pathname;
+  if (
+    path === '/.well-known/assetlinks.json' ||
+    path === '/.well known/assetlinks.json' ||
+    path === '/.well%20known/assetlinks.json'
+  ) {
     const assetlinks = [
       {
         relation: ["delegate_permission/common.handle_all_urls"],
@@ -24,5 +29,9 @@ export function middleware(req) {
 }
 
 export const config = {
-  matcher: '/.well-known/assetlinks.json',
+  matcher: [
+    '/.well-known/assetlinks.json',
+    '/.well known/assetlinks.json',
+    '/.well%20known/assetlinks.json'
+  ],
 };
