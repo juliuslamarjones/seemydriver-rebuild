@@ -17,7 +17,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build && node postbuild.js",
+    "build": "next build",
     "start": "next start"
   },
   "description": "",
