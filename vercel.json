@@ -1,6 +1,6 @@
 {
   "routes": [
-    { "src": "/\\.well-known/.*", "dest": "/.well-known/$&" },
+    { "src": "/\\.well-known/assetlinks.json", "dest": "/api/assetlinks" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
