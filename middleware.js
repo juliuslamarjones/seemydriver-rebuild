@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 
 export function middleware(req) {
-  if (req.nextUrl.pathname === '/.well-known/assetlinks.json') {
+  const { pathname } = req.nextUrl;
+  
+  if (pathname === '/.well-known/assetlinks.json') {
     const assetlinks = [
       {
         relation: ["delegate_permission/common.handle_all_urls"],
@@ -12,16 +14,18 @@ export function middleware(req) {
         }
       }
     ];
-    return new NextResponse(JSON.stringify(assetlinks), {
+    
+    return new NextResponse(JSON.stringify(assetlinks, null, 2), {
       status: 200,
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json; charset=utf-8',
       },
     });
   }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: '/.well-known/assetlinks.json',
+  matcher: '/:path*',
 };
