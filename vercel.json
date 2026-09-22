@@ -1,7 +1,5 @@
 {
-  "routes": [
-    { "src": "/\\.well-known/assetlinks.json", "dest": "/api/assetlinks" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
