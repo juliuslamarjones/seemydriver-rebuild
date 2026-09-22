@@ -1,32 +1,35 @@
 {
-  "name": "seemydriver",
-  "version": "1.0.0",
-  "dependencies": {
-    "@capacitor-community/background-geolocation": "^1.2.26",
-    "@capacitor/android": "^8.5.2",
-    "@capacitor/core": "^8.5.2",
-    "@capacitor/geolocation": "^8.2.2",
-    "@capacitor/ios": "^8.5.2",
-    "firebase-admin": "^11.11.0",
-    "micro": "^10.0.1",
-    "next": "^14.2.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "stripe": "^22.6.1",
-    "twilio": "^4.23.0"
-  },
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
-  },
-  "description": "",
-  "main": "sw.js",
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "module",
-  "devDependencies": {
-    "@capacitor/cli": "^8.5.2"
-  }
+    "name":  "seemydriver",
+    "version":  "1.0.0",
+    "dependencies":  {
+                         "@capacitor-community/background-geolocation":  "^1.2.26",
+                         "@capacitor/android":  "^8.5.2",
+                         "@capacitor/core":  "^8.5.2",
+                         "@capacitor/geolocation":  "^8.2.2",
+                         "@capacitor/ios":  "^8.5.2",
+                         "firebase-admin":  "^11.11.0",
+                         "micro":  "^10.0.1",
+                         "next":  "^14.2.0",
+                         "react":  "^18.2.0",
+                         "react-dom":  "^18.2.0",
+                         "stripe":  "^22.6.1",
+                         "twilio":  "^4.23.0"
+                     },
+    "scripts":  {
+                    "dev":  "next dev",
+                    "build":  "next build",
+                    "start":  "next start",
+                    "postbuild":  "node -e \"const fs=require(\u0027fs\u0027); fs.cpSync(\u0027well-known\u0027, \u0027.next/.well-known\u0027, {recursive: true});\""
+                },
+    "description":  "",
+    "main":  "sw.js",
+    "keywords":  [
+
+                 ],
+    "author":  "",
+    "license":  "ISC",
+    "type":  "module",
+    "devDependencies":  {
+                            "@capacitor/cli":  "^8.5.2"
+                        }
 }
