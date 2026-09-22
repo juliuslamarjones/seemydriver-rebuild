@@ -1,5 +1,8 @@
 {
-  "routes": [
-    { "src": "/.well-known/assetlinks.json", "dest": "/assetlinks.json" }
+  "rewrites": [
+    {
+      "source": "/.well-known/assetlinks.json",
+      "destination": "/assetlinks.json"
+    }
   ]
 }
