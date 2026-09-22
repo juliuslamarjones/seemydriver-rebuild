@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SeeMyDriver - Choose Your Account</title>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+        import { getDatabase, ref, set, update } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI",
+            authDomain: "seemydriver-prod.firebaseapp.com",
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",
+            projectId: "seemydriver-prod",
+            storageBucket: "seemydriver-prod.firebasestorage.app",
+            messagingSenderId: "163660133229",
+            appId: "1:163660133229:web:7e993e6ee37f940a04a064"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+
+        let selectedAccountType = 'solo';
+
+        window.setAccountType = function(type) {
+            selectedAccountType = type;
+            const btnSolo = document.getElementById('btnSolo');
+            const btnFleet = document.getElementById('btnFleet');
+            const businessContainer = document.getElementById('businessContainer');
+            const businessInput = document.getElementById('signupBusiness');
+            const submitBtn = document.getElementById('submitBtn');
+
+            if (type === 'solo') {
+                btnSolo.className = "p-4 rounded-xl border border-yellow-400 bg-yellow-400/5 text-left flex flex-col gap-1 transition";
+                btnFleet.className = "p-4 rounded-xl border border-neutral-800 bg-neutral-900 text-left flex flex-col gap-1 transition hover:border-neutral-700";
+                businessContainer.style.display = 'none';
+                businessInput.removeAttribute('required');
+                submitBtn.textContent = "Launch Solo Driver Portal →";
+            } else {
+                btnFleet.className = "p-4 rounded-xl border border-yellow-400 bg-yellow-400/5 text-left flex flex-col gap-1 transition";
+                btnSolo.className = "p-4 rounded-xl border border-neutral-800 bg-neutral-900 text-left flex flex-col gap-1 transition hover:border-neutral-700";
+                businessContainer.style.display = 'flex';
+                businessInput.setAttribute('required', 'true');
+                submitBtn.textContent = "Launch Fleet Dispatch Portal →";
+            }
+        };
+
+        window.togglePassword = function() {
+            const passwordInput = document.getElementById('signupPassword');
+            passwordInput.type = passwordInput.type === 'password' ? 'text' : 'password';
+        };
+
+        window.handleSignup = function(e) {
+            e.preventDefault();
+            const fullName = document.getElementById('signupName').value.trim();
+            const emailInput = document.getElementById('signupEmail').value.trim().toLowerCase();
+            const password = document.getElementById('signupPassword').value;
+            const businessName = document.getElementById('signupBusiness').value.trim();
+            
+            const emailKey = emailInput.replace(/[.#$\/\[\]]/g, '_');
+            const errorMsg = document.getElementById('errorMsg');
+            const submitBtn = document.getElementById('submitBtn');
+
+            submitBtn.textContent = "Processing Account...";
+            errorMsg.classList.add('hidden');
+
+            createUserWithEmailAndPassword(auth, emailInput, password)
+                .then((userCredential) => {
+                    const user = userCredential.user;
+                    return sendEmailVerification(user).then(() => {
+                        const userData = {
+                            fullName: fullName,
+                            email: emailInput,
+                            accountType: selectedAccountType,
+                            businessName: selectedAccountType === 'fleet' ? businessName : '',
+                            createdAt: Date.now(),
+                            isPaid: false,
+                            isVerified: false
+                        };
+
+                        return set(ref(db, 'users/' + emailKey), userData).then(() => {
+                            alert("Registration successful! We've sent a verification link to your email.");
+                            if (selectedAccountType === 'fleet') {
+                                const sanitizedBus = businessName.replace(/\s+/g, '_');
+                                window.location.href = `fleet.html?business=${encodeURIComponent(sanitizedBus)}`;
+                            } else {
+                                window.location.href = "driver.html";
+                            }
+                        });
+                    });
+                })
+                .catch((error) => {
+                    if (error.code === 'auth/email-already-in-use') {
+                        submitBtn.textContent = "Updating Workspace...";
+                        signInWithEmailAndPassword(auth, emailInput, password)
+                            .then(() => {
+                                const updates = {
+                                    accountType: selectedAccountType,
+                                    businessName: selectedAccountType === 'fleet' ? businessName : ''
+                                };
+                                return update(ref(db, 'users/' + emailKey), updates).then(() => {
+                                    alert(`Workspace updated successfully to ${selectedAccountType.toUpperCase()} mode! Redirecting...`);
+                                    if (selectedAccountType === 'fleet') {
+                                        const sanitizedBus = businessName.replace(/\s+/g, '_');
+                                        window.location.href = `fleet.html?business=${encodeURIComponent(sanitizedBus)}`;
+                                    } else {
+                                        window.location.href = "driver.html";
+                                    }
+                                });
+                            })
+                            .catch((loginError) => {
+                                console.error("Login fallback error:", loginError);
+                                errorMsg.textContent = "This email is already registered. Please enter your correct password to update your workspace, or sign in directly.";
+                                errorMsg.classList.remove('hidden');
+                                submitBtn.textContent = selectedAccountType === 'solo' ? "Launch Solo Driver Portal →" : "Launch Fleet Dispatch Portal →";
+                            });
+                    } else {
+                        console.error("Signup error:", error);
+                        errorMsg.textContent = error.message || "Failed to create account. Please check your details.";
+                        errorMsg.classList.remove('hidden');
+                        submitBtn.textContent = selectedAccountType === 'solo' ? "Launch Solo Driver Portal →" : "Launch Fleet Dispatch Portal →";
+                    }
+                });
+        };
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-black text-white min-h-screen flex flex-col justify-between selection:bg-yellow-400 selection:text-black">
+
+    <header class="w-full max-w-7xl mx-auto px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+            <a href="index.html" class="text-3xl md:text-4xl font-black tracking-tight text-white flex items-center gap-2.5">
+                See<span class="text-yellow-400">My</span>Driver 👀
+            </a>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="text-xs text-neutral-400">Already have an account? <a href="login.html" class="text-yellow-400 font-bold hover:underline">Sign In</a></span>
+        </div>
+    </header>
+
+    <main class="w-full max-w-xl mx-auto px-6 py-12 flex-1 flex flex-col justify-center">
+        <div class="bg-neutral-950 border border-neutral-900 p-8 rounded-2xl flex flex-col gap-6 shadow-2xl">
+            <div class="flex flex-col gap-2 text-center">
+                <div class="w-12 h-12 bg-yellow-400/10 text-yellow-400 text-xl rounded-2xl flex items-center justify-center mx-auto mb-2">🚀</div>
+                <h1 class="text-2xl font-black tracking-tight text-white">Start Your 14-Day Trial</h1>
+                <p class="text-xs text-neutral-400">Select how you plan to use SeeMyDriver to get set up with the right workspace.</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <button type="button" id="btnSolo" onclick="setAccountType('solo')" class="p-4 rounded-xl border border-yellow-400 bg-yellow-400/5 text-left flex flex-col gap-1 transition">
+                    <span class="text-xs font-black text-white flex items-center gap-1.5">🚗 Solo Driver</span>
+                    <span class="text-[10px] text-neutral-400 leading-tight">Broadcast your own live location directly to customers.</span>
+                </button>
+                <button type="button" id="btnFleet" onclick="setAccountType('fleet')" class="p-4 rounded-xl border border-neutral-800 bg-neutral-900 text-left flex flex-col gap-1 transition hover:border-neutral-700">
+                    <span class="text-xs font-black text-white flex items-center gap-1.5">🏢 Fleet / Dispatch</span>
+                    <span class="text-[10px] text-neutral-400 leading-tight">Manage multiple drivers &amp; generate tracking links.</span>
+                </button>
+            </div>
+
+            <form onsubmit="handleSignup(event)" class="flex flex-col gap-4">
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Full Name</label>
+                    <input type="text" id="signupName" required placeholder="Julius Jones" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-yellow-400 transition">
+                </div>
+
+                <div class="flex flex-col gap-1.5" id="businessContainer" style="display: none;">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Business / Service Name</label>
+                    <input type="text" id="signupBusiness" placeholder="Quick Tap Dispatch" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-yellow-400 transition">
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Email Address</label>
+                    <input type="email" id="signupEmail" required placeholder="julius@quicktapsolutions.com" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-yellow-400 transition">
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Password</label>
+                    <div class="relative">
+                        <input type="password" id="signupPassword" required placeholder="••••••••" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 pr-12 text-white text-sm focus:outline-none focus:border-yellow-400 transition">
+                        <button type="button" onclick="togglePassword()" class="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white text-xs font-bold px-2 py-1">
+                            👁️
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 pt-1">
+                    <input type="checkbox" id="termsCheck" required class="w-4 h-4 rounded border-neutral-800 bg-neutral-900 text-yellow-400 focus:ring-0">
+                    <label for="termsCheck" class="text-xs text-neutral-400">I agree to the <a href="#" class="text-yellow-400 hover:underline">Terms of Service</a> and Privacy Policy.</label>
+                </div>
+
+                <div id="errorMsg" class="text-red-500 text-xs text-center hidden"></div>
+
+                <button type="submit" id="submitBtn" class="w-full bg-yellow-400 hover:bg-yellow-300 text-black font-black text-xs uppercase tracking-wider py-4 rounded-xl transition shadow-lg shadow-yellow-400/20 text-center mt-2">
+                    Launch Solo Driver Portal &rarr;
+                </button>
+            </form>
+        </div>
+    </main>
+
+    <footer class="w-full max-w-7xl mx-auto px-8 py-6 text-center text-xs text-neutral-500 border-t border-neutral-900">
+        &copy; 2026 SeeMyDriver. Powered by Quick Tap Solutions.
+    </footer>
+</body>
+</html>

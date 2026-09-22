@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SeeMyDriver - Solo Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+</head>
+<body class="bg-black text-white min-h-screen flex flex-col justify-between overflow-x-hidden selection:bg-yellow-400 selection:text-black">
+
+    <header class="w-full max-w-md mx-auto px-4 py-4 flex items-center justify-between border-b border-neutral-900">
+        <div class="flex items-center gap-2">
+            <span class="text-[22px] font-black tracking-tight text-white">See<span class="text-yellow-400">My</span>Driver</span>
+        </div>
+        <div class="flex items-center gap-1.5 bg-neutral-900 px-3 py-1.5 rounded-full border border-neutral-800">
+            <div id="status-dot" class="w-2 h-2 rounded-full bg-yellow-500"></div>
+            <span class="text-[10px] font-black uppercase tracking-wider text-yellow-500" id="status-text">Ready</span>
+        </div>
+    </header>
+
+    <main class="w-full max-w-md mx-auto px-4 py-4 flex-1 flex flex-col gap-4">
+        
+        <div class="bg-neutral-950 border border-neutral-800 p-4 rounded-3xl flex flex-col gap-3 shadow-xl">
+            <h1 class="text-xs font-black text-yellow-400 uppercase tracking-wider">Solo Driver Dashboard</h1>
+            
+            <div class="flex flex-col gap-1.5">
+                <label class="text-[10px] font-bold text-neutral-400 uppercase">Company ID</label>
+                <input type="text" id="company-id" autocomplete="false" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-400 font-mono" value="QuickTapSolutions">
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+                <label class="text-[10px] font-bold text-neutral-400 uppercase">Driver Name</label>
+                <input type="text" id="driver-name" autocomplete="false" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-400 font-mono" value="Sonny">
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+                <label class="text-[10px] font-bold text-neutral-400 uppercase">Customer Name</label>
+                <input type="text" id="customer-name" autocomplete="nope" name="no-autofill-customer" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-400" placeholder="Enter customer name">
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+                <label class="text-[10px] font-bold text-neutral-400 uppercase">Customer Phone Number (For SMS)</label>
+                <input type="tel" id="customer-phone" autocomplete="nope" name="no-autofill-phone" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-400 font-mono" placeholder="Enter phone number">
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+                <div class="flex justify-between items-center">
+                    <label class="text-[10px] font-bold text-neutral-400 uppercase">Destination Address</label>
+                    <span id="geocode-status" class="text-[9px] text-neutral-500 font-bold">Not geocoded</span>
+                </div>
+                <input type="text" id="destination-address" autocomplete="nope" name="no-autofill-dest" class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-400" placeholder="Enter destination address">
+            </div>
+
+            <div class="flex flex-col gap-1.5 pt-2 border-t border-neutral-900">
+                <label class="text-[10px] font-bold text-neutral-400 uppercase">Customer Tracking Link</label>
+                <input type="text" id="tracking-link" readonly class="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-[11px] text-yellow-400 font-mono select-all">
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 pt-1">
+                <button onclick="copyLink()" class="bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-yellow-400 font-bold text-[11px] py-2.5 rounded-xl transition cursor-pointer text-center">Copy Link 📋</button>
+                <button onclick="sendSMS()" class="bg-yellow-400 hover:bg-yellow-300 text-black font-black text-[11px] py-2.5 rounded-xl transition cursor-pointer text-center shadow-md">Text SMS 📱</button>
+            </div>
+        </div>
+
+        <div class="bg-neutral-950 border border-neutral-800 p-4 rounded-3xl flex flex-col gap-3 shadow-xl">
+            <div class="flex justify-between items-center">
+                <span class="text-xs font-black text-neutral-300 uppercase tracking-wider">GPS Broadcast Control</span>
+                <span id="gps-status" class="text-[10px] text-neutral-500 font-mono">Acquiring GPS...</span>
+            </div>
+            <button id="broadcast-btn" onclick="toggleBroadcast()" class="bg-yellow-400 hover:bg-yellow-300 text-black font-black text-xs py-3 rounded-2xl transition cursor-pointer text-center shadow-lg uppercase tracking-wider">Start Broadcast 🚀</button>
+        </div>
+
+        <div class="bg-neutral-950 border border-neutral-800 p-3 rounded-3xl flex-1 flex flex-col shadow-xl min-h-[250px]">
+            <div id="dashboard-map" class="w-full h-full min-h-[220px] rounded-2xl z-10 border border-neutral-800"></div>
+        </div>
+
+    </main>
+
+    <footer class="w-full max-w-md mx-auto px-4 py-4 text-center text-[10px] text-neutral-600 border-t border-neutral-900">
+        &copy; 2026 SeeMyDriver. Powered by Quick Tap Solutions.
+    </footer>
+
+    <script>
+        const firebaseConfig = { databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com/" };
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+
+        let map, marker = null, watchId = null;
+        let isBroadcasting = false;
+        let lat = null, lng = null;
+        let activeTrackingLink = "";
+
+        const companyInput = document.getElementById('company-id');
+        const driverInput = document.getElementById('driver-name');
+        const customerInput = document.getElementById('customer-name');
+        const phoneInput = document.getElementById('customer-phone');
+        const destInput = document.getElementById('destination-address');
+        const linkInput = document.getElementById('tracking-link');
+
+        function clearCustomerInputs() {
+            customerInput.value = '';
+            phoneInput.value = '';
+            destInput.value = '';
+            document.getElementById('geocode-status').innerText = 'Not geocoded';
+            document.getElementById('geocode-status').className = 'text-[9px] text-neutral-500 font-bold';
+        }
+
+        function initMap() {
+            clearCustomerInputs();
+            setTimeout(clearCustomerInputs, 300);
+
+            map = L.map('dashboard-map', { zoomControl: false }).setView([20, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+            updateTrackingLink();
+
+            if (navigator.geolocation) {
+                document.getElementById('gps-status').innerText = 'Acquiring GPS...';
+                navigator.geolocation.getCurrentPosition((position) => {
+                    lat = position.coords.latitude;
+                    lng = position.coords.longitude;
+                    
+                    marker = L.marker([lat, lng]).addTo(map);
+                    map.setView([lat, lng], 16);
+                    document.getElementById('gps-status').innerText = 'GPS Locked ✅';
+                }, (error) => {
+                    document.getElementById('gps-status').innerText = 'GPS Error: ' + error.message;
+                    alert('Could not get your location. Please ensure location permissions are enabled in your browser.');
+                }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+            } else {
+                alert('Geolocation is not supported by your browser.');
+            }
+        }
+
+        function updateTrackingLink() {
+            if (isBroadcasting && activeTrackingLink) {
+                linkInput.value = activeTrackingLink;
+                return;
+            }
+
+            const company = encodeURIComponent(companyInput.value.trim());
+            const driver = encodeURIComponent(driverInput.value.trim());
+            const client = encodeURIComponent(customerInput.value.trim() || 'Customer');
+            const dest = encodeURIComponent(destInput.value.trim());
+
+            const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+            linkInput.value = `${baseUrl}track.html?driver=${driver}&company=${company}&client=${client}&dest=${dest}`;
+        }
+
+        // Automatically strip spaces from company input to keep database and URLs safe without changing UI
+        companyInput.addEventListener('input', () => {
+            companyInput.value = companyInput.value.replace(/\s+/g, '');
+            if (!isBroadcasting) updateTrackingLink();
+        });
+
+        [driverInput, customerInput, destInput].forEach(input => {
+            input.addEventListener('input', () => {
+                if (!isBroadcasting) updateTrackingLink();
+            });
+        });
+
+        destInput.addEventListener('blur', () => {
+            const query = destInput.value.trim();
+            if(!query) return;
+            document.getElementById('geocode-status').innerText = 'Locating...';
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if(data && data.length > 0) {
+                        document.getElementById('geocode-status').innerText = 'Located ✅';
+                        document.getElementById('geocode-status').className = 'text-[9px] text-green-400 font-bold';
+                    } else {
+                        document.getElementById('geocode-status').innerText = 'Not found ❌';
+                        document.getElementById('geocode-status').className = 'text-[9px] text-red-400 font-bold';
+                    }
+                });
+        });
+
+        function toggleBroadcast() {
+            const btn = document.getElementById('broadcast-btn');
+            const statusDot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+            const gpsStatus = document.getElementById('gps-status');
+
+            const company = companyInput.value.trim();
+            const driver = driverInput.value.trim();
+
+            if (!isBroadcasting) {
+                if (lat === null || lng === null) {
+                    alert('Waiting for GPS lock. Please ensure your location is enabled and try again in a moment.');
+                    return;
+                }
+
+                activeTrackingLink = linkInput.value;
+                isBroadcasting = true;
+                btn.innerText = "Stop Broadcast ⏹️";
+                btn.className = "bg-red-500 hover:bg-red-400 text-white font-black text-xs py-3 rounded-2xl transition cursor-pointer text-center shadow-lg uppercase tracking-wider";
+                statusDot.className = "w-2 h-2 rounded-full bg-green-400 animate-pulse";
+                statusText.innerText = "LIVE ACTIVE";
+                statusText.className = "text-[10px] font-black uppercase tracking-wider text-green-400";
+                gpsStatus.innerText = "Broadcasting Live GPS...";
+
+                db.ref(`trips/${driver}`).set({ lat, lng, timestamp: Date.now() });
+                db.ref(`companies/${company}/trips/${driver}`).set({ lat, lng, timestamp: Date.now() });
+                db.ref(`drivers/${driver}`).set({ lat, lng, timestamp: Date.now() });
+
+                watchId = navigator.geolocation.watchPosition((position) => {
+                    lat = position.coords.latitude;
+                    lng = position.coords.longitude;
+                    
+                    if (marker) {
+                        marker.setLatLng([lat, lng]);
+                    } else {
+                        marker = L.marker([lat, lng]).addTo(map);
+                    }
+                    map.setView([lat, lng], 16);
+
+                    db.ref(`trips/${driver}`).set({ lat, lng, timestamp: Date.now() });
+                    db.ref(`companies/${company}/trips/${driver}`).set({ lat, lng, timestamp: Date.now() });
+                    db.ref(`drivers/${driver}`).set({ lat, lng, timestamp: Date.now() });
+                }, (error) => {
+                    console.log("GPS watch error: " + error.message);
+                }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+
+                setTimeout(() => {
+                    clearCustomerInputs();
+                }, 500);
+
+            } else {
+                isBroadcasting = false;
+                activeTrackingLink = "";
+                if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+
+                btn.innerText = "Start Broadcast 🚀";
+                btn.className = "bg-yellow-400 hover:bg-yellow-300 text-black font-black text-xs py-3 rounded-2xl transition cursor-pointer text-center shadow-lg uppercase tracking-wider";
+                statusDot.className = "w-2 h-2 rounded-full bg-yellow-500";
+                statusText.innerText = "Ready";
+                statusText.className = "text-[10px] font-black uppercase tracking-wider text-yellow-500";
+                gpsStatus.innerText = "GPS Locked ✅";
+                updateTrackingLink();
+            }
+        }
+
+        function copyLink() {
+            navigator.clipboard.writeText(linkInput.value);
+            alert('Tracking link copied to clipboard!');
+        }
+
+        function sendSMS() {
+            const phone = phoneInput.value.trim();
+            const link = linkInput.value;
+            const targetLink = activeTrackingLink || link;
+            if (!phone) {
+                alert('Please enter a customer phone number first.');
+                return;
+            }
+            window.location.href = `sms:${phone}?body=${encodeURIComponent("Track your driver here: " + targetLink)}`;
+        }
+
+        window.onload = initMap;
+    </script>
+</body>
+</html>

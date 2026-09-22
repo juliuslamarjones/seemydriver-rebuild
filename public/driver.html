@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Driver Console - SeeMyDriver</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body class="bg-black text-white min-h-screen flex flex-col justify-between overflow-x-hidden selection:bg-yellow-400 selection:text-black">
+
+    <header class="w-full max-w-4xl mx-auto px-4 py-3 flex items-center justify-between border-b border-neutral-900">
+        <div class="flex items-center gap-2">
+            <a href="index.html" class="text-[24px] font-black tracking-tight text-white">See<span class="text-yellow-400">My</span>Driver</a>
+            <span class="text-sm">👀</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-xl text-xs font-bold text-yellow-400">
+                <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span> Solo Dispatcher
+            </span>
+            <a href="index.html" class="bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white font-bold text-xs px-3 py-2 rounded-xl transition">
+                Exit
+            </a>
+        </div>
+    </header>
+
+    <main class="w-full max-w-lg mx-auto px-4 py-6 flex-1 flex flex-col items-center gap-4">
+
+        <!-- Dispatch Console Input Card -->
+        <div class="w-full bg-neutral-950 border border-neutral-900 p-5 rounded-3xl flex flex-col gap-4 shadow-xl">
+            <div class="flex justify-between items-center border-b border-neutral-900 pb-3">
+                <div>
+                    <span class="text-[10px] font-bold text-yellow-400 uppercase tracking-wider">Dispatcher Hub</span>
+                    <h1 class="text-xl font-black text-white">Request Client Location</h1>
+                </div>
+                <span class="text-2xl">📍</span>
+            </div>
+
+            <div class="flex flex-col gap-3">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[11px] font-bold text-neutral-400">Driver Name</label>
+                    <input type="text" id="driver-name-input" placeholder="e.g. Julius" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+                </div>
+
+                <div class="flex flex-col gap-1">
+                    <label class="text-[11px] font-bold text-neutral-400">Customer / Friend Name</label>
+                    <input type="text" id="client-name-input" placeholder="e.g. Store Friend" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+                </div>
+
+                <div class="flex flex-col gap-1">
+                    <label class="text-[11px] font-bold text-neutral-400">Customer Phone (for SMS link)</label>
+                    <input type="text" id="client-phone-input" placeholder="e.g. 8329025417" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+                </div>
+            </div>
+        </div>
+
+        <!-- Generated Client Share Link Box -->
+        <div class="w-full bg-neutral-950 border border-neutral-900 p-4 rounded-3xl flex flex-col gap-2 shadow-xl">
+            <div class="flex justify-between items-center">
+                <span class="text-xs font-bold text-yellow-400 uppercase tracking-wider">Client Location Link</span>
+                <span class="text-[10px] text-neutral-400">Text this to client</span>
+            </div>
+            <div class="flex gap-2">
+                <input type="text" id="share-link-input" readonly class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-[11px] text-neutral-300 focus:outline-none font-mono">
+                <button onclick="copyShareLink()" class="bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-yellow-400 font-bold text-xs px-4 py-2 rounded-xl transition shrink-0 cursor-pointer">
+                    Copy
+                </button>
+            </div>
+        </div>
+
+        <!-- Dispatcher Map View: Tracks the Client live -->
+        <div class="w-full bg-neutral-950 border border-neutral-900 p-4 rounded-3xl flex flex-col gap-2 shadow-xl">
+            <div class="flex items-center justify-between text-xs font-bold text-neutral-300">
+                <span>Client Live Telemetry</span>
+                <span id="gps-coords" class="text-yellow-400 font-mono text-[11px]">Waiting for client link click...</span>
+            </div>
+            <div id="map" class="w-full h-64 bg-neutral-900 rounded-2xl relative overflow-hidden border border-neutral-800 z-0"></div>
+        </div>
+
+    </main>
+
+    <footer class="w-full max-w-4xl mx-auto px-4 py-3 text-center text-[10px] text-neutral-600 border-t border-neutral-900">
+        &copy; 2026 SeeMyDriver. Powered by Quick Tap Solutions.
+    </footer>
+
+    <script>
+        localStorage.setItem('smd_logged_in', 'true');
+        localStorage.setItem('smd_active_plan', 'solo');
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI",
+            authDomain: "seemydriver-prod.firebaseapp.com",
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",
+            projectId: "seemydriver-prod",
+            storageBucket: "seemydriver-prod.firebasestorage.app",
+            messagingSenderId: "163660133229",
+            appId: "1:163660133229:web:7e993e6ee37f940a04a064"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+        const rawCompanyId = 'MY25DOLLARMAJIC';
+        const companyId = rawCompanyId.replace(/[.#$\/\[\]]/g, '_');
+        const jobId = 'job_' + Math.floor(10000 + Math.random() * 90000);
+
+        let map, clientMarker;
+        let listenerInitialized = false;
+
+        function initMap() {
+            // Default center on Humble, TX while waiting for client data
+            map = L.map('map').setView([29.9987, -95.2622], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            setTimeout(() => { if (map) map.invalidateSize(); }, 300);
+            listenToClientLocation();
+        }
+
+        function updateShareLink() {
+            const driver = document.getElementById('driver-name-input').value.trim() || 'Dispatcher';
+            const client = document.getElementById('client-name-input').value.trim() || 'Client';
+
+            const baseUrl = window.location.origin + window.location.pathname.replace('driver.html', 'share.html');
+            const link = `${baseUrl}?job=${jobId}&driver=${encodeURIComponent(driver)}&client=${encodeURIComponent(client)}&company=${rawCompanyId}`;
+
+            document.getElementById('share-link-input').value = link;
+        }
+
+        function copyShareLink() {
+            const input = document.getElementById('share-link-input');
+            input.select();
+            navigator.clipboard.writeText(input.value);
+            alert('Client tracking link copied to clipboard!');
+        }
+
+        function listenToClientLocation() {
+            const locationRef = db.ref(`companies/${companyId}/customer_locations/${jobId}`);
+            locationRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data && data.lat && data.lng) {
+                    const lat = data.lat;
+                    const lng = data.lng;
+                    const clientName = document.getElementById('client-name-input').value.trim() || 'Client';
+
+                    document.getElementById('gps-coords').textContent = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+
+                    if (!clientMarker) {
+                        clientMarker = L.marker([lat, lng]).addTo(map)
+                            .bindPopup(`${clientName}'s Live Location`)
+                            .openPopup();
+                        map.setView([lat, lng], 16);
+                    } else {
+                        clientMarker.setLatLng([lat, lng]);
+                        map.setView([lat, lng], 16);
+                    }
+                }
+            });
+        }
+
+        window.onload = () => {
+            initMap();
+            updateShareLink();
+
+            ['driver-name-input', 'client-name-input', 'client-phone-input'].forEach(id => {
+                document.getElementById(id).addEventListener('input', updateShareLink);
+            });
+        };
+    </script>
+</body>
+</html>

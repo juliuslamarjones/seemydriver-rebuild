@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#090a0f">
+    <meta name="color-scheme" content="dark">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+    <title>SeeMyDriver - Real-Time GPS Telemetry</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS & JS for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <style>
+        @keyframes wave-hand {
+            0% { transform: rotate(0deg); }
+            20% { transform: rotate(14deg); }
+            40% { transform: rotate(-8deg); }
+            60% { transform: rotate(14deg); }
+            80% { transform: rotate(-4deg); }
+            100% { transform: rotate(0deg); }
+        }
+        .animate-wave {
+            display: inline-block;
+            animation: wave-hand 2s infinite;
+            transform-origin: 70% 70%;
+        }
+    </style>
+    <script>
+        // ==========================================
+        // SAFE STORAGE UTILS (Bulletproofing private mode / quota)
+        // ==========================================
+        const SafeStorage = {
+            getItem(key) {
+                try { return localStorage.getItem(key); } catch (e) { return null; }
+            },
+            setItem(key, value) {
+                try { localStorage.setItem(key, value); } catch (e) { console.error('Storage error:', e); }
+            },
+            removeItem(key) {
+                try { localStorage.removeItem(key); } catch (e) {}
+            }
+        };
+
+        // ==========================================
+        // FIREBASE CONFIGURATION (Connected to seemydriver-prod)
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyAft3ZCE8DEmjsf4FLIQDgdYIQL1woIJOI",
+            authDomain: "seemydriver-prod.firebaseapp.com",
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",
+            projectId: "seemydriver-prod",
+            storageBucket: "seemydriver-prod.firebasestorage.app",
+            messagingSenderId: "16366013329",
+            appId: "1:16366013329:web:7e993e6ee37f940a04a064"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+        try { db.goOnline(); } catch (e) {}
+
+        let regTierSelected = 'solo';
+        let watchId = null;
+        let backgroundWatchId = null;
+        let wakeLock = null;
+        let backgroundHeartbeatInterval = null;
+
+        // Background Audio Keep-Alive Engine
+        let silentAudioContext = null;
+        let silentAudioNode = null;
+
+        // Maps & Markers
+        let map = null;
+        let driverMarker = null;
+        let destMarker = null;
+        let routeLine = null;
+        let driverMap = null;
+        let driverMapMarker = null;
+        let driverDestMarker = null;
+        let driverRouteLine = null;
+
+        // OSRM Throttling & Caching
+        let driverLastRouteLat = null;
+        let driverLastRouteLng = null;
+        let driverCachedRouteCoords = null;
+        let custLastRouteLat = null;
+        let custLastRouteLng = null;
+        let custCachedRouteCoords = null;
+
+        let activeSessionId = SafeStorage.getItem('smd_session_id') || ('session_' + Math.random().toString(36).substring(2, 11));
+        SafeStorage.setItem('smd_session_id', activeSessionId);
+
+        let lastLat = null;
+        let lastLng = null;
+        let lastTime = null;
+        let addressCheckTimeout = null;
+        let lastCheckedAddress = '';
+        let cachedDestName = '';
+        let cachedDestLat = null;
+        let cachedDestLng = null;
+        let connectionMonitorInitialized = false;
+
+        // ==========================================
+        // ROBUST WAKE LOCK, FOREGROUND SERVICE & SILENT AUDIO ENGINE
+        // ==========================================
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    if (wakeLock === null && document.visibilityState === 'visible') {
+                        wakeLock = await navigator.wakeLock.request('screen');
+                        wakeLock.addEventListener('release', () => {
+                            wakeLock = null;
+                            if (SafeStorage.getItem('smd_active_broadcast') === 'true') {
+                                setTimeout(requestWakeLock, 1000);
+                            }
+                        });
+                    }
+                } catch (err) {
+                    console.warn(`Wake lock warning: ${err.name}, ${err.message}`);
+                }
+            }
+        }
+
+        async function releaseWakeLock() {
+            if (wakeLock !== null) {
+                try { await wakeLock.release(); } catch (err) {}
+                wakeLock = null;
+            }
+        }
+
+        function startSilentAudio() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                if (!silentAudioContext || silentAudioContext.state === 'closed') {
+                    silentAudioContext = new AudioContext();
+                }
+                if (silentAudioContext.state === 'suspended') {
+                    silentAudioContext.resume();
+                }
+                if (!silentAudioNode) {
+                    const buffer = silentAudioContext.createBuffer(1, silentAudioContext.sampleRate * 2, silentAudioContext.sampleRate);
+                    const source = silentAudioContext.createBufferSource();
+                    source.buffer = buffer;
+                    source.loop = true;
+                    const gainNode = silentAudioContext.createGain();
+                    gainNode.gain.value = 0.00001;
+                    source.connect(gainNode);
+                    gainNode.connect(silentAudioContext.destination);
+                    source.start(0);
+                    silentAudioNode = source;
+                }
+            } catch (err) {
+                console.warn('Silent audio keep-alive warning:', err);
+            }
+        }
+
+        function stopSilentAudio() {
+            try {
+                if (silentAudioNode) {
+                    try { silentAudioNode.stop(); } catch (e) {}
+                    silentAudioNode.disconnect();
+                    silentAudioNode = null;
+                }
+                if (silentAudioContext && silentAudioContext.state !== 'closed') {
+                    silentAudioContext.close();
+                    silentAudioContext = null;
+                }
+            } catch (err) {
+                console.warn('Stop silent audio warning:', err);
+            }
+        }
+
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState === 'visible') {
+                if (SafeStorage.getItem('smd_active_broadcast') === 'true' || watchId !== null || backgroundWatchId !== null) {
+                    await requestWakeLock();
+                    startSilentAudio();
+                    if (navigator.geolocation && SafeStorage.getItem('smd_active_broadcast') === 'true') {
+                        navigator.geolocation.getCurrentPosition(position => {
+                            if (position && position.coords) {
+                                handlePositionUpdate(position);
+                            }
+                        }, err => {}, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+                    }
+                }
+            } else {
+                if (SafeStorage.getItem('smd_active_broadcast') === 'true') {
+                    startSilentAudio();
+                }
+            }
+        });
+
+        function initConnectionMonitor() {
+            if (connectionMonitorInitialized) return;
+            connectionMonitorInitialized = true;
+            db.ref('.info/connected').on('value', (snapshot) => {
+                const isConnected = snapshot.val();
+                const dot = document.getElementById('connection-indicator-dot');
+                const text = document.getElementById('connection-status-text');
+                if (dot && text) {
+                    if (isConnected) {
+                        dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping";
+                        text.innerText = "LIVE CLOUD VIEW";
+                    } else {
+                        dot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+                        text.innerText = "CONNECTION LOST - RECONNECTING...";
+                        try { db.goOnline(); } catch(e){}
+                    }
+                }
+            });
+        }
+
+        function setRegTier(tier) {
+            regTierSelected = tier;
+            const soloCard = document.getElementById('solo-plan-card');
+            const fleetCard = document.getElementById('fleet-plan-card');
+            if (soloCard && fleetCard) {
+                if (tier === 'fleet') {
+                    fleetCard.className = "w-full bg-[#12141c] border-2 border-amber-400 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
+                    soloCard.className = "w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
+                } else {
+                    soloCard.className = "w-full bg-[#12141c] border-2 border-amber-400 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
+                    fleetCard.className = "w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
+                }
+            }
+        }
+
+        function selectAndRegister(tier) {
+            setRegTier(tier);
+            if (tier === 'fleet') {
+                switchView('fleet-dashboard');
+            } else {
+                switchView('register');
+            }
+        }
+
+        function switchView(viewId, cleanUrl = false) {
+            const views = [
+                'landing-view',
+                'apk-guide-view',
+                'fleet-dashboard-view',
+                'sandbox-view',
+                'plans-view',
+                'job-setup-view',
+                'active-broadcast-view',
+                'customer-view-view',
+                'signin-view',
+                'register-view'
+            ];
+            views.forEach(v => {
+                const el = document.getElementById(v);
+                if (el) el.classList.add('hidden');
+            });
+            if (cleanUrl && window.history.replaceState) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+            const targetId = (viewId === 'customer') ? 'customer-view-view' : (viewId + '-view');
+            const target = document.getElementById(targetId);
+            if (target) {
+                target.classList.remove('hidden');
+            }
+            updateHeaderNav();
+            checkActiveBroadcastBanner();
+
+            if (viewId === 'job-setup') {
+                const driverNameInput = document.getElementById('job-driver-name');
+                if (driverNameInput) {
+                    driverNameInput.value = SafeStorage.getItem('smd_driver_name') || '';
+                }
+                const custNameInput = document.getElementById('job-cust-name');
+                const custAddressInput = document.getElementById('job-cust-address');
+                const custPhoneInput = document.getElementById('job-cust-phone');
+                const addressFeedback = document.getElementById('address-feedback');
+                if (custNameInput) custNameInput.value = '';
+                if (custAddressInput) custAddressInput.value = '';
+                if (custPhoneInput) custPhoneInput.value = '';
+                if (addressFeedback) addressFeedback.innerHTML = '';
+                lastCheckedAddress = '';
+            }
+            if (viewId === 'active-broadcast') {
+                setTimeout(() => {
+                    initDriverActiveMap();
+                    if (driverMap) driverMap.invalidateSize();
+                }, 200);
+            }
+            if (viewId === 'customer') {
+                setTimeout(() => {
+                    initCustomerMapLive();
+                    if (map) map.invalidateSize();
+                }, 200);
+            }
+        }
+
+        function updateHeaderNav() {
+            const nav = document.getElementById('header-nav-actions');
+            if (!nav) return;
+            const urlParams = new URLSearchParams(window.location.search);
+            const customerViewEl = document.getElementById('customer-view-view');
+            const isCustomerView = (customerViewEl && !customerViewEl.classList.contains('hidden')) || urlParams.get('view') === 'customer';
+            const registerViewEl = document.getElementById('register-view');
+            const isRegisterView = registerViewEl && !registerViewEl.classList.contains('hidden');
+            const signinViewEl = document.getElementById('signin-view');
+            const isSigninView = signinViewEl && !signinViewEl.classList.contains('hidden');
+
+            if (isCustomerView || isRegisterView || isSigninView) {
+                nav.innerHTML = '';
+                return;
+            }
+
+            const isLoggedIn = SafeStorage.getItem('smd_is_logged_in') === 'true';
+            if (isLoggedIn) {
+                const userEmail = SafeStorage.getItem('smd_user_email') || '';
+                const driverName = SafeStorage.getItem('smd_driver_name') || userEmail.split('@')[0];
+                nav.innerHTML = `<span class="text-xs text-neutral-300 font-bold hidden sm:inline">${driverName}</span> <button onclick="handleSignOut()" class="bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-neutral-300 hover:text-white text-xs px-2.5 py-1.5 rounded-xl font-bold transition cursor-pointer">Sign Out</button>`;
+            } else {
+                nav.innerHTML = `<button onclick="switchView('signin')" class="text-xs text-neutral-300 hover:text-white font-bold px-3 py-1.5 cursor-pointer">Sign In</button> <button onclick="switchView('register')" class="bg-amber-400 hover:bg-amber-300 text-black text-xs px-3.5 py-1.5 rounded-xl font-black transition cursor-pointer shadow-md">Get Started</button>`;
+            }
+        }
+
+        function handleRegister() {
+            const businessName = document.getElementById('reg-business-name').value.trim();
+            const name = document.getElementById('reg-name').value.trim();
+            const email = document.getElementById('reg-email').value.trim();
+            const password = document.getElementById('password-input').value.trim();
+            if (!email) { alert('Email address is required.'); return; }
+            if (!password) { alert('Password is required.'); return; }
+            const driverName = name || email.split('@')[0];
+            SafeStorage.setItem('smd_account_exists', 'true');
+            SafeStorage.setItem('smd_is_logged_in', 'true');
+            SafeStorage.setItem('smd_user_email', email);
+            SafeStorage.setItem('smd_driver_name', driverName);
+            SafeStorage.setItem('smd_business_name', businessName);
+            SafeStorage.setItem('smd_pass_' + email, password);
+            SafeStorage.setItem('smd_name_' + email, driverName);
+            switchView('job-setup');
+        }
+
+        function handleSignIn() {
+            const email = document.getElementById('signin-email').value.trim();
+            const password = document.getElementById('signin-password').value.trim();
+            if (!email) { alert('Please enter your email address.'); return; }
+            if (!password) { alert('Please enter your password.'); return; }
+            const storedPass = SafeStorage.getItem('smd_pass_' + email);
+            if (!storedPass) {
+                alert('No account found for this email address. Please create an account first.');
+                switchView('register');
+                return;
+            }
+            if (storedPass !== password) {
+                alert('Incorrect password. Please try again.');
+                return;
+            }
+            SafeStorage.setItem('smd_account_exists', 'true');
+            SafeStorage.setItem('smd_is_logged_in', 'true');
+            SafeStorage.setItem('smd_user_email', email);
+            const savedName = SafeStorage.getItem('smd_name_' + email);
+            if (savedName) {
+                SafeStorage.setItem('smd_driver_name', savedName);
+            } else if (!SafeStorage.getItem('smd_driver_name')) {
+                SafeStorage.setItem('smd_driver_name', email.split('@')[0]);
+            }
+            switchView('job-setup');
+        }
+
+        function handleSignOut() {
+            SafeStorage.removeItem('smd_is_logged_in');
+            SafeStorage.removeItem('smd_user_email');
+            SafeStorage.removeItem('smd_active_broadcast');
+            SafeStorage.removeItem('smd_cust_name');
+            SafeStorage.removeItem('smd_cust_address');
+            stopRealTimeTracking();
+            checkActiveBroadcastBanner();
+            switchView('signin');
+        }
+
+        // ==========================================
+        // DOOR-DASH GRADE BACKGROUND GEOLOCATION ENGINE
+        // ==========================================
+        function handlePositionUpdate(position) {
+            if (!position || !position.coords) return;
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const currentTime = Date.now();
+            let speedMph = 0;
+            if (position.coords.speed !== null && !isNaN(position.coords.speed)) {
+                speedMph = position.coords.speed * 2.23694;
+            } else if (lastLat !== null && lastLng !== null && lastTime !== null) {
+                const distanceMiles = calculateDistance(lastLat, lastLng, lat, lng);
+                const hoursElapsed = (currentTime - lastTime) / 3600000;
+                if (hoursElapsed > 0) {
+                    speedMph = distanceMiles / hoursElapsed;
+                }
+            }
+            lastLat = lat;
+            lastLng = lng;
+            lastTime = currentTime;
+            if (speedMph < 2) speedMph = 0;
+
+            const statusEl = document.getElementById('landing-sim-status');
+            const statusText = document.getElementById('landing-sim-status-text');
+            const latEl = document.getElementById('landing-lat');
+            const lngEl = document.getElementById('landing-lng');
+            const sandboxLat = document.getElementById('sandbox-lat');
+            const sandboxLng = document.getElementById('sandbox-lng');
+            const sandboxStatus = document.getElementById('sandbox-sim-status');
+
+            if (latEl) latEl.innerText = lat.toFixed(6);
+            if (lngEl) lngEl.innerText = lng.toFixed(6);
+            if (sandboxLat) sandboxLat.innerText = lat.toFixed(6);
+            if (sandboxLng) sandboxLng.innerText = lng.toFixed(6);
+            if (statusEl) statusEl.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse";
+            if (statusText) statusText.innerText = "Live GPS Fix Active (Background Foreground Service Locked)";
+            if (sandboxStatus) sandboxStatus.innerText = "Active Native Background Stream";
+
+            if (SafeStorage.getItem('smd_active_broadcast') === 'true') {
+                db.ref('broadcasts/' + activeSessionId).update({
+                    lat: lat,
+                    lng: lng,
+                    speed: Math.round(speedMph),
+                    timestamp: currentTime
+                }).catch(err => {
+                    console.warn('Firebase sync warning:', err);
+                    try { db.goOnline(); } catch(e){}
+                });
+            }
+        }
+
+        function handleGeoError(error) {
+            console.error('GPS Error:', error);
+            const statusText = document.getElementById('landing-sim-status-text');
+            if (statusText) statusText.innerText = "GPS Error / Permission Denied - Retrying...";
+        }
+
+        async function startRealTimeTracking() {
+            if (watchId !== null || backgroundWatchId !== null) return;
+            await requestWakeLock();
+            startSilentAudio();
+
+            if (backgroundHeartbeatInterval) clearInterval(backgroundHeartbeatInterval);
+            backgroundHeartbeatInterval = setInterval(async () => {
+                if (SafeStorage.getItem('smd_active_broadcast') === 'true') {
+                    await requestWakeLock();
+                    startSilentAudio();
+                    if (navigator.geolocation && (!window.Capacitor || !window.Capacitor.isNativePlatform())) {
+                        navigator.geolocation.getCurrentPosition(position => {
+                            if (position && position.coords) {
+                                handlePositionUpdate(position);
+                            }
+                        }, err => {}, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+                    }
+                } else {
+                    clearInterval(backgroundHeartbeatInterval);
+                    backgroundHeartbeatInterval = null;
+                }
+            }, 8000);
+
+            const isCapacitorNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+            if (isCapacitorNative && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation) {
+                try {
+                    const BackgroundGeolocation = window.Capacitor.Plugins.BackgroundGeolocation;
+                    try {
+                        const permStatus = await BackgroundGeolocation.addWatcher({ requestPermissions: true }, () => {});
+                        if (permStatus) {
+                            await BackgroundGeolocation.removeWatcher({ id: permStatus });
+                        }
+                    } catch (permErr) {
+                        console.warn("Background geolocation permission prompt warning:", permErr);
+                    }
+                    backgroundWatchId = await BackgroundGeolocation.addWatcher({
+                        backgroundMessage: "Your SeeMyDriver telemetry service is running securely in the background.",
+                        backgroundTitle: "SeeMyDriver Active Broadcast (Locked)",
+                        requestPermissions: false,
+                        stale: false,
+                        distanceFilter: 3
+                    }, (location, error) => {
+                        if (error) {
+                            handleGeoError(error);
+                            return;
+                        }
+                        if (location) {
+                            handlePositionUpdate({
+                                coords: {
+                                    latitude: location.latitude,
+                                    longitude: location.longitude,
+                                    speed: location.speed !== null ? location.speed : 0,
+                                    accuracy: location.accuracy || 0
+                                }
+                            });
+                        }
+                    });
+                    window._seeMyDriverWatcherId = backgroundWatchId;
+                    return;
+                } catch (err) {
+                    console.warn('BackgroundGeolocation plugin fallback to standard Capacitor/Web:', err);
+                }
+            }
+
+            if (!navigator.geolocation) {
+                alert('Geolocation is not supported by your browser');
+                return;
+            }
+            watchId = navigator.geolocation.watchPosition(handlePositionUpdate, handleGeoError, {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            });
+        }
+
+        function startDemoMode() {
+            const demoLat = 29.9855;
+            const demoLng = -95.2612;
+            const statusEl = document.getElementById('landing-sim-status');
+            const statusText = document.getElementById('landing-sim-status-text');
+            const latEl = document.getElementById('landing-lat');
+            const lngEl = document.getElementById('landing-lng');
+            const sandboxLat = document.getElementById('sandbox-lat');
+            const sandboxLng = document.getElementById('sandbox-lng');
+            const sandboxStatus = document.getElementById('sandbox-sim-status');
+
+            if (latEl) latEl.innerText = demoLat.toFixed(6);
+            if (lngEl) lngEl.innerText = demoLng.toFixed(6);
+            if (sandboxLat) sandboxLat.innerText = demoLat.toFixed(6);
+            if (sandboxLng) sandboxLng.innerText = demoLng.toFixed(6);
+            if (statusEl) statusEl.className = "w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse";
+            if (statusText) statusText.innerText = "Demo Mode Active";
+            if (sandboxStatus) sandboxStatus.innerText = "Simulated Demo Stream";
+
+            if (SafeStorage.getItem('smd_active_broadcast') === 'true') {
+                db.ref('broadcasts/' + activeSessionId).update({
+                    lat: demoLat,
+                    lng: demoLng,
+                    speed: 25,
+                    timestamp: Date.now()
+                }).catch(err => {});
+            }
+        }
+
+        async function stopRealTimeTracking() {
+            const isCapacitorNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+            const watcherToClear = backgroundWatchId || window._seeMyDriverWatcherId;
+            if (watcherToClear !== null && isCapacitorNative && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation) {
+                try {
+                    await window.Capacitor.Plugins.BackgroundGeolocation.removeWatcher({ id: watcherToClear });
+                } catch (err) {}
+                backgroundWatchId = null;
+                window._seeMyDriverWatcherId = null;
+            }
+            if (watchId !== null) {
+                if (navigator.geolocation) {
+                    navigator.geolocation.clearWatch(watchId);
+                }
+                watchId = null;
+            }
+            if (backgroundHeartbeatInterval) {
+                clearInterval(backgroundHeartbeatInterval);
+                backgroundHeartbeatInterval = null;
+            }
+            await releaseWakeLock();
+            stopSilentAudio();
+            SafeStorage.removeItem('smd_active_broadcast');
+            checkActiveBroadcastBanner();
+        }
+
+        function checkActiveBroadcastBanner() {
+            const banner = document.getElementById('active-broadcast-banner');
+            if (!banner) return;
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('view') === 'customer') {
+                banner.remove();
+                return;
+            }
+            const active = SafeStorage.getItem('smd_active_broadcast');
+            if (active === 'true') {
+                banner.classList.remove('hidden');
+            } else {
+                banner.classList.add('hidden');
+            }
+        }
+
+        function endBroadcastAndHome() {
+            stopRealTimeTracking();
+            SafeStorage.removeItem('smd_cust_name');
+            SafeStorage.removeItem('smd_cust_address');
+            activeSessionId = 'session_' + Math.random().toString(36).substring(2, 11);
+            SafeStorage.setItem('smd_session_id', activeSessionId);
+            if (window.history.replaceState) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+            switchView('job-setup', true);
+        }
+
+        // ==========================================
+        // BATTERY OPTIMIZATION EXEMPTION RUNTIME CHECK & PROMPT
+        // ==========================================
+        async function checkAndShowBatteryOptimizationModal(onProceedCallback) {
+            const isCapacitorNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+            let isWhitelisted = false;
+            if (isCapacitorNative && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation) {
+                try {
+                    if (typeof window.Capacitor.Plugins.BackgroundGeolocation.isIgnoringBatteryOptimizations === 'function') {
+                        const res = await window.Capacitor.Plugins.BackgroundGeolocation.isIgnoringBatteryOptimizations();
+                        isWhitelisted = res && res.isIgnoring === true;
+                    }
+                } catch (e) {
+                    console.warn("Native battery optimization check warning:", e);
+                }
+            }
+            if (isWhitelisted || SafeStorage.getItem('smd_battery_exempted') === 'true') {
+                SafeStorage.setItem('smd_battery_exempted', 'true');
+                onProceedCallback();
+                return;
+            }
+            const modal = document.getElementById('battery-opt-modal');
+            if (modal) {
+                modal.classList.remove('hidden');
+            } else {
+                const proceed = confirm("Battery Optimization Exemption Required:\n\nHeavy OEM skinning aggressively terminates background GPS after 10-15 minutes of screen-off time.\n\nPlease set your app battery to 'Unrestricted'.\n\nClick OK to proceed.");
+                if (proceed) {
+                    SafeStorage.setItem('smd_battery_exempted', 'true');
+                    onProceedCallback();
+                }
+            }
+        }
+
+        function openBatterySettings() {
+            const isCapacitorNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+            if (isCapacitorNative && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+                try { window.Capacitor.Plugins.App.openAppSettings(); } catch (e) {}
+            }
+            alert("Please navigate to your device Settings -> Apps -> SeeMyDriver -> Battery and toggle it to 'Unrestricted' or 'Don't optimize'.");
+        }
+
+        function confirmBatteryExempted() {
+            SafeStorage.setItem('smd_battery_exempted', 'true');
+            const modal = document.getElementById('battery-opt-modal');
+            if (modal) modal.classList.add('hidden');
+            executeLaunchBroadcast();
+        }
+
+        function closeBatteryModal() {
+            const modal = document.getElementById('battery-opt-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function launchLiveBroadcast() {
+            const custName = document.getElementById('job-cust-name').value.trim() || 'Valued Client';
+            const custAddress = document.getElementById('job-cust-address').value.trim() || 'Destination';
+            const custPhone = document.getElementById('job-cust-phone').value.trim() || '';
+            const driverNameInput = document.getElementById('job-driver-name').value.trim();
+            const driverName = driverNameInput || SafeStorage.getItem('smd_driver_name') || 'Driver';
+            SafeStorage.setItem('smd_driver_name', driverName);
+
+            if (!custAddress || custAddress === 'Destination') {
+                alert('Please enter a valid client street address.');
+                return;
+            }
+            const feedbackEl = document.getElementById('address-feedback');
+            if (feedbackEl && feedbackEl.innerHTML.includes('⚠️')) {
+                alert('Please enter a valid, verifiable destination address before launching.');
+                return;
+            }
+            SafeStorage.setItem('smd_cust_name', custName);
+            SafeStorage.setItem('smd_cust_address', custAddress);
+            checkAndShowBatteryOptimizationModal(() => {
+                executeLaunchBroadcast();
+            });
+        }
+
+        function executeLaunchBroadcast() {
+            const custName = SafeStorage.getItem('smd_cust_name') || 'Valued Client';
+            const custAddress = SafeStorage.getItem('smd_cust_address') || 'Destination';
+            const driverName = SafeStorage.getItem('smd_driver_name') || 'Driver';
+            SafeStorage.setItem('smd_active_broadcast', 'true');
+
+            db.ref('broadcasts/' + activeSessionId).set({
+                driverName: driverName,
+                custName: custName,
+                custAddress: custAddress,
+                lat: 0,
+                lng: 0,
+                speed: 0,
+                timestamp: Date.now()
+            }).catch(err => {
+                console.error('Firebase broadcast init error:', err);
+                try { db.goOnline(); } catch(e){}
+            });
+
+            startRealTimeTracking();
+            checkActiveBroadcastBanner();
+
+            // ==========================================
+            // ROBUST BASE URL CONFIGURATION (Local IP & Production Domain)
+            // ==========================================
+            const productionBaseUrl = 'https://seemydriver.com';
+            const currentHostname = window.location.hostname;
+            const currentProtocol = window.location.protocol;
+            const currentPort = window.location.port ? `:${window.location.port}` : '';
+            
+            let baseUrl = productionBaseUrl;
+            if (currentHostname && currentHostname !== 'localhost' && currentHostname !== '127.0.0.1' && (currentHostname.startsWith('192.168.') || currentHostname.startsWith('10.') || currentHostname.startsWith('172.'))) {
+                baseUrl = `${currentProtocol}//${currentHostname}${currentPort}${window.location.pathname}`;
+            }
+
+            const trackingUrl = `${baseUrl}?view=customer&session=${activeSessionId}`;
+            const linkOutput = document.getElementById('tracking-link-output');
+            if (linkOutput) linkOutput.value = trackingUrl;
+
+            const coordDisplay = document.getElementById('active-coord-display');
+            if (coordDisplay) {
+                coordDisplay.innerText = `Broadcasting to ${custName} (${custAddress}) with background audio keep-alive, wake-lock persistence & foreground service locking.`;
+            }
+            switchView('active-broadcast');
+        }
+
+        function copyTrackingLink() {
+            const linkOutput = document.getElementById('tracking-link-output');
+            if (linkOutput) {
+                navigator.clipboard.writeText(linkOutput.value).then(() => {
+                    alert('Tracking link copied to clipboard!');
+                }).catch(err => {
+                    linkOutput.select();
+                    document.execCommand('copy');
+                    alert('Tracking link copied to clipboard!');
+                });
+            }
+        }
+
+        function textTrackingLink() {
+            const phone = document.getElementById('job-cust-phone').value;
+            const linkOutput = document.getElementById('tracking-link-output');
+            const url = linkOutput ? linkOutput.value : '';
+            const text = encodeURIComponent(`Track my live driver telemetry here: ${url}`);
+            window.location.href = `sms:${phone}?body=${text}`;
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 3958.8;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        async function smartGeocode(destinationString) {
+            if (!destinationString) return null;
+            let cleaned = destinationString.trim().replace(/\s+/g, ' ');
+            cleaned = cleaned
+                .replace(/\bRd.?\b/i, 'Road')
+                .replace(/\bSt.?\b/i, 'Street')
+                .replace(/\bDr.?\b/i, 'Drive')
+                .replace(/\bAve.?\b/i, 'Avenue')
+                .replace(/\bBlvd.?\b/i, 'Boulevard')
+                .replace(/\bLn.?\b/i, 'Lane')
+                .replace(/\bCt.?\b/i, 'Court');
+            
+            const hasCityOrStateOrZip = /houston|tx|texas|co|colorado|denver|colorado springs|boulder|fort collins|aurora|lakewood|arvada|westminster|pueblo|centennial|thornton|greeley|longmont|loveland|broomfield|grand junction|d.?c.?|washington|new york|ny|california|ca|florida|fl|georgia|ga|illinois|il|pennsylvania|pa|ohio|oh|michigan|mi|\b\d{5}\b/i.test(cleaned);
+            let primaryQuery = hasCityOrStateOrZip ? cleaned : `${cleaned}, Houston, TX`;
+
+            try {
+                let res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(primaryQuery)}&addressdetails=1&email=support@seemydriver.com`);
+                if (!res.ok) throw new Error('Geocoding network error');
+                let geoData = await res.json();
+                if (!geoData || geoData.length === 0) {
+                    const streetOnly = cleaned.replace(/^\d+\s*/, '');
+                    const fallbackQuery = hasCityOrStateOrZip ? streetOnly : (/houston|tx/i.test(streetOnly) ? streetOnly : `${streetOnly}, Houston, TX`);
+                    res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fallbackQuery)}&addressdetails=1&email=support@seemydriver.com`);
+                    geoData = await res.json();
+                }
+                if (geoData && geoData.length > 0) {
+                    const searchTerms = cleaned.replace(/^\d+\s*/, '').toLowerCase().split(/[\s,]+/).filter(term => term.length > 1);
+                    let bestMatch = geoData.find(item => {
+                        const name = (item.display_name || '').toLowerCase();
+                        return searchTerms.every(term => name.includes(term));
+                    });
+                    const matchedResult = bestMatch || geoData[0];
+                    return { lat: parseFloat(matchedResult.lat), lon: parseFloat(matchedResult.lon) };
+                }
+            } catch (err) {
+                console.warn('Smart geocoding warning:', err);
+            }
+            return null;
+        }
+
+        function handleAddressInput(value) {
+            const feedbackEl = document.getElementById('address-feedback');
+            if (!feedbackEl) return;
+            const cleaned = value.trim();
+            if (!cleaned) {
+                feedbackEl.innerHTML = '';
+                lastCheckedAddress = '';
+                return;
+            }
+            if (cleaned === lastCheckedAddress) return;
+            feedbackEl.innerHTML = '<span class="text-neutral-400 animate-pulse">Checking address...</span>';
+            clearTimeout(addressCheckTimeout);
+            addressCheckTimeout = setTimeout(async () => {
+                lastCheckedAddress = cleaned;
+                const result = await smartGeocode(cleaned);
+                if (result) {
+                    feedbackEl.innerHTML = '<span class="text-emerald-400 font-bold">✓ Valid address found</span>';
+                } else {
+                    feedbackEl.innerHTML = '<span class="text-rose-400 font-bold">⚠️ Address not found. Try adding city and state (e.g., Houston, TX) or ZIP.</span>';
+                }
+            }, 600);
+        }
+
+        async function fillAddressWithCurrentGPS() {
+            const feedbackEl = document.getElementById('address-feedback');
+            const addressInput = document.getElementById('job-cust-address');
+            if (!navigator.geolocation) {
+                alert('Geolocation is not supported by your browser.');
+                return;
+            }
+            if (feedbackEl) feedbackEl.innerHTML = '<span class="text-amber-400 animate-pulse">Acquiring current GPS & reverse geocoding...</span>';
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    try {
+                        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&email=support@seemydriver.com`);
+                        const data = await res.json();
+                        if (data && data.display_name) {
+                            addressInput.value = data.display_name;
+                            handleAddressInput(data.display_name);
+                        } else {
+                            addressInput.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                            if (feedbackEl) feedbackEl.innerHTML = '<span class="text-emerald-400 font-bold">✓ Coordinates loaded successfully</span>';
+                        }
+                    } catch (err) {
+                        addressInput.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                        if (feedbackEl) feedbackEl.innerHTML = '<span class="text-emerald-400 font-bold">✓ Coordinates loaded successfully</span>';
+                    }
+                },
+                (error) => {
+                    if (feedbackEl) feedbackEl.innerHTML = '<span class="text-rose-400 font-bold">⚠️ GPS permission denied or unavailable.</span>';
+                    alert('Could not retrieve your GPS location. Please check browser permissions.');
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        }
+
+        // ==========================================
+        // DRIVER ACTIVE MAP (STEP 2)
+        // ==========================================
+        async function initDriverActiveMap() {
+            const container = document.getElementById('driver-map-container');
+            if (!container) return;
+            const destName = SafeStorage.getItem('smd_cust_address') || 'Destination';
+            let destLat = null;
+            let destLng = null;
+            let addressFound = false;
+
+            const geoResult = await smartGeocode(destName);
+            if (geoResult) {
+                destLat = geoResult.lat;
+                destLng = geoResult.lon;
+                addressFound = true;
+            }
+
+            const broadcastRef = db.ref('broadcasts/' + activeSessionId);
+            broadcastRef.off();
+            broadcastRef.on('value', async (snapshot) => {
+                const data = snapshot.val();
+                if (!data || !data.lat || !data.lng) return;
+                const driverLat = data.lat;
+                const driverLng = data.lng;
+                const speedMph = (data.speed !== undefined && !isNaN(data.speed)) ? data.speed : 0;
+                const speedEl = document.getElementById('driver-map-speed');
+                if (speedEl) speedEl.innerText = speedMph + ' mph';
+
+                let routeCoords = [[driverLat, driverLng]];
+                if (addressFound) {
+                    if (!driverCachedRouteCoords || driverLastRouteLat === null || driverLastRouteLng === null || calculateDistance(driverLastRouteLat, driverLastRouteLng, driverLat, driverLng) > 0.05) {
+                        try {
+                            const routeRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverLng},${driverLat};${destLng},${destLat}?overview=full&geometries=geojson`);
+                            const routeData = await routeRes.json();
+                            if (routeData.code === 'Ok' && routeData.routes && routeData.routes.length > 0) {
+                                driverCachedRouteCoords = routeData.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                            } else {
+                                driverCachedRouteCoords = [[driverLat, driverLng], [destLat, destLng]];
+                            }
+                            driverLastRouteLat = driverLat;
+                            driverLastRouteLng = driverLng;
+                        } catch (err) {
+                            driverCachedRouteCoords = [[driverLat, driverLng], [destLat, destLng]];
+                        }
+                    }
+                    routeCoords = driverCachedRouteCoords;
+                }
+
+                const truckIcon = L.divIcon({
+                    className: 'custom-truck-marker',
+                    html: `<div style="display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%);"> <span style="background: rgba(18,20,28,0.95); color: #fbbf24; padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 900; white-space: nowrap; margin-bottom: 2px; border: 1px solid rgba(251,191,36,0.4); box-shadow: 0 4px 12px rgba(0,0,0,0.6);">You (Driver)</span> <span style="font-size: 28px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));">🚚</span> </div>`,
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0]
+                });
+
+                const pinIcon = L.divIcon({
+                    className: 'custom-pin-marker',
+                    html: `<div style="display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%);"> <span style="font-size: 30px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));">📍</span> </div>`,
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0]
+                });
+
+                if (!driverMap) {
+                    driverMap = L.map('driver-map-container', {zoomControl: false}).setView([driverLat, driverLng], 15);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(driverMap);
+                    driverMapMarker = L.marker([driverLat, driverLng], {icon: truckIcon}).addTo(driverMap);
+                    if (addressFound) {
+                        driverDestMarker = L.marker([destLat, destLng], {icon: pinIcon}).addTo(driverMap);
+                        driverRouteLine = L.polyline(routeCoords, {color: '#3b82f6', weight: 5, opacity: 0.9}).addTo(driverMap);
+                        const group = L.featureGroup([driverMapMarker, driverDestMarker]);
+                        driverMap.fitBounds(group.getBounds().pad(0.2));
+                    } else {
+                        driverMap.setView([driverLat, driverLng], 15);
+                    }
+                } else {
+                    driverMapMarker.setLatLng([driverLat, driverLng]);
+                    driverMapMarker.setIcon(truckIcon);
+                    if (addressFound) {
+                        if (!driverDestMarker) {
+                            driverDestMarker = L.marker([destLat, destLng], {icon: pinIcon}).addTo(driverMap);
+                        }
+                        if (!driverRouteLine) {
+                            driverRouteLine = L.polyline(routeCoords, {color: '#3b82f6', weight: 5, opacity: 0.9}).addTo(driverMap);
+                        } else {
+                            driverRouteLine.setLatLngs(routeCoords);
+                        }
+                    }
+                }
+                setTimeout(() => { if (driverMap) driverMap.invalidateSize(); }, 150);
+            });
+        }
+
+        function zoomDriverMapIn() { if (driverMap) driverMap.zoomIn(); }
+        function zoomDriverMapOut() { if (driverMap) driverMap.zoomOut(); }
+        function fitDriverBothMarkers() {
+            if (driverMap && driverMapMarker && driverDestMarker) {
+                const group = L.featureGroup([driverMapMarker, driverDestMarker]);
+                driverMap.fitBounds(group.getBounds().pad(0.2));
+            } else if (driverMap && driverMapMarker) {
+                driverMap.setView(driverMapMarker.getLatLng(), 15);
+            }
+        }
+        function recenterDriverMap() { if (driverMap && driverMapMarker) driverMap.setView(driverMapMarker.getLatLng(), 16); }
+        function openDriverDirections() {
+            const destName = SafeStorage.getItem('smd_cust_address') || '';
+            if (destName) window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destName)}`, '_blank');
+        }
+
+        // ==========================================
+        // CUSTOMER VIEW (CLIENT MAP)
+        // ==========================================
+        async function initCustomerMapLive() {
+            initConnectionMonitor();
+            const container = document.getElementById('customer-map-container');
+            if (!container) return;
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionId = urlParams.get('session') || activeSessionId;
+            const broadcastRef = db.ref('broadcasts/' + sessionId);
+
+            broadcastRef.off();
+            broadcastRef.on('value', async (snapshot) => {
+                const data = snapshot.val();
+                if (!data || !data.lat || !data.lng) {
+                    const driverNameEl = document.getElementById('cust-driver-name');
+                    if (driverNameEl) driverNameEl.innerText = "Waiting for GPS signal...";
+                    return;
+                }
+
+                const driverName = data.driverName || 'Driver';
+                const destName = data.custAddress || 'Destination';
+                const driverNameEl = document.getElementById('cust-driver-name');
+                if (driverNameEl) driverNameEl.innerText = driverName;
+
+                const driverLat = data.lat;
+                const driverLng = data.lng;
+                const speedMph = (data.speed !== undefined && !isNaN(data.speed)) ? data.speed : 0;
+                const speedEl = document.getElementById('cust-speed');
+                if (speedEl) speedEl.innerText = speedMph + ' mph';
+
+                let destLat = null;
+                let destLng = null;
+                let addressFound = false;
+
+                const destEl = document.getElementById('cust-destination');
+                const etaEl = document.getElementById('cust-eta');
+                const distEl = document.getElementById('cust-distance');
+
+                if (destName === cachedDestName && cachedDestLat !== null && cachedDestLng !== null) {
+                    destLat = cachedDestLat;
+                    destLng = cachedDestLng;
+                    addressFound = true;
+                    if (destEl) destEl.innerText = destName;
+                } else {
+                    const geoResult = await smartGeocode(destName);
+                    if (geoResult) {
+                        destLat = geoResult.lat;
+                        destLng = geoResult.lon;
+                        cachedDestName = destName;
+                        cachedDestLat = destLat;
+                        cachedDestLng = destLng;
+                        addressFound = true;
+                        if (destEl) destEl.innerText = destName;
+                    } else {
+                        cachedDestName = destName;
+                        cachedDestLat = null;
+                        cachedDestLng = null;
+                        if (destEl) destEl.innerHTML = `<span class="text-rose-400 font-bold">⚠️ Address Not Found: "${destName}"</span>`;
+                        if (etaEl) etaEl.innerText = "N/A";
+                        if (distEl) distEl.innerText = "N/A";
+                    }
+                }
+
+                let routeCoords = [[driverLat, driverLng]];
+                let distanceMiles = 0;
+                if (addressFound) {
+                    distanceMiles = calculateDistance(driverLat, driverLng, destLat, destLng);
+                    const effectiveSpeedForEta = speedMph > 15 ? speedMph : 30;
+                    const hours = distanceMiles / effectiveSpeedForEta;
+                    const hrs = Math.floor(hours);
+                    const mins = Math.round((hours - hrs) * 60);
+
+                    if (distEl) distEl.innerText = distanceMiles.toFixed(1) + ' mi';
+                    if (etaEl) etaEl.innerText = hrs > 0 ? `${hrs} hr ${mins} mins` : `${mins} mins`;
+
+                    if (!custCachedRouteCoords || custLastRouteLat === null || custLastRouteLng === null || calculateDistance(custLastRouteLat, custLastRouteLng, driverLat, driverLng) > 0.05) {
+                        try {
+                            const routeRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverLng},${driverLat};${destLng},${destLat}?overview=full&geometries=geojson`);
+                            const routeData = await routeRes.json();
+                            if (routeData.code === 'Ok' && routeData.routes && routeData.routes.length > 0) {
+                                custCachedRouteCoords = routeData.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                            } else {
+                                custCachedRouteCoords = [[driverLat, driverLng], [destLat, destLng]];
+                            }
+                            custLastRouteLat = driverLat;
+                            custLastRouteLng = driverLng;
+                        } catch (err) {
+                            custCachedRouteCoords = [[driverLat, driverLng], [destLat, destLng]];
+                        }
+                    }
+                    routeCoords = custCachedRouteCoords;
+                }
+
+                const truckIcon = L.divIcon({
+                    className: 'custom-truck-marker',
+                    html: `<div style="display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%);"> <span style="background: rgba(18,20,28,0.95); color: #fbbf24; padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 900; white-space: nowrap; margin-bottom: 2px; border: 1px solid rgba(251,191,36,0.4); box-shadow: 0 4px 12px rgba(0,0,0,0.6);">${driverName}</span> <span style="font-size: 28px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));">🚚</span> </div>`,
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0]
+                });
+
+                const pinIcon = L.divIcon({
+                    className: 'custom-pin-marker',
+                    html: `<div style="display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%);"> <span style="font-size: 30px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));">📍</span> </div>`,
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0]
+                });
+
+                if (!map) {
+                    map = L.map('customer-map-container', {zoomControl: false}).setView([driverLat, driverLng], 15);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+                    driverMarker = L.marker([driverLat, driverLng], {icon: truckIcon}).addTo(map);
+                    if (addressFound) {
+                        destMarker = L.marker([destLat, destLng], {icon: pinIcon}).addTo(map);
+                        routeLine = L.polyline(routeCoords, {color: '#3b82f6', weight: 5, opacity: 0.9}).addTo(map);
+                        const group = L.featureGroup([driverMarker, destMarker]);
+                        map.fitBounds(group.getBounds().pad(0.2));
+                    } else {
+                        map.setView([driverLat, driverLng], 15);
+                    }
+                } else {
+                    driverMarker.setLatLng([driverLat, driverLng]);
+                    driverMarker.setIcon(truckIcon);
+                    if (addressFound) {
+                        if (!destMarker) {
+                            destMarker = L.marker([destLat, destLng], {icon: pinIcon}).addTo(map);
+                        } else {
+                            destMarker.setLatLng([destLat, destLng]);
+                            destMarker.setIcon(pinIcon);
+                        }
+                        if (!routeLine) {
+                            routeLine = L.polyline(routeCoords, {color: '#3b82f6', weight: 5, opacity: 0.9}).addTo(map);
+                        } else {
+                            routeLine.setLatLngs(routeCoords);
+                        }
+                    }
+                }
+                setTimeout(() => { if (map) map.invalidateSize(); }, 150);
+            });
+        }
+
+        function fitBothMarkers() {
+            if (map && driverMarker && destMarker) {
+                const group = L.featureGroup([driverMarker, destMarker]);
+                map.fitBounds(group.getBounds().pad(0.2));
+            } else if (map && driverMarker) {
+                map.setView(driverMarker.getLatLng(), 15);
+            }
+        }
+        function recenterCustomerMap() { if (map && driverMarker) map.setView(driverMarker.getLatLng(), 16); }
+        function openCustomerDirections() {
+            const destElement = document.getElementById('cust-destination');
+            const destName = destElement ? destElement.innerText : '';
+            if (destName) window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destName)}`, '_blank');
+        }
+        function zoomMapIn() { if (map) map.zoomIn(); }
+        function zoomMapOut() { if (map) map.zoomOut(); }
+
+        function togglePassword() {
+            const input = document.getElementById('password-input');
+            const btn = document.getElementById('toggle-password-btn');
+            if (input && btn) {
+                input.type = input.type === 'password' ? 'text' : 'password';
+                btn.innerText = input.type === 'password' ? '👁️' : '🙈';
+            }
+        }
+
+        function toggleSigninPassword() {
+            const input = document.getElementById('signin-password');
+            const btn = document.getElementById('toggle-signin-password');
+            if (input && btn) {
+                input.type = input.type === 'password' ? 'text' : 'password';
+                btn.innerText = input.type === 'password' ? '👁️' : '🙈';
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', function() {
+            initConnectionMonitor();
+            const urlParams = new URLSearchParams(window.location.search);
+            const isCustomerView = urlParams.get('view') === 'customer';
+            
+            // Robust detection for app wrappers (Bubblewrap TWA passes android-app:// referrer, PWA standalone, or explicit ?app=true)
+            const isTwaApp = document.referrer && document.referrer.includes('android-app://');
+            const isStandaloneApp = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true || urlParams.get('app') === 'true' || isTwaApp;
+
+            if (isCustomerView) {
+                switchView('customer');
+            } else if (isStandaloneApp) {
+                const accountExists = SafeStorage.getItem('smd_account_exists');
+                const isLoggedIn = SafeStorage.getItem('smd_is_logged_in') === 'true';
+                if (!accountExists) {
+                    switchView('register');
+                } else if (!isLoggedIn) {
+                    switchView('signin');
+                } else {
+                    switchView('job-setup');
+                }
+            } else {
+                switchView('landing');
+            }
+            checkActiveBroadcastBanner();
+        });
+    </script>
+</head>
+<body class="bg-[#090a0f] text-neutral-100 min-h-screen flex flex-col justify-between overflow-x-hidden selection:bg-amber-400 selection:text-black">
+
+    <!-- BATTERY OPTIMIZATION EXEMPTION MODAL -->
+    <div id="battery-opt-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 hidden">
+        <div class="w-full max-w-md bg-[#12141c] border-2 border-amber-400 p-6 rounded-3xl text-left flex flex-col gap-4 shadow-2xl relative">
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-400 text-2xl font-black shrink-0">⚡</div>
+                <div>
+                    <h3 class="text-lg font-black text-white leading-tight">Battery Optimization Exemption</h3>
+                    <p class="text-[11px] text-amber-400 font-bold uppercase tracking-wider">Required for Uninterrupted GPS</p>
+                </div>
+            </div>
+            <p class="text-xs text-neutral-300 leading-relaxed">
+                Even with foreground services, heavy-handed OEM skinning (<strong class="text-white">Samsung One UI, Xiaomi MIUI, Motorola, and Google Pixel Adaptive Battery</strong>) aggressively terminates background processes after 10–15 minutes of screen-off time.
+            </p>
+            <div class="bg-[#161923] border border-neutral-800 p-3.5 rounded-2xl flex flex-col gap-2">
+                <span class="text-[11px] font-bold text-amber-400">The Fix (Just like Uber & DoorDash):</span>
+                <ol class="text-[11px] text-neutral-300 space-y-1 list-decimal list-inside leading-relaxed">
+                    <li>Tap <strong class="text-white">"Open Battery Settings"</strong> below.</li>
+                    <li>Locate <strong class="text-white">SeeMyDriver</strong> in your app list.</li>
+                    <li>Select <strong class="text-amber-400">"Unrestricted"</strong> or <strong class="text-amber-400">"Don't optimize"</strong>.</li>
+                </ol>
+            </div>
+            <div class="flex flex-col gap-2 mt-1">
+                <button onclick="openBatterySettings()" class="w-full bg-[#161923] hover:bg-[#1e2230] border border-amber-400/40 text-amber-400 font-bold text-xs py-3 rounded-xl transition shadow-md text-center cursor-pointer">Open Battery Settings ⚙️</button>
+                <button onclick="confirmBatteryExempted()" class="w-full bg-amber-400 hover:bg-amber-300 active:scale-95 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer">I've Set to Unrestricted — Launch Broadcast 🚀</button>
+                <button onclick="closeBatteryModal()" class="w-full text-neutral-400 hover:text-white font-bold text-xs py-2 transition text-center cursor-pointer">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <header class="w-full max-w-4xl mx-auto px-4 py-3.5 flex items-center justify-between border-b border-neutral-900 bg-[#090a0f]/85 backdrop-blur-md sticky top-0 z-50">
+        <div class="flex items-center gap-2">
+            <span class="text-[32px] font-black tracking-tight text-white cursor-pointer select-none whitespace-nowrap flex items-center gap-3" onclick="switchView('landing', true)">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center shadow-lg shadow-amber-500/20 text-black text-2xl font-black">👀</div>
+                <span>See<span class="text-amber-400">My</span>Driver</span>
+            </span>
+        </div>
+        <div id="header-nav-actions" class="flex items-center gap-2"></div>
+    </header>
+
+    <main class="w-full max-w-2xl mx-auto px-4 py-6 flex-1 flex flex-col items-center justify-center">
+
+        <script>
+            if (window.location.search.includes('view=customer')) {
+                document.write('<style>#active-broadcast-banner { display: none !important; }</style>');
+            }
+        </script>
+
+        <!-- ACTIVE BROADCAST BANNER -->
+        <div id="active-broadcast-banner" class="w-full bg-amber-400/10 border border-amber-400/40 p-3.5 rounded-2xl mb-4 flex items-center justify-between shadow-xl hidden backdrop-blur-sm">
+            <div class="flex items-center gap-2.5 text-left cursor-pointer flex-1" onclick="switchView('active-broadcast')">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+                <div>
+                    <div class="text-xs font-black text-amber-400">Active Broadcast Running (Locked)</div>
+                    <div class="text-[10px] text-neutral-400">Tap here to view your live driver navigation map & link.</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <button onclick="switchView('active-broadcast')" class="bg-amber-400 hover:bg-amber-300 text-black font-black text-xs px-3 py-2 rounded-xl transition cursor-pointer shadow-md">Return</button>
+                <button onclick="endBroadcastAndHome()" class="bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-neutral-300 hover:text-white font-bold text-xs px-2.5 py-2 rounded-xl transition cursor-pointer">End</button>
+            </div>
+        </div>
+
+        <!-- LANDING VIEW -->
+        <div id="landing-view" class="w-full flex flex-col items-center text-center gap-4">
+            <div class="w-full bg-gradient-to-r from-amber-500/20 via-amber-400/10 to-amber-500/20 text-amber-300 font-bold text-xs py-3 px-4 rounded-2xl shadow-lg flex items-center justify-center gap-2 tracking-wide border border-amber-400/30 backdrop-blur-md">
+                <span>🔥 100% Free Solo Driver Plan — No Credit Card Required! 🔥</span>
+            </div>
+            <div class="inline-flex items-center gap-2 bg-[#12141c] border border-neutral-800 px-3.5 py-1.5 rounded-full shadow-inner mt-1">
+                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                <span class="text-[10px] font-bold text-neutral-300 uppercase tracking-wider">Real-Time GPS Telemetry Ready (Locked)</span>
+            </div>
+            <h1 class="text-3xl sm:text-5xl font-black tracking-tight text-white leading-tight">
+                Stop asking <span class="text-amber-400">"Where are you?"</span>
+            </h1>
+            <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed max-w-md">
+                Stream your exact live location straight from your mobile device browser to your clients in real time via Firebase cloud sync.
+            </p>
+
+            <div class="w-full bg-gradient-to-b from-[#12141c] to-[#161923] border border-amber-400/40 p-5 rounded-3xl flex flex-col gap-3 shadow-2xl relative overflow-hidden text-left backdrop-blur-md">
+                <div class="absolute top-0 right-0 bg-amber-400 text-black font-black text-[9px] px-3 py-1 rounded-bl-xl uppercase tracking-wider">Direct APK Download</div>
+                <div class="flex items-center gap-2 text-xs font-bold text-amber-400">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span>Android Sideload Ready</span>
+                </div>
+                <a href="/seemydriver.apk" download class="w-full bg-amber-400 hover:bg-amber-300 active:scale-95 text-black font-black text-xs py-3.5 rounded-xl transition shadow-lg shadow-amber-400/10 text-center cursor-pointer block">Download Android App (.apk)</a>
+                <div class="bg-[#090a0f] border border-neutral-800 rounded-2xl p-3 text-[11px] text-neutral-300 leading-relaxed">
+                    <span class="text-amber-400 font-bold">100% Secure Guarantee:</span> If Android or Google Play Protect shows a <span class="text-white italic">"Harm to your device"</span> or <span class="text-white italic">"Unrecognized app"</span> warning, this is standard for direct APK files. Simply tap <strong class="text-white">"More details"</strong> and then <strong class="text-white">"Install anyway"</strong>.
+                </div>
+            </div>
+
+            <div class="w-full bg-[#12141c] border border-neutral-800 p-5 rounded-3xl flex flex-col gap-2 shadow-2xl relative overflow-hidden text-left">
+                <div class="absolute top-0 right-0 bg-neutral-800 text-neutral-300 font-black text-[9px] px-3 py-1 rounded-bl-xl uppercase tracking-wider">No Download Needed</div>
+                <div class="flex items-center gap-2 text-xs font-bold text-sky-400">
+                    <span class="text-sm leading-none">🍎</span>
+                    <span>Apple / iOS Users Instructions</span>
+                </div>
+                <p class="text-[11px] text-neutral-300 leading-relaxed">
+                    Apple devices stream natively through <strong class="text-white">Safari</strong> without requiring an app installation. Simply open this page on your iPhone, allow location permissions, and start streaming!
+                </p>
+            </div>
+
+            <div class="w-full bg-[#12141c] border border-neutral-800 p-5 rounded-3xl flex flex-col gap-3 shadow-2xl relative overflow-hidden text-left">
+                <div class="absolute top-0 right-0 bg-neutral-800 text-neutral-300 font-black text-[9px] px-3 py-1 rounded-bl-xl uppercase tracking-wider">Live GPS Feed</div>
+                <div class="flex items-center gap-2 text-xs font-bold text-amber-400">
+                    <span id="landing-sim-status" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
+                    <span id="landing-sim-status-text">Waiting for GPS signal</span>
+                </div>
+                <div class="bg-[#161923] border border-neutral-800 rounded-2xl p-3 flex flex-col gap-2">
+                    <div class="flex justify-between text-[11px] text-neutral-400">
+                        <span>Latitude: <strong class="text-white" id="landing-lat">Waiting...</strong></span>
+                        <span>Longitude: <strong class="text-white" id="landing-lng">Waiting...</strong></span>
+                    </div>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <button onclick="startRealTimeTracking(); switchView('sandbox');" class="flex-1 bg-[#161923] border border-amber-400/40 hover:bg-[#1e2230] text-amber-400 font-bold text-xs py-3.5 rounded-xl transition shadow-lg text-center cursor-pointer">Start Real-Time GPS Stream →</button>
+                    <button onclick="startDemoMode(); switchView('sandbox');" class="flex-1 bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3.5 rounded-xl transition shadow-lg text-center cursor-pointer">Try Demo Mode</button>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-2.5 w-full max-w-xs mt-1">
+                <button onclick="switchView('plans')" class="w-full bg-amber-400 hover:bg-amber-300 active:scale-95 text-black font-black text-xs py-3.5 rounded-2xl transition text-center cursor-pointer shadow-md">View Plans & Pricing</button>
+                <button onclick="switchView('job-setup')" class="w-full bg-[#12141c] hover:bg-[#1a1d28] active:scale-95 border border-neutral-800 text-white font-bold text-xs py-3.5 rounded-2xl transition text-center cursor-pointer">Start Live Broadcast Now</button>
+            </div>
+        </div>
+
+        <!-- SANDBOX VIEW -->
+        <div id="sandbox-view" class="w-full flex flex-col items-center text-center gap-3 hidden">
+            <div class="w-full flex items-center justify-between mb-1">
+                <button onclick="stopRealTimeTracking(); switchView('landing');" class="text-xs text-neutral-400 hover:text-white flex items-center gap-1 bg-[#12141c] border border-neutral-800 px-3 py-1.5 rounded-xl cursor-pointer">← Back</button>
+                <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider animate-pulse">● Live GPS Streaming</span>
+                <div class="w-12"></div>
+            </div>
+            <h2 class="text-2xl font-black tracking-tight text-white">Real-Time GPS <span class="text-amber-400">Stream</span></h2>
+            <div class="w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3 shadow-xl max-w-sm mx-auto">
+                <div class="bg-[#161923] p-3.5 rounded-2xl border border-neutral-800 flex flex-col gap-2">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-neutral-400">GPS Status:</span>
+                        <span id="sandbox-sim-status" class="text-emerald-400 font-bold">Active Live Stream</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-neutral-400">Live Coordinates:</span>
+                        <span class="text-white font-mono text-[11px]"><span id="sandbox-lat">Acquiring...</span>, <span id="sandbox-lng">Acquiring...</span></span>
+                    </div>
+                </div>
+                <button onclick="switchView('job-setup');" class="w-full bg-amber-400 hover:bg-amber-300 active:scale-95 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer">Proceed to Job Setup 🚀</button>
+            </div>
+        </div>
+
+        <!-- PLANS VIEW -->
+        <div id="plans-view" class="w-full flex flex-col items-center text-center gap-4 hidden">
+            <div class="w-full flex items-center justify-between mb-1">
+                <button onclick="switchView('landing')" class="text-xs text-neutral-400 hover:text-white flex items-center gap-1 bg-[#12141c] border border-neutral-800 px-3 py-1.5 rounded-xl cursor-pointer">← Back</button>
+            </div>
+            <h2 class="text-3xl font-black tracking-tight text-white">Choose Your <span class="text-amber-400">Plan</span></h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-xl text-left">
+                <div id="solo-plan-card" onclick="setRegTier('solo')" class="w-full bg-[#12141c] border-2 border-amber-400 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer">
+                    <h3 class="text-xl font-black text-white">Solo Driver - Free</h3>
+                    <p class="text-xs text-neutral-400">Instant cloud telemetry & live client tracking.</p>
+                    <button onclick="selectAndRegister('solo')" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3 rounded-xl transition mt-2 cursor-pointer">Select Solo Free</button>
+                </div>
+                <div id="fleet-plan-card" onclick="setRegTier('fleet')" class="w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer">
+                    <h3 class="text-xl font-black text-white">Fleet Enterprise - $49/mo</h3>
+                    <p class="text-xs text-neutral-400">Multi-driver dispatch and custom telemetry stream.</p>
+                    <button onclick="selectAndRegister('fleet')" class="w-full bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-amber-400 font-bold text-xs py-3 rounded-xl transition mt-2 cursor-pointer">Select Fleet $49/mo</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- FLEET DASHBOARD VIEW -->
+        <div id="fleet-dashboard-view" class="w-full flex flex-col items-center text-center gap-4 hidden">
+            <div class="w-full flex items-center justify-between mb-1">
+                <button onclick="switchView('plans')" class="text-xs text-neutral-400 hover:text-white flex items-center gap-1 bg-[#12141c] border border-neutral-800 px-3 py-1.5 rounded-xl cursor-pointer">← Back to Plans</button>
+            </div>
+            <h2 class="text-3xl font-black tracking-tight text-white">Fleet Enterprise <span class="text-amber-400">Dashboard</span></h2>
+            <div class="w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-4 shadow-xl max-w-lg mx-auto">
+                <div class="bg-[#161923] p-4 rounded-2xl border border-neutral-800 flex flex-col gap-2">
+                    <span class="text-xs font-bold text-amber-400">🏢 Fleet Management Portal ($49/mo)</span>
+                    <p class="text-xs text-neutral-300 leading-relaxed">Multi-driver live dispatch, real-time fleet map overview, and custom telemetry API webhooks are active for your enterprise account.</p>
+                </div>
+                <div class="flex flex-col gap-2">
+                    <button onclick="switchView('job-setup')" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer">Launch Driver Job Setup 🚀</button>
+                    <button onclick="switchView('landing')" class="w-full bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-neutral-300 font-bold text-xs py-3 rounded-xl transition text-center cursor-pointer">Return to Home</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- APK GUIDE VIEW -->
+        <div id="apk-guide-view" class="w-full flex flex-col items-center text-center gap-4 hidden">
+            <div class="w-full flex items-center justify-between mb-1">
+                <button onclick="switchView('landing')" class="text-xs text-neutral-400 hover:text-white flex items-center gap-1 bg-[#12141c] border border-neutral-800 px-3 py-1.5 rounded-xl cursor-pointer">← Back</button>
+            </div>
+            <h2 class="text-3xl font-black tracking-tight text-white">Android APK Sideload <span class="text-amber-400">Guide</span></h2>
+            <div class="w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3 shadow-xl max-w-lg mx-auto text-xs text-neutral-300 leading-relaxed space-y-2">
+                <p class="font-bold text-amber-400">How to install SeeMyDriver on Android:</p>
+                <ol class="list-decimal list-inside space-y-1">
+                    <li>Download the <strong class="text-white">seemydriver.apk</strong> file from the landing page.</li>
+                    <li>Open the downloaded file in your Files app.</li>
+                    <li>If prompted about "Install from unknown sources", tap <strong class="text-white">Settings</strong> and enable permission for your browser/file manager.</li>
+                    <li>Tap <strong class="text-white">Install anyway</strong> if Play Protect shows a warning.</li>
+                </ol>
+                <button onclick="switchView('landing')" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer mt-4">Got It — Return Home</button>
+            </div>
+        </div>
+
+        <!-- JOB SETUP VIEW (STEP 1) -->
+        <div id="job-setup-view" class="w-full flex flex-col items-center text-center gap-3 hidden">
+            <div class="w-full max-w-sm mx-auto mt-2">
+                <div class="inline-flex items-center gap-1.5 bg-amber-400/10 border border-amber-400/30 text-amber-400 font-black text-[11px] px-3 py-1 rounded-full mb-2 uppercase tracking-wide">
+                    <span>📍 Step 1 of 2: Enter Job Details</span>
+                </div>
+                <h2 class="text-2xl font-black tracking-tight text-white mb-3">Customer & <span class="text-amber-400">Destination</span></h2>
+                <div class="w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3.5 shadow-xl">
+                    <div>
+                        <label class="block text-[11px] font-bold text-neutral-300 mb-1">Driver Name (Shows on Customer Map)</label>
+                        <input type="text" id="job-driver-name" placeholder="Driver Name" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-neutral-300 mb-1">Client Name</label>
+                        <input type="text" id="job-cust-name" placeholder="John Smith" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
+                    </div>
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-[11px] font-bold text-neutral-300">Destination Address *</label>
+                            <button type="button" onclick="fillAddressWithCurrentGPS()" class="text-[10px] bg-amber-400/10 hover:bg-amber-400/20 text-amber-400 font-bold px-2 py-0.5 rounded-lg border border-amber-400/30 transition cursor-pointer flex items-center gap-1">📍 Use My GPS</button>
+                        </div>
+                        <input type="text" id="job-cust-address" placeholder="Enter street address, city, state..." oninput="handleAddressInput(this.value)" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
+                        <div id="address-feedback" class="text-[10px] mt-1 text-neutral-400 min-h-[16px]"></div>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-neutral-300 mb-1">Client Phone (For Quick SMS Link)</label>
+                        <input type="tel" id="job-cust-phone" placeholder="(555) 000-0000" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
+                    </div>
+                    <button onclick="launchLiveBroadcast()" class="w-full bg-amber-400 hover:bg-amber-300 active:scale-95 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer mt-1">Start Cloud Broadcast 🚀</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACTIVE BROADCAST VIEW (STEP 2) -->
+        <div id="active-broadcast-view" class="w-full flex flex-col items-center text-center gap-3 hidden">
+            <div class="inline-flex items-center gap-1.5 bg-emerald-400/10 border border-emerald-400/30 text-emerald-400 font-black text-[11px] px-3 py-1 rounded-full uppercase tracking-wide">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span>🚀 Step 2 of 2: Share Link & Keep This Page Open</span>
+            </div>
+            <h2 class="text-2xl font-black tracking-tight text-white">Live Telemetry & <span class="text-amber-400">Driver Navigation</span></h2>
+            <div class="w-full bg-[#12141c] border border-neutral-800 p-5 rounded-3xl text-left flex flex-col gap-3.5 shadow-xl max-w-md mx-auto">
+                <div id="active-coord-display" class="text-xs text-neutral-300 bg-[#161923] p-3 rounded-xl border border-neutral-800 font-bold">Broadcasting active with foreground locking.</div>
+                
+                <div class="w-full bg-[#161923] border border-neutral-800 rounded-2xl overflow-hidden shadow-inner relative h-60">
+                    <div id="driver-map-container" style="width: 100%; height: 100%;"></div>
+                    <div class="absolute bottom-2 left-2 z-[1000] bg-black/80 backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-neutral-800 text-[11px] font-bold text-amber-400">
+                        Speed: <span id="driver-map-speed" class="text-white">0 mph</span>
+                    </div>
+                    <div class="absolute top-3 right-3 z-[1000] bg-amber-400 rounded-xl shadow-lg overflow-hidden flex flex-col border border-amber-500">
+                        <button onclick="zoomDriverMapIn()" class="w-9 h-9 hover:bg-amber-300 text-black font-black text-lg flex items-center justify-center transition cursor-pointer border-b border-amber-500">+</button>
+                        <button onclick="zoomDriverMapOut()" class="w-9 h-9 hover:bg-amber-300 text-black font-black text-lg flex items-center justify-center transition cursor-pointer">-</button>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="fitDriverBothMarkers()" class="flex-1 bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-sky-400 font-bold text-xs py-2.5 rounded-xl transition text-center cursor-pointer shadow-md min-w-[90px]">🎯 Fit Both</button>
+                    <button onclick="recenterDriverMap()" class="flex-1 bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-emerald-400 font-bold text-xs py-2.5 rounded-xl transition text-center cursor-pointer shadow-md min-w-[90px]">📍 Recenter</button>
+                    <button onclick="openDriverDirections()" class="flex-1 bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-amber-400 font-bold text-xs py-2.5 rounded-xl transition text-center cursor-pointer shadow-md min-w-[90px]">🗺️ Directions</button>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-400 mb-1">Client Tracking Link (Copy or Text)</label>
+                    <input type="text" id="tracking-link-output" readonly class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-amber-400 font-mono focus:outline-none" />
+                </div>
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <button onclick="copyTrackingLink()" class="flex-1 bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-white font-bold text-xs py-3 rounded-xl transition cursor-pointer shadow-md">Copy Link</button>
+                    <button onclick="textTrackingLink()" class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs py-3 rounded-xl transition text-center shadow-md cursor-pointer">💬 Text SMS</button>
+                </div>
+                <div class="bg-amber-400/10 border border-amber-400/30 p-2.5 rounded-xl text-[10px] text-amber-300 leading-snug">
+                    ⚠️ <strong>Important:</strong> Keep this browser tab or app open while driving so your GPS location continuously updates for your customer.
+                </div>
+                <button onclick="endBroadcastAndHome()" class="w-full bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-neutral-300 font-bold text-xs py-3 rounded-xl transition cursor-pointer">← End Broadcast & New Job</button>
+            </div>
+        </div>
+
+        <!-- CUSTOMER VIEW -->
+        <div id="customer-view-view" class="w-full flex flex-col items-center gap-4 hidden">
+            <div class="w-full flex items-center justify-center mb-1">
+                <div class="bg-[#12141c] border border-neutral-800 text-amber-400 font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-2 shadow-md">
+                    <span id="connection-indicator-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span id="connection-status-text">LIVE CLOUD VIEW</span>
+                </div>
+            </div>
+
+            <div class="w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl flex flex-col gap-4 shadow-2xl relative max-w-md mx-auto">
+                <div class="flex justify-between items-center bg-[#161923] p-3.5 rounded-2xl border border-neutral-800">
+                    <div>
+                        <span class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Active Driver</span>
+                        <span id="cust-driver-name" class="text-sm font-black text-white">Connecting to stream...</span>
+                    </div>
+                </div>
+                <div class="bg-[#161923] p-3.5 rounded-2xl border border-neutral-800 flex flex-col gap-1">
+                    <span class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Destination</span>
+                    <span id="cust-destination" class="text-xs font-bold text-amber-400">--</span>
+                </div>
+                <div class="grid grid-cols-3 gap-2.5">
+                    <div class="bg-[#161923] p-3 rounded-2xl border border-neutral-800 text-center">
+                        <span class="text-[9px] font-bold text-neutral-400 uppercase tracking-wider block mb-0.5">Est. Arrival</span>
+                        <span id="cust-eta" class="text-sm sm:text-base font-black text-white">--</span>
+                    </div>
+                    <div class="bg-[#161923] p-3 rounded-2xl border border-neutral-800 text-center">
+                        <span class="text-[9px] font-bold text-neutral-400 uppercase tracking-wider block mb-0.5">Distance</span>
+                        <span id="cust-distance" class="text-sm sm:text-base font-black text-white">--</span>
+                    </div>
+                    <div class="bg-[#161923] p-3 rounded-2xl border border-neutral-800 text-center">
+                        <span class="text-[9px] font-bold text-neutral-400 uppercase tracking-wider block mb-0.5">Speed</span>
+                        <span id="cust-speed" class="text-sm sm:text-base font-black text-amber-400">0 mph</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2.5 pt-1 flex-wrap">
+                    <button onclick="fitBothMarkers()" class="flex-1 bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-sky-400 font-bold text-xs py-3 rounded-xl transition text-center cursor-pointer shadow-md min-w-[90px]">🎯 Fit Both</button>
+                    <button onclick="recenterCustomerMap()" class="flex-1 bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-emerald-400 font-bold text-xs py-3 rounded-xl transition text-center cursor-pointer shadow-md min-w-[90px]">📍 Recenter</button>
+                    <button onclick="openCustomerDirections()" class="flex-1 bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-amber-400 font-bold text-xs py-3 rounded-xl transition text-center cursor-pointer shadow-md min-w-[90px]">🗺️ Directions</button>
+                </div>
+            </div>
+
+            <div class="w-full bg-[#12141c] border border-neutral-800 rounded-3xl overflow-hidden shadow-2xl relative h-80 max-w-md mx-auto">
+                <div id="customer-map-container" style="width: 100%; height: 100%;"></div>
+                <div class="absolute top-3 right-3 z-[1000] bg-amber-400 rounded-xl shadow-lg overflow-hidden flex flex-col border border-amber-500">
+                    <button onclick="zoomMapIn()" class="w-9 h-9 hover:bg-amber-300 text-black font-black text-lg flex items-center justify-center transition cursor-pointer border-b border-amber-500">+</button>
+                    <button onclick="zoomMapOut()" class="w-9 h-9 hover:bg-amber-300 text-black font-black text-lg flex items-center justify-center transition cursor-pointer">-</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SIGN IN VIEW -->
+        <div id="signin-view" class="w-full flex flex-col items-center text-center gap-2 hidden">
+            <div class="flex flex-col items-center gap-1.5 my-4">
+                <h2 class="font-black text-white tracking-tight flex items-center gap-3">
+                    <span class="text-[36px]">Welcome Back</span>
+                    <span class="animate-wave text-[38px]">👋</span>
+                </h2>
+                <p class="text-sm text-neutral-400">Glad to see you back on the road!</p>
+            </div>
+            <div class="w-full max-w-md bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-4 shadow-xl">
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Email Address</label>
+                    <input type="email" id="signin-email" placeholder="name@company.com" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Password</label>
+                    <div class="relative">
+                        <input type="password" id="signin-password" placeholder="••••••••" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition pr-10">
+                        <button type="button" id="toggle-signin-password" onclick="toggleSigninPassword()" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-neutral-400 hover:text-white cursor-pointer">👁️</button>
+                    </div>
+                </div>
+                <button onclick="handleSignIn()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer">Sign In →</button>
+            </div>
+        </div>
+
+        <!-- REGISTER VIEW -->
+        <div id="register-view" class="w-full flex flex-col items-center text-center gap-2 hidden">
+            <div class="flex flex-col items-center gap-1.5 my-4">
+                <h2 class="font-black text-white tracking-tight flex items-center gap-3 leading-none">
+                    <span class="text-[36px]">Welcome</span>
+                    <span class="animate-wave text-[38px]">👋</span>
+                </h2>
+                <p class="text-sm text-neutral-400 mt-1">Create your account to get started!</p>
+            </div>
+            <div class="w-full max-w-md bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-4 shadow-xl">
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Business / Company Name</label>
+                    <input type="text" id="reg-business-name" placeholder="Company Name" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Driver / Full Name</label>
+                    <input type="text" id="reg-name" placeholder="Your Name" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Email Address</label>
+                    <input type="email" id="reg-email" placeholder="name@company.com" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Password</label>
+                    <div class="relative">
+                        <input type="password" id="password-input" placeholder="••••••••" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition pr-10">
+                        <button type="button" id="toggle-password-btn" onclick="togglePassword()" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-neutral-400 hover:text-white cursor-pointer">👁️</button>
+                    </div>
+                </div>
+                <button onclick="handleRegister()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer">Create Account & Start →</button>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="w-full max-w-4xl mx-auto px-4 py-3 text-center border-t border-neutral-900 text-neutral-500 text-[10px]">
+        © 2026 SeeMyDriver. All rights reserved. Secure Cloud GPS Telemetry.
+    </footer>
+
+</body>
+</html>

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In - SeeMyDriver</title>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+        import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI",
+            authDomain: "seemydriver-prod.firebaseapp.com",
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",
+            projectId: "seemydriver-prod",
+            storageBucket: "seemydriver-prod.firebasestorage.app",
+            messagingSenderId: "163660133229",
+            appId: "1:163660133229:web:7e993e6ee37f940a04a064"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+
+        window.togglePassword = function() {
+            const passwordInput = document.getElementById('loginPassword');
+            passwordInput.type = passwordInput.type === 'password' ? 'text' : 'password';
+        };
+
+        window.handleLogin = function(e) {
+            e.preventDefault();
+            const emailInput = document.getElementById('loginEmail').value.trim().toLowerCase();
+            const password = document.getElementById('loginPassword').value;
+            const errorMsg = document.getElementById('errorMsg');
+            const submitBtn = document.getElementById('submitBtn');
+
+            const emailKey = emailInput.replace(/[.#$\/\[\]]/g, '_');
+
+            submitBtn.textContent = "Signing In...";
+            errorMsg.classList.add('hidden');
+
+            signInWithEmailAndPassword(auth, emailInput, password)
+                .then((userCredential) => {
+                    // Check user account type in Realtime Database to route correctly
+                    return get(ref(db, 'users/' + emailKey));
+                })
+                .then((snapshot) => {
+                    if (snapshot.exists()) {
+                        const userData = snapshot.val();
+                        if (userData.accountType === 'fleet') {
+                            window.location.href = "fleet.html";
+                        } else {
+                            window.location.href = "driver.html";
+                        }
+                    } else {
+                        // Default fallback if database record isn't found
+                        window.location.href = "driver.html";
+                    }
+                })
+                .catch((error) => {
+                    console.error("Login error:", error);
+                    errorMsg.textContent = error.message || "Failed to sign in. Please check your credentials.";
+                    errorMsg.classList.remove('hidden');
+                    submitBtn.textContent = "Sign In →";
+                });
+        };
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-black text-white min-h-screen flex flex-col justify-between selection:bg-yellow-400 selection:text-black">
+    
+    <header class="w-full max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">        
+        <div class="flex flex-col items-start gap-1">
+            <a href="index.html" class="text-3xl md:text-4xl font-black tracking-tight text-white flex items-center gap-2">                
+                See<span class="text-yellow-400">My</span>Driver  👀            
+            </a>
+            <div class="flex items-center gap-1.5 text-base md:text-lg font-black tracking-tight leading-none mt-0.5">
+                <span class="text-yellow-400 text-sm">⚡</span> 
+                <span><span class="text-yellow-400">Tap.</span> <span class="text-white">Track.</span> <span class="text-yellow-400">Done.</span></span>
+                <span class="text-white font-normal text-sm sm:inline">&mdash; Live tracking without the learning curve.</span>
+            </div>
+        </div>        
+        <a href="signup.html" class="bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition">Create Account</a>
+    </header>
+
+    <main class="w-full max-w-md mx-auto px-6 py-12 flex flex-col items-center justify-center flex-grow">
+        <div class="w-full bg-neutral-950 border border-neutral-900 p-8 rounded-3xl shadow-2xl flex flex-col gap-6">
+            
+            <div class="flex flex-col gap-2 text-center">
+                <h1 class="text-2xl font-black tracking-tight text-white">Welcome Back</h1>
+                <p class="text-xs text-neutral-400">Sign in to access your live tracking dashboard.</p>
+            </div>
+
+            <form onsubmit="handleLogin(event)" class="flex flex-col gap-4">
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Email Address</label>
+                    <input type="email" id="loginEmail" required placeholder="julius@quicktapsolutions.com" class="w-full bg-neutral-900 border border-neutral-800 text-white text-xs px-4 py-3 rounded-xl focus:outline-none focus:border-yellow-400 transition">
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Password</label>
+                    <div class="relative">
+                        <input type="password" id="loginPassword" required placeholder="••••••••" class="w-full bg-neutral-900 border border-neutral-800 text-white text-xs px-4 py-3 pr-10 rounded-xl focus:outline-none focus:border-yellow-400 transition">
+                        <button type="button" onclick="togglePassword()" class="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white text-xs font-bold px-2 py-1">
+                            👁️
+                        </button>
+                    </div>
+                </div>
+
+                <div id="errorMsg" class="text-red-500 text-xs text-center hidden"></div>
+
+                <button type="submit" id="submitBtn" class="w-full bg-yellow-400 hover:bg-yellow-300 text-black font-black text-xs px-7 py-3.5 rounded-xl transition shadow-lg shadow-yellow-400/20 mt-2">
+                    Sign In &rarr;
+                </button>
+            </form>
+
+        </div>
+    </main>
+
+    <footer class="w-full max-w-7xl mx-auto px-8 py-5 flex flex-col md:flex-row items-center justify-between text-xs text-neutral-500 border-t border-neutral-900 gap-2">        
+        <div>&copy; 2026 SeeMyDriver. Stop asking where your driver is.</div>        
+        <div class="flex items-center gap-1 text-neutral-400 font-medium">            
+            Powered by <span class="text-yellow-400 font-bold">Quick Tap Solutions</span> &mdash; Systems Architect: <span class="text-white font-bold">Julius Jones</span>        
+        </div>    
+    </footer>
+</body>
+</html>

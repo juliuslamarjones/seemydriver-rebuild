@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SeeMyDriver - Live Tracking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+</head>
+<body class="bg-black text-white min-h-screen flex flex-col justify-between overflow-x-hidden selection:bg-yellow-400 selection:text-black">
+
+    <header class="w-full max-w-md mx-auto px-4 py-4 flex items-center justify-between border-b border-neutral-900">
+        <div class="flex items-center gap-2">
+            <span class="text-[22px] font-black tracking-tight text-white">See<span class="text-yellow-400">My</span>Driver</span>
+        </div>
+        <div class="flex items-center gap-1.5 bg-neutral-900 px-3 py-1.5 rounded-full border border-neutral-800">
+            <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+            <span class="text-[10px] font-black uppercase tracking-wider text-green-400">LIVE ACTIVE</span>
+        </div>
+    </header>
+
+    <main class="w-full max-w-md mx-auto px-4 py-4 flex-1 flex flex-col gap-4">
+        
+        <div class="bg-neutral-950 border border-neutral-800 p-4 rounded-3xl flex flex-col gap-3 shadow-xl">
+            <div class="flex justify-between items-center">
+                <h1 id="driver-status-title" class="text-xs font-black text-yellow-400 uppercase tracking-wider">Driver is En Route</h1>
+            </div>
+            
+            <div class="bg-neutral-900 border border-neutral-800 p-3 rounded-2xl flex flex-col gap-1 text-xs">
+                <div class="text-neutral-300"><strong class="text-neutral-500 uppercase text-[10px] block">Destination:</strong> <span id="dest-text" class="font-medium text-white">Loading...</span></div>
+                <div class="text-neutral-300 pt-1 border-t border-neutral-800"><strong class="text-neutral-500 uppercase text-[10px] block">Client:</strong> <span id="client-text" class="font-medium text-white">Loading...</span></div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 pt-1">
+                <button onclick="panToDriver()" class="bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-yellow-400 font-bold text-[11px] py-2 rounded-xl transition cursor-pointer text-center">📍 Driver</button>
+                <button onclick="panToDestination()" class="bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 font-bold text-[11px] py-2 rounded-xl transition cursor-pointer text-center">🏁 Destination</button>
+                <button onclick="fitBoth()" class="bg-yellow-400 hover:bg-yellow-300 text-black font-black text-[11px] py-2 rounded-xl transition cursor-pointer text-center shadow-md">🗺️ Fit Both</button>
+            </div>
+        </div>
+
+        <div class="bg-neutral-950 border border-neutral-800 p-3 rounded-3xl flex-1 flex flex-col shadow-xl min-h-[350px]">
+            <div id="tracking-map" class="w-full h-full min-h-[320px] rounded-2xl z-10 border border-neutral-800"></div>
+        </div>
+
+    </main>
+
+    <footer class="w-full max-w-md mx-auto px-4 py-4 text-center text-[10px] text-neutral-600 border-t border-neutral-900">
+        &copy; 2026 SeeMyDriver. Powered by Quick Tap Solutions.
+    </footer>
+
+    <script>
+        const firebaseConfig = { databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com/" };
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const driverName = urlParams.get('driver') || 'Driver';
+        const companyName = urlParams.get('company') || '';
+        const clientName = urlParams.get('client') || 'Customer';
+        const destAddress = urlParams.get('dest') || '';
+
+        document.getElementById('client-text').innerText = clientName;
+        document.getElementById('dest-text').innerText = destAddress ? decodeURIComponent(destAddress) : 'Not specified';
+        document.getElementById('driver-status-title').innerText = `${driverName} is En Route`;
+
+        let map, driverMarker = null, destMarker = null, routeLine = null;
+        let driverCoords = null, destCoords = null;
+
+        // Custom directional arrow icon for the driver
+        const driverArrowIcon = L.divIcon({
+            className: 'custom-driver-arrow',
+            html: `<div style="background-color: #facc15; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.6); border: 2px solid #000;">
+                <svg style="width: 20px; height: 20px; fill: #000; transform: rotate(45deg);" viewBox="0 0 24 24">
+                    <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/>
+                </svg>
+            </div>`,
+            iconSize: [36, 36],
+            iconAnchor: [18, 18]
+        });
+
+        function initTrackingMap() {
+            map = L.map('tracking-map', { zoomControl: false }).setView([29.7604, -95.3698], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+            // Geocode destination if provided
+            if (destAddress) {
+                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${destAddress}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data && data.length > 0) {
+                            destCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                            destMarker = L.marker(destCoords).addTo(map);
+                            checkAndUpdateMap();
+                        }
+                    });
+            }
+
+            // Listen to live driver location from Firebase
+            const dbPath = companyName ? `companies/${companyName}/trips/${driverName}` : `trips/${driverName}`;
+            db.ref(dbPath).on('value', (snapshot) => {
+                const val = snapshot.val();
+                if (val && val.lat && val.lng) {
+                    driverCoords = [val.lat, val.lng];
+                    
+                    if (driverMarker) {
+                        driverMarker.setLatLng(driverCoords);
+                    } else {
+                        driverMarker = L.marker(driverCoords, { icon: driverArrowIcon }).addTo(map);
+                    }
+                    checkAndUpdateMap();
+                }
+            });
+        }
+
+        function checkAndUpdateMap() {
+            if (driverCoords && destCoords) {
+                if (routeLine) map.removeLayer(routeLine);
+                routeLine = L.polyline([driverCoords, destCoords], { color: '#facc15', weight: 4, dashArray: '6, 6' }).addTo(map);
+            }
+            if (driverCoords && !map.hasCenteredInitial) {
+                map.setView(driverCoords, 15);
+                map.hasCenteredInitial = true;
+            }
+        }
+
+        function panToDriver() {
+            if (driverCoords) map.setView(driverCoords, 16);
+        }
+
+        function panToDestination() {
+            if (destCoords) map.setView(destCoords, 16);
+        }
+
+        function fitBoth() {
+            if (driverCoords && destCoords) {
+                const bounds = L.latLngBounds([driverCoords, destCoords]);
+                map.fitBounds(bounds, { padding: [50, 50] });
+            } else if (driverCoords) {
+                panToDriver();
+            }
+        }
+
+        window.onload = initTrackingMap;
+    </script>
+</body>
+</html>
