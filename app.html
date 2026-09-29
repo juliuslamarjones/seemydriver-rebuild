@@ -78,8 +78,6 @@
         let activeSessionId = SafeStorage.getItem('smd_session_id') || ('session_' + Math.random().toString(36).substring(2, 11));
         SafeStorage.setItem('smd_session_id', activeSessionId);
 
-        let cachedDestLat = null;
-        let cachedDestLng = null;
         let connectionMonitorInitialized = false;
 
         async function requestWakeLock() {
@@ -195,7 +193,7 @@
             } else {
                 nav.innerHTML = `
                     <button onclick="switchView('signin')" class="text-xs text-neutral-300 hover:text-white font-bold px-3 py-1">Sign In</button>
-                    <button onclick="switchView('register')" class="bg-amber-400 hover:bg-amber-300 text-black text-xs px-3 py-1 rounded-xl font-black">Get Started</button>
+                    <button onclick="switchView('register')" class="bg-amber-400 hover:bg-amber-300 text-black text-xs px-3.5 py-1.5 rounded-xl font-black">Get Started</button>
                 `;
             }
         }
@@ -293,12 +291,45 @@
             SafeStorage.setItem('smd_session_id', activeSessionId);
             driverCachedRouteCoords = null;
             custCachedRouteCoords = null;
-            cachedDestLat = null;
-            cachedDestLng = null;
             switchView('job-setup', true);
         }
 
-        function launchLiveBroadcast() {
+        async function handleAddressInput(value) {
+            const suggestions = document.getElementById('address-suggestions');
+            const trimmed = value.trim();
+            if (trimmed.length < 3) { suggestions.classList.add('hidden'); return; }
+            
+            // Extract any leading house number typed by user (e.g. "4412")
+            const typedMatch = trimmed.match(/^(\d+)/);
+            const typedHouseNum = typedMatch ? typedMatch[1] : '';
+
+            try {
+                const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(value)}&limit=5`);
+                const data = await res.json();
+                suggestions.innerHTML = '';
+                data.features.forEach(f => {
+                    // Use API house number if available, otherwise preserve what user typed!
+                    const houseNum = f.properties.housenumber || typedHouseNum;
+                    const houseStr = houseNum ? houseNum + ' ' : '';
+                    
+                    const street = f.properties.street || f.properties.name || '';
+                    const city = f.properties.city || f.properties.town || f.properties.village || '';
+                    const state = f.properties.state || '';
+                    const postcode = f.properties.postcode || '';
+                    
+                    const name = `${houseStr}${street}, ${city}, ${state} ${postcode}`.replace(/,\s*,/g, ',').replace(/^,\s*/, '').trim();
+                    
+                    const div = document.createElement('div');
+                    div.className = "px-3.5 py-2 text-xs text-neutral-200 hover:bg-neutral-800 cursor-pointer border-b border-neutral-800";
+                    div.innerText = name;
+                    div.onclick = () => { document.getElementById('job-cust-address').value = name; suggestions.classList.add('hidden'); };
+                    suggestions.appendChild(div);
+                });
+                suggestions.classList.remove('hidden');
+            } catch(e){}
+        }
+
+        async function launchLiveBroadcast() {
             const custName = document.getElementById('job-cust-name').value.trim() || 'Client';
             const custAddress = document.getElementById('job-cust-address').value.trim();
             const driverPhone = document.getElementById('job-driver-phone').value.trim();
@@ -306,7 +337,29 @@
             
             if (!custAddress) { alert('Enter client address.'); return; }
 
-            // Force a brand new session ID for every single broadcast to avoid ghost caching
+            let destLat = null, destLng = null;
+            try {
+                let res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(custAddress)}&limit=1`);
+                let data = await res.json();
+                if (data.features?.length) {
+                    destLng = data.features[0].geometry.coordinates[0];
+                    destLat = data.features[0].geometry.coordinates[1];
+                } else {
+                    const cleanQuery = custAddress.replace(/^\d+\s+/, '');
+                    res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(cleanQuery)}&limit=1`);
+                    data = await res.json();
+                    if (data.features?.length) {
+                        destLng = data.features[0].geometry.coordinates[0];
+                        destLat = data.features[0].geometry.coordinates[1];
+                    }
+                }
+            } catch(e) {}
+
+            if (!destLat || !destLng) {
+                destLat = 29.7604;
+                destLng = -95.3698;
+            }
+
             activeSessionId = 'session_' + Math.random().toString(36).substring(2, 11);
             SafeStorage.setItem('smd_session_id', activeSessionId);
             SafeStorage.setItem('smd_cust_name', custName);
@@ -316,21 +369,19 @@
             SafeStorage.setItem('smd_active_broadcast', 'true');
 
             driverCachedRouteCoords = null;
-            cachedDestLat = null;
-            cachedDestLng = null;
 
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(position => {
-                    writeBroadcastToFirebase(position.coords.latitude, position.coords.longitude, driverName, driverPhone, custName, custAddress);
+                    writeBroadcastToFirebase(position.coords.latitude, position.coords.longitude, destLat, destLng, driverName, driverPhone, custName, custAddress);
                 }, () => {
-                    writeBroadcastToFirebase(29.9855, -95.2612, driverName, driverPhone, custName, custAddress);
+                    writeBroadcastToFirebase(29.9855, -95.2612, destLat, destLng, driverName, driverPhone, custName, custAddress);
                 }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
             } else {
-                writeBroadcastToFirebase(29.9855, -95.2612, driverName, driverPhone, custName, custAddress);
+                writeBroadcastToFirebase(29.9855, -95.2612, destLat, destLng, driverName, driverPhone, custName, custAddress);
             }
         }
 
-        function writeBroadcastToFirebase(lat, lng, driverName, driverPhone, custName, custAddress) {
+        function writeBroadcastToFirebase(lat, lng, destLat, destLng, driverName, driverPhone, custName, custAddress) {
             db.ref('broadcasts/' + activeSessionId).set({
                 driverName: driverName,
                 driverPhone: driverPhone,
@@ -338,6 +389,8 @@
                 custAddress: custAddress,
                 lat: lat,
                 lng: lng,
+                destLat: destLat,
+                destLng: destLng,
                 speed: 0,
                 timestamp: Date.now()
             });
@@ -402,38 +455,7 @@
             markerAnimIds.set(marker, requestAnimationFrame(animate));
         }
 
-        async function handleAddressInput(value) {
-            const suggestions = document.getElementById('address-suggestions');
-            if (value.trim().length < 3) { suggestions.classList.add('hidden'); return; }
-            try {
-                const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(value)}&limit=5`);
-                const data = await res.json();
-                suggestions.innerHTML = '';
-                data.features.forEach(f => {
-                    const name = `${f.properties.name || ''}, ${f.properties.city || ''}, ${f.properties.state || ''}`.replace(/^, /, '');
-                    const div = document.createElement('div');
-                    div.className = "px-3.5 py-2 text-xs text-neutral-200 hover:bg-neutral-800 cursor-pointer border-b border-neutral-800";
-                    div.innerText = name;
-                    div.onclick = () => { document.getElementById('job-cust-address').value = name; suggestions.classList.add('hidden'); };
-                    suggestions.appendChild(div);
-                });
-                suggestions.classList.remove('hidden');
-            } catch(e){}
-        }
-
         async function initDriverActiveMap() {
-            const destName = SafeStorage.getItem('smd_cust_address') || 'Destination';
-            let destLat = null, destLng = null, addressFound = false;
-            try {
-                const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(destName)}&limit=1`);
-                const data = await res.json();
-                if (data.features?.length) {
-                    destLng = data.features[0].geometry.coordinates[0];
-                    destLat = data.features[0].geometry.coordinates[1];
-                    addressFound = true;
-                }
-            } catch(e){}
-
             db.ref('broadcasts/' + activeSessionId).on('value', async (snap) => {
                 const data = snap.val();
                 if (!data || !data.lat) return;
@@ -445,6 +467,9 @@
                 if (clientLabel && data.custName) {
                     clientLabel.innerText = `Client: ${data.custName} — ${data.custAddress || 'Destination'}`;
                 }
+
+                let destLat = data.destLat, destLng = data.destLng;
+                let addressFound = !!(destLat && destLng);
 
                 let fullRoute = [[lat, lng]];
                 if (addressFound) {
@@ -518,6 +543,22 @@
             });
         }
 
+        function customerFitBoth() {
+            if (map && driverMarker && destMarker) {
+                try {
+                    map.fitBounds(L.featureGroup([driverMarker, destMarker]).getBounds().pad(0.2));
+                } catch(e) {}
+            } else if (map && driverMarker) {
+                map.setView(driverMarker.getLatLng(), 15);
+            }
+        }
+
+        function customerRecenter() {
+            if (map && driverMarker) {
+                map.setView(driverMarker.getLatLng(), 16);
+            }
+        }
+
         async function initCustomerMapLive() {
             initConnectionMonitor();
             const urlParams = new URLSearchParams(window.location.search);
@@ -531,7 +572,6 @@
                 const speed = data.speed || 0;
                 document.getElementById('cust-speed').innerText = speed + ' mph';
 
-                // Wire up phone buttons if driver phone exists
                 if (data.driverPhone) {
                     const callBtn = document.getElementById('cust-call-btn');
                     const msgBtn = document.getElementById('cust-msg-btn');
@@ -540,20 +580,8 @@
                 }
 
                 let lat = data.lat, lng = data.lng;
-                let destLat = cachedDestLat, destLng = cachedDestLng, addressFound = !!cachedDestLat;
-
-                if (!addressFound && data.custAddress) {
-                    try {
-                        const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(data.custAddress)}&limit=1`);
-                        const resData = await res.json();
-                        if (resData.features?.length) {
-                            destLng = resData.features[0].geometry.coordinates[0];
-                            destLat = resData.features[0].geometry.coordinates[1];
-                            cachedDestLat = destLat; cachedDestLng = destLng;
-                            addressFound = true;
-                        }
-                    } catch(e){}
-                }
+                let destLat = data.destLat, destLng = data.destLng;
+                let addressFound = !!(destLat && destLng);
 
                 let fullRoute = [[lat, lng]];
                 if (addressFound) {
@@ -618,6 +646,7 @@
                     if (addressFound) {
                         destMarker = L.marker([destLat, destLng], {icon: pinIcon}).addTo(map);
                         routeLine = L.polyline(activeForwardPath, {color: '#3b82f6', weight: 5, opacity: 0.9}).addTo(map);
+                        map.fitBounds(L.featureGroup([driverMarker, destMarker]).getBounds().pad(0.2));
                     }
                 } else {
                     smoothMoveMarker(driverMarker, lat, lng, speed);
@@ -644,10 +673,11 @@
 </head>
 <body class="bg-[#090a0f] text-neutral-100 min-h-screen flex flex-col justify-between selection:bg-amber-400 selection:text-black">
 
-    <header class="w-full max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between border-b border-neutral-900 bg-[#090a0f]/85 backdrop-blur-md sticky top-0 z-50">
+    <!-- Unified Header -->
+    <header class="w-full max-w-4xl mx-auto px-4 py-3.5 flex items-center justify-between border-b border-neutral-900 bg-[#090a0f]/85 backdrop-blur-md sticky top-0 z-50">
         <div class="flex items-center gap-2">
-            <span class="text-2xl font-black tracking-tight text-white cursor-pointer flex items-center gap-2" onclick="switchView('signin', true)">
-                <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center text-black text-lg font-black">👀</div>
+            <span class="text-[32px] font-black tracking-tight text-white cursor-pointer select-none whitespace-nowrap flex items-center gap-3" onclick="switchView('signin', true)">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center shadow-lg shadow-amber-500/20 text-black text-2xl font-black">👀</div>
                 <span>See<span class="text-amber-400">My</span>Driver</span>
             </span>
         </div>
@@ -688,7 +718,6 @@
         <div id="active-broadcast-view" class="w-full flex flex-col gap-2 hidden">
             <div class="bg-[#12141c] border border-neutral-800 p-3 rounded-2xl flex flex-col gap-2.5 shadow-xl">
                 
-                <!-- Clean Broadcasting Header Banner -->
                 <div class="bg-[#161923] border border-neutral-800 p-2.5 rounded-xl flex flex-col gap-1 shadow-inner">
                     <div class="flex items-center gap-2">
                         <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
@@ -697,7 +726,6 @@
                     <div id="broadcast-client-label" class="text-[11px] text-neutral-200 font-bold truncate">Client: Connecting...</div>
                 </div>
 
-                <!-- Map Container -->
                 <div class="w-full bg-[#161923] rounded-xl overflow-hidden relative h-56 border border-neutral-800 shadow-inner">
                     <div id="driver-map-container" style="width:100%; height:100%;"></div>
                     <div class="absolute bottom-2 left-2 z-[1000] bg-black/80 px-2 py-0.5 rounded-md text-[10px] font-bold text-amber-400 backdrop-blur-md">
@@ -733,6 +761,11 @@
                 <div class="absolute bottom-2 left-2 z-[1000] bg-black/80 px-2.5 py-1 rounded-lg text-xs font-bold text-amber-400">
                     Speed: <span id="cust-speed" class="text-white">0 mph</span>
                 </div>
+            </div>
+            <!-- Customer Map Controls: Fit Both & Recenter -->
+            <div class="flex gap-2">
+                <button onclick="customerFitBoth()" class="flex-1 bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-amber-400 font-bold text-xs py-2.5 rounded-xl transition shadow-md">🎯 Fit Both</button>
+                <button onclick="customerRecenter()" class="flex-1 bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-white font-bold text-xs py-2.5 rounded-xl transition shadow-md">📍 Recenter</button>
             </div>
             <div class="bg-[#12141c] border border-neutral-800 p-3 rounded-2xl flex justify-between items-center">
                 <div>
