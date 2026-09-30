@@ -1,9 +1,8 @@
 {
   "appId": "com.seemydriver.app",
   "appName": "SeeMyDriver",
-  "webDir": "public",
-  "server": {
-    "url": "https://seemydriver.com",
-    "cleartext": true
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true
   }
 }
