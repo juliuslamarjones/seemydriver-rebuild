@@ -18,6 +18,74 @@ if (typeof window.cachedDestLng === 'undefined') {
 if (typeof window.activeFirebaseListener === 'undefined') window.activeFirebaseListener = null;
 if (typeof window.simulationInterval === 'undefined') window.simulationInterval = null;
 
+// --- AUTOCOMPLETE ADDRESS GEOCODER LISTENER ---
+document.addEventListener('DOMContentLoaded', () => {
+    const addressInput = document.getElementById('job-cust-address');
+    const dropdown = document.getElementById('address-dropdown');
+
+    if (!addressInput || !dropdown) return;
+
+    let debounceTimer = null;
+
+    addressInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        if (query.length < 3) {
+            dropdown.classList.add('hidden');
+            dropdown.innerHTML = '';
+            return;
+        }
+
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async () => {
+            try {
+                const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`);
+                const data = await res.json();
+                
+                dropdown.innerHTML = '';
+                if (data.features && data.features.length > 0) {
+                    data.features.forEach(feature => {
+                        const props = feature.properties;
+                        const coords = feature.geometry.coordinates; // [lng, lat]
+                        const name = props.name || '';
+                        const street = props.street || name;
+                        const city = props.city || props.county || '';
+                        const state = props.state || '';
+                        const displayText = [street, city, state].filter(Boolean).join(', ');
+
+                        const item = document.createElement('div');
+                        item.className = 'px-3.5 py-2.5 text-xs text-neutral-300 hover:bg-amber-400 hover:text-black cursor-pointer border-b border-neutral-800/50 transition';
+                        item.innerText = displayText;
+
+                        item.addEventListener('click', () => {
+                            addressInput.value = displayText;
+                            window.cachedDestLng = coords[0];
+                            window.cachedDestLat = coords[1];
+                            SafeStorage.setItem('smd_dest_lat', coords[1]);
+                            SafeStorage.setItem('smd_dest_lng', coords[0]);
+                            dropdown.classList.add('hidden');
+                            dropdown.innerHTML = '';
+                        });
+
+                        dropdown.appendChild(item);
+                    });
+                    dropdown.classList.remove('hidden');
+                } else {
+                    dropdown.classList.add('hidden');
+                }
+            } catch (err) {
+                console.warn("Geocoding lookup failed:", err);
+            }
+        }, 300);
+    });
+
+    // Hide dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!addressInput.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.add('hidden');
+        }
+    });
+});
+
 // --- DYNAMIC OSRM ROUTE FETCHING ---
 async function fetchDynamicRoute(startLat, startLng, destLat, destLng) {
     try {
@@ -38,7 +106,7 @@ window.simulateTestDrive = async function() {
     const destLng = window.cachedDestLng || (SafeStorage.getItem('smd_dest_lng') ? parseFloat(SafeStorage.getItem('smd_dest_lng')) : null);
 
     if (!destLat || !destLng) {
-        alert('Please set a valid destination address in job setup first.');
+        alert('Please select a valid destination address from the drop-down list in job setup first.');
         return;
     }
     alert('Simulation started! Driving along dynamic route from your desk.');

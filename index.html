@@ -97,9 +97,10 @@
                         <label class="block text-[11px] font-bold text-neutral-300 mb-1">Client Mobile Number</label>
                         <input type="tel" id="job-cust-phone" placeholder="(555) 000-0000" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
                     </div>
-                    <div>
+                    <div class="relative">
                         <label class="block text-[11px] font-bold text-neutral-300 mb-1">Destination Address *</label>
                         <input type="text" id="job-cust-address" placeholder="Enter street address..." autocomplete="off" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
+                        <div id="address-dropdown" class="absolute left-0 right-0 mt-1 bg-[#161923] border border-neutral-800 rounded-xl shadow-2xl max-h-48 overflow-y-auto z-50 hidden"></div>
                     </div>
                     <button onclick="window.launchLiveBroadcast()" class="w-full bg-amber-400 hover:bg-amber-300 active:scale-95 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer mt-1">Start Cloud Broadcast 🚀</button>
                 </div>
