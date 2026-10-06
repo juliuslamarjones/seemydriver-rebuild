@@ -2,8 +2,8 @@
 // SEEMYDRIVER - 100% PURE SOLO PRODUCTION CORE
 // ==========================================
 
-window.activeSessionId = SafeStorage.getItem('smd_session_id') || ('session_' + Math.random().toString(36).substring(2, 11));
-SafeStorage.setItem('smd_session_id', window.activeSessionId);
+window.activeSessionId = window.SafeStorage.getItem('smd_session_id') || ('session_' + Math.random().toString(36).substring(2, 11));
+window.SafeStorage.setItem('smd_session_id', window.activeSessionId);
 
 function getAppBaseUrl() {
     const origin = window.location.origin;
@@ -13,23 +13,16 @@ function getAppBaseUrl() {
     return origin;
 }
 
-let driverMap = null;
-let driverMapMarker = null;
-let driverDestMarker = null;
-let driverMapLabelMarker = null;
-
-let cachedDestLat = SafeStorage.getItem('smd_dest_lat') ? parseFloat(SafeStorage.getItem('smd_dest_lat')) : null;
-let cachedDestLng = SafeStorage.getItem('smd_dest_lng') ? parseFloat(SafeStorage.getItem('smd_dest_lng')) : null;
-let activeFirebaseListener = null;
+let cachedDestLat = window.SafeStorage.getItem('smd_dest_lat') ? parseFloat(window.SafeStorage.getItem('smd_dest_lat')) : null;
+let cachedDestLng = window.SafeStorage.getItem('smd_dest_lng') ? parseFloat(window.SafeStorage.getItem('smd_dest_lng')) : null;
 
 window.driverMapFitted = false;
 window.driverFollowTruck = true;
 window.custMapFitted = false;
 window.custFollowTruck = true;
-let simulationInterval = null;
 
 function isBroadcastLocked() {
-    return SafeStorage.getItem('smd_active_broadcast') === 'true' && !!SafeStorage.getItem('smd_session_id');
+    return window.SafeStorage.getItem('smd_active_broadcast') === 'true' && !!window.SafeStorage.getItem('smd_session_id');
 }
 
 function isCustomerLink() {
@@ -64,8 +57,8 @@ function switchView(viewId, cleanUrl = false) {
     }
 
     if (viewId === 'job-setup') {
-        document.getElementById('job-driver-name').value = SafeStorage.getItem('smd_driver_name') || '';
-        document.getElementById('job-driver-phone').value = SafeStorage.getItem('smd_driver_phone') || '';
+        document.getElementById('job-driver-name').value = window.SafeStorage.getItem('smd_driver_name') || '';
+        document.getElementById('job-driver-phone').value = window.SafeStorage.getItem('smd_driver_phone') || '';
     }
 
     if (viewId === 'active-broadcast') {
@@ -78,14 +71,14 @@ window.switchView = switchView;
 function handleSignIn() {
     const email = document.getElementById('signin-email').value.trim();
     if (!email) { alert('Email required.'); return; }
-    SafeStorage.setItem('smd_is_logged_in', 'true');
-    SafeStorage.setItem('smd_user_email', email);
+    window.SafeStorage.setItem('smd_is_logged_in', 'true');
+    window.SafeStorage.setItem('smd_user_email', email);
     switchView('job-setup');
 }
 window.handleSignIn = handleSignIn;
 
 function handleSignOut() {
-    SafeStorage.clear();
+    window.SafeStorage.clear();
     stopRealTimeTracking();
     switchView('signin');
 }
@@ -101,12 +94,12 @@ async function launchLiveBroadcast() {
 
     if (!custAddress) { alert('Please enter a destination address.'); return; }
 
-    SafeStorage.setItem('smd_driver_name', driverName);
-    SafeStorage.setItem('smd_driver_phone', driverPhone);
-    SafeStorage.setItem('smd_cust_name', custName);
-    SafeStorage.setItem('smd_cust_phone', custPhone);
-    SafeStorage.setItem('smd_cust_address', custAddress);
-    SafeStorage.setItem('smd_active_broadcast', 'true');
+    window.SafeStorage.setItem('smd_driver_name', driverName);
+    window.SafeStorage.setItem('smd_driver_phone', driverPhone);
+    window.SafeStorage.setItem('smd_cust_name', custName);
+    window.SafeStorage.setItem('smd_cust_phone', custPhone);
+    window.SafeStorage.setItem('smd_cust_address', custAddress);
+    window.SafeStorage.setItem('smd_active_broadcast', 'true');
 
     let livePos = { lat: 29.9902, lng: -95.2636, speed: 15 };
     if (navigator.geolocation) {
@@ -124,8 +117,8 @@ async function launchLiveBroadcast() {
             if (data.features && data.features.length > 0) {
                 cachedDestLng = data.features[0].geometry.coordinates[0];
                 cachedDestLat = data.features[0].geometry.coordinates[1];
-                SafeStorage.setItem('smd_dest_lat', cachedDestLat);
-                SafeStorage.setItem('smd_dest_lng', cachedDestLng);
+                window.SafeStorage.setItem('smd_dest_lat', cachedDestLat);
+                window.SafeStorage.setItem('smd_dest_lng', cachedDestLng);
             }
         } catch(err) {}
     }
@@ -145,145 +138,17 @@ window.launchLiveBroadcast = launchLiveBroadcast;
 
 function endBroadcastAndHome() {
     stopRealTimeTracking();
-    SafeStorage.removeItem('smd_active_broadcast');
+    window.SafeStorage.removeItem('smd_active_broadcast');
     switchView('job-setup');
 }
 window.endBroadcastAndHome = endBroadcastAndHome;
-
-// --- GEOMETRY & MAP MARKERS ---
-function getTruckIcon(bearing = 0) {
-    return L.divIcon({
-        className: 'custom-truck-svg-marker',
-        html: `<div style="transform: translate(-50%, -50%) rotate(${bearing}deg); width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0px 6px 10px rgba(0,0,0,0.7);">
-            <svg viewBox="0 0 24 36" width="30" height="45" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="12" width="16" height="21" rx="2.5" fill="#0b0f19" stroke="#374151" stroke-width="1.5"/>
-                <rect x="4" y="21" width="16" height="3.5" fill="#f59e0b"/>
-                <path d="M6 12H18V5.5C18 3.84315 16.6569 2.5 15 2.5H9C7.34315 2.5 6 3.84315 6 5.5V12Z" fill="#111827" stroke="#4b5563" stroke-width="1.5"/>
-                <path d="M7.5 8H16.5L15.5 4.5H8.5L7.5 8Z" fill="#38bdf8" fill-opacity="0.9" stroke="#bae6fd" stroke-width="0.5"/>
-            </svg>
-        </div>`,
-        iconSize: [36, 36], iconAnchor: [18, 18]
-    });
-}
-
-function getDriverLabelIcon(name = 'Driver') {
-    return L.divIcon({
-        className: 'custom-driver-label-marker',
-        html: `<div style="transform: translate(-50%, -100%); font-size: 11px; font-weight: 900; color: #000; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff; white-space: nowrap;">${name}</div>`,
-        iconSize: [0, 0], iconAnchor: [0, -25]
-    });
-}
-
-// --- DESKTOP BROWSER SIMULATOR ---
-window.simulateTestDrive = async function() {
-    if (!cachedDestLat || !cachedDestLng) {
-        alert('Please set a valid destination address in job setup first.');
-        return;
-    }
-    alert('Simulation started! Watch your map move along the route from your desk.');
-    
-    let currentLat = 29.9902, currentLng = -95.2636;
-    try {
-        const snap = await db.ref('broadcasts/' + window.activeSessionId).once('value');
-        if (snap.val()) {
-            currentLat = snap.val().lat;
-            currentLng = snap.val().lng;
-        }
-    } catch(e){}
-
-    let coords = [[currentLat, currentLng], [cachedDestLat, cachedDestLng]];
-    try {
-        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${currentLng},${currentLat};${cachedDestLng},${cachedDestLat}?overview=full&geometries=geojson`);
-        const data = await res.json();
-        if (data.routes && data.routes.length > 0) {
-            coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-        }
-    } catch(e){}
-
-    let index = 0;
-    if (simulationInterval) clearInterval(simulationInterval);
-
-    simulationInterval = setInterval(() => {
-        if (index >= coords.length) {
-            clearInterval(simulationInterval);
-            return;
-        }
-        const pt = coords[index];
-        db.ref('broadcasts/' + window.activeSessionId).update({
-            lat: pt[0],
-            lng: pt[1],
-            speed: 28,
-            timestamp: Date.now()
-        });
-        index += 2;
-    }, 1000);
-};
-
-// --- ACTIVE MAP & TRACKING LOOP ---
-async function initDriverActiveMap() {
-    const container = document.getElementById('driver-map-container');
-    if (!container) return;
-    container.style.height = '288px';
-
-    if (driverMap) { driverMap.remove(); driverMap = null; }
-    driverMap = L.map('driver-map-container', {zoomControl: false}).setView([29.9902, -95.2636], 16);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(driverMap);
-
-    const pinIcon = L.divIcon({className: 'custom-pin-marker', html: `<div style="font-size:28px;">📍</div>`, iconSize: [32,32], iconAnchor: [16,32]});
-    if (cachedDestLat && cachedDestLng) {
-        driverDestMarker = L.marker([cachedDestLat, cachedDestLng], {icon: pinIcon}).addTo(driverMap);
-    }
-
-    if (activeFirebaseListener) db.ref('broadcasts/' + window.activeSessionId).off('value', activeFirebaseListener);
-
-    activeFirebaseListener = db.ref('broadcasts/' + window.activeSessionId).on('value', async (snap) => {
-        const data = snap.val();
-        if (!data) return;
-        const lat = data.lat, lng = data.lng, speed = data.speed || 0;
-
-        let speedEl = document.getElementById('driver-map-speed');
-        if (speedEl) speedEl.innerText = speed + ' mph';
-
-        let bearing = window.lastHeading || 0;
-        if (window.lastLat && window.lastLng && (lat !== window.lastLat || lng !== window.lastLng)) {
-            const dLng = (lng - window.lastLng) * Math.PI / 180;
-            const y = Math.sin(dLng) * Math.cos(lat * Math.PI / 180);
-            const x = Math.cos(window.lastLat * Math.PI / 180) * Math.sin(lat * Math.PI / 180) - Math.sin(window.lastLat * Math.PI / 180) * Math.cos(window.lastLat * Math.PI / 180) * Math.cos(dLng);
-            let rad = Math.atan2(y, x);
-            bearing = (rad * 180 / Math.PI + 360) % 360;
-            window.lastHeading = bearing;
-        }
-        window.lastLat = lat; window.lastLng = lng;
-
-        const truckIcon = getTruckIcon(bearing);
-        const labelIcon = getDriverLabelIcon(data.driverName || 'Driver');
-
-        if (driverMap && window.driverFollowTruck) {
-            driverMap.panTo([lat, lng], { animate: true });
-        }
-
-        if (!driverMapMarker) {
-            driverMapMarker = L.marker([lat, lng], {icon: truckIcon}).addTo(driverMap);
-            driverMapLabelMarker = L.marker([lat, lng], {icon: labelIcon}).addTo(driverMap);
-        } else {
-            driverMapMarker.setLatLng([lat, lng]);
-            driverMapMarker.setIcon(truckIcon);
-            driverMapLabelMarker.setLatLng([lat, lng]);
-        }
-    });
-}
-
-function stopRealTimeTracking() {
-    if (simulationInterval) clearInterval(simulationInterval);
-    SafeStorage.removeItem('smd_active_broadcast');
-}
 
 window.addEventListener('DOMContentLoaded', () => {
     if (isCustomerLink()) {
         switchView('customer');
     } else if (isBroadcastLocked()) {
         switchView('active-broadcast');
-    } else if (SafeStorage.getItem('smd_is_logged_in') === 'true') {
+    } else if (window.SafeStorage.getItem('smd_is_logged_in') === 'true') {
         switchView('job-setup');
     } else {
         switchView('signin');
