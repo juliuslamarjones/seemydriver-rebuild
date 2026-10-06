@@ -78,13 +78,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 300);
     });
 
-    // Hide dropdown when clicking outside
     document.addEventListener('click', (e) => {
         if (!addressInput.contains(e.target) && !dropdown.contains(e.target)) {
             dropdown.classList.add('hidden');
         }
     });
 });
+
+// --- TRUCK & LABEL ICON HELPERS ---
+function getTruckIcon(bearing = 0) {
+    return L.divIcon({
+        className: 'custom-truck-svg-marker',
+        html: `<div style="transform: translate(-50%, -50%) rotate(${bearing}deg); width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0px 6px 10px rgba(0,0,0,0.7);">
+            <svg viewBox="0 0 24 36" width="30" height="45" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="12" width="16" height="21" rx="2.5" fill="#0b0f19" stroke="#374151" stroke-width="1.5"/>
+                <rect x="4" y="21" width="16" height="3.5" fill="#f59e0b"/>
+                <path d="M6 12H18V5.5C18 3.84315 16.6569 2.5 15 2.5H9C7.34315 2.5 6 3.84315 6 5.5V12Z" fill="#111827" stroke="#4b5563" stroke-width="1.5"/>
+                <path d="M7.5 8H16.5L15.5 4.5H8.5L7.5 8Z" fill="#38bdf8" fill-opacity="0.9" stroke="#bae6fd" stroke-width="0.5"/>
+            </svg>
+        </div>`,
+        iconSize: [36, 36], iconAnchor: [18, 18]
+    });
+}
+
+function getDriverLabelIcon(name = 'Driver') {
+    return L.divIcon({
+        className: 'custom-driver-label-marker',
+        html: `<div style="transform: translate(-50%, -100%); font-size: 11px; font-weight: 900; color: #000; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff; white-space: nowrap;">${name}</div>`,
+        iconSize: [0, 0], iconAnchor: [0, -25]
+    });
+}
 
 // --- DYNAMIC OSRM ROUTE FETCHING ---
 async function fetchDynamicRoute(startLat, startLng, destLat, destLng) {
@@ -155,7 +178,7 @@ async function initDriverActiveMap() {
     if (!container) return;
     container.style.height = '288px';
 
-    if (window.driverMap) { window.driverMap.remove(); window.driverMap = null; window.routePolyline = null; }
+    if (window.driverMap) { window.driverMap.remove(); window.driverMap = null; window.routePolyline = null; window.driverMapMarker = null; }
     window.driverMap = L.map('driver-map-container', {zoomControl: false}).setView([29.9902, -95.2636], 16);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(window.driverMap);
 
@@ -171,12 +194,12 @@ async function initDriverActiveMap() {
     if (window.activeFirebaseListener) db.ref('broadcasts/' + window.activeSessionId).off('value', window.activeFirebaseListener);
 
     let fullRouteCoords = [];
+    const initialSnap = await db.ref('broadcasts/' + window.activeSessionId).once('value');
+    const initData = initialSnap.val() || { lat: 29.9902, lng: -95.2636 };
+
     if (destLat && destLng) {
-        const initialSnap = await db.ref('broadcasts/' + window.activeSessionId).once('value');
-        if (initialSnap.val()) {
-            fullRouteCoords = await fetchDynamicRoute(initialSnap.val().lat, initialSnap.val().lng, destLat, destLng);
-            window.routePolyline = L.polyline(fullRouteCoords, {color: '#38bdf8', weight: 5, opacity: 0.8}).addTo(window.driverMap);
-        }
+        fullRouteCoords = await fetchDynamicRoute(initData.lat, initData.lng, destLat, destLng);
+        window.routePolyline = L.polyline(fullRouteCoords, {color: '#38bdf8', weight: 5, opacity: 0.8}).addTo(window.driverMap);
     }
 
     window.activeFirebaseListener = db.ref('broadcasts/' + window.activeSessionId).on('value', async (snap) => {
@@ -198,8 +221,8 @@ async function initDriverActiveMap() {
         }
         window.lastLat = lat; window.lastLng = lng;
 
-        const truckIcon = typeof getTruckIcon === 'function' ? getTruckIcon(bearing) : L.divIcon({className: 'truck', html: '🚚'});
-        const labelIcon = typeof getDriverLabelIcon === 'function' ? getDriverLabelIcon(data.driverName || 'Driver') : L.divIcon({className: 'label', html: data.driverName});
+        const truckIcon = getTruckIcon(bearing);
+        const labelIcon = getDriverLabelIcon(data.driverName || 'Driver');
 
         if (window.driverMap && window.driverFollowTruck) {
             window.driverMap.panTo([lat, lng], { animate: true });
