@@ -1,29 +1,160 @@
 // ==========================================
-// SEEMYDRIVER - PURE REAL-WORLD TRACKER ENGINE
+// SEEMYDRIVER - PURE GPS HARDWARE ENGINE & ACTIVE MAP
 // ==========================================
+
+let wakeLock = null;
+let backgroundHeartbeatInterval = null;
+let silentAudioContext = null;
+let silentAudioNode = null;
 
 if (typeof window.driverMap === 'undefined') window.driverMap = null;
 if (typeof window.driverMapMarker === 'undefined') window.driverMapMarker = null;
 if (typeof window.driverDestMarker === 'undefined') window.driverDestMarker = null;
 if (typeof window.driverMapLabelMarker === 'undefined') window.driverMapLabelMarker = null;
 if (typeof window.routePolyline === 'undefined') window.routePolyline = null;
-
-if (typeof window.cachedDestLat === 'undefined') {
-    window.cachedDestLat = SafeStorage.getItem('smd_dest_lat') ? parseFloat(SafeStorage.getItem('smd_dest_lat')) : null;
-}
-if (typeof window.cachedDestLng === 'undefined') {
-    window.cachedDestLng = SafeStorage.getItem('smd_dest_lng') ? parseFloat(SafeStorage.getItem('smd_dest_lng')) : null;
-}
-
 if (typeof window.activeFirebaseListener === 'undefined') window.activeFirebaseListener = null;
 
-// --- AUTOCOMPLETE ADDRESS GEOCODER LISTENER ---
+async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+        try {
+            if (wakeLock === null && document.visibilityState === 'visible') {
+                wakeLock = await navigator.wakeLock.request('screen');
+            }
+        } catch (err) {}
+    }
+}
+
+async function releaseWakeLock() {
+    if (wakeLock !== null) {
+        try { await wakeLock.release(); } catch (err) {}
+        wakeLock = null;
+    }
+}
+
+function startSilentAudio() {
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        if (!silentAudioContext || silentAudioContext.state === 'closed') {
+            silentAudioContext = new AudioContext();
+        }
+        if (silentAudioContext.state === 'suspended') { silentAudioContext.resume(); }
+        if (!silentAudioNode) {
+            const buffer = silentAudioContext.createBuffer(1, silentAudioContext.sampleRate * 2, silentAudioContext.sampleRate);
+            const source = silentAudioContext.createBufferSource();
+            source.buffer = buffer;
+            source.loop = true;
+            const gainNode = silentAudioContext.createGain();
+            gainNode.gain.value = 0.00001;
+            source.connect(gainNode);
+            gainNode.connect(silentAudioContext.destination);
+            source.start(0);
+            silentAudioNode = source;
+        }
+    } catch (err) {}
+}
+
+function stopSilentAudio() {
+    try {
+        if (silentAudioNode) { try { silentAudioNode.stop(); } catch (e) {} silentAudioNode.disconnect(); silentAudioNode = null; }
+        if (silentAudioContext && silentAudioContext.state !== 'closed') { silentAudioContext.close(); silentAudioContext = null; }
+    } catch (err) {}
+}
+
+async function getLivePosition() {
+    return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+            reject(new Error('Geolocation not supported by device.'));
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const lat = pos.coords ? pos.coords.latitude : pos.lat;
+                const lng = pos.coords ? pos.coords.longitude : pos.lng;
+                const speed = pos.coords && pos.coords.speed ? pos.coords.speed * 2.23694 : (pos.speed || 0);
+                
+                if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
+                    reject(new Error('Invalid GPS coordinates received.'));
+                    return;
+                }
+                resolve({ lat: Number(lat), lng: Number(lng), speed: Number(speed) });
+            },
+            (err) => {
+                reject(new Error('GPS Hardware Lock Failed: ' + err.message));
+            },
+            { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+        );
+    });
+}
+
+function handlePositionUpdate(position) {
+    if (!position) return;
+    
+    let lat, lng, speedMph = 0;
+
+    if (position.lat !== undefined && position.lng !== undefined) {
+        lat = Number(position.lat);
+        lng = Number(position.lng);
+        speedMph = Number(position.speed || 0);
+    } else if (position.coords) {
+        lat = Number(position.coords.latitude);
+        lng = Number(position.coords.longitude);
+        speedMph = position.coords.speed ? Number(position.coords.speed * 2.23694) : 0;
+    }
+
+    if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng)) {
+        console.warn("Blocked undefined/NaN coordinate update:", position);
+        return;
+    }
+
+    const sessionId = window.activeSessionId || SafeStorage.getItem('smd_session_id');
+    if (SafeStorage.getItem('smd_active_broadcast') === 'true' && sessionId) {
+        db.ref('broadcasts/' + sessionId).update({
+            lat: lat,
+            lng: lng,
+            speed: Math.round(speedMph),
+            timestamp: Date.now()
+        });
+    }
+}
+
+async function startRealTimeTracking() {
+    await requestWakeLock();
+    startSilentAudio();
+    
+    try {
+        const initial = await getLivePosition();
+        handlePositionUpdate(initial);
+    } catch(err) {
+        alert("GPS Error: " + err.message);
+    }
+
+    if (backgroundHeartbeatInterval) clearInterval(backgroundHeartbeatInterval);
+    backgroundHeartbeatInterval = setInterval(async () => {
+        if (SafeStorage.getItem('smd_active_broadcast') === 'true') {
+            try {
+                const pos = await getLivePosition();
+                handlePositionUpdate(pos);
+            } catch(e) {}
+        } else {
+            clearInterval(backgroundHeartbeatInterval);
+        }
+    }, 3000);
+}
+
+async function stopRealTimeTracking() {
+    if (backgroundHeartbeatInterval) clearInterval(backgroundHeartbeatInterval);
+    await releaseWakeLock();
+    stopSilentAudio();
+    SafeStorage.removeItem('smd_active_broadcast');
+}
+
+// --- ADDRESS AUTOCOMPLETE GEOCODER ---
 document.addEventListener('DOMContentLoaded', () => {
     const addressInput = document.getElementById('job-cust-address');
     const dropdown = document.getElementById('address-dropdown');
 
     if (!addressInput || !dropdown) return;
-
     let debounceTimer = null;
 
     addressInput.addEventListener('input', (e) => {
@@ -117,12 +248,12 @@ async function fetchDynamicRoute(startLat, startLng, destLat, destLng) {
             return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
         }
     } catch (e) {
-        console.warn("OSRM routing failed, falling back to direct line:", e);
+        console.warn("OSRM routing failed:", e);
     }
     return [[startLat, startLng], [destLat, destLng]];
 }
 
-// --- ACTIVE MAP & REAL-WORLD TRACKING LOOP ---
+// --- ACTIVE MAP & RENDERING ENGINE ---
 async function initDriverActiveMap() {
     const container = document.getElementById('driver-map-container');
     if (!container) return;
@@ -134,10 +265,10 @@ async function initDriverActiveMap() {
 
     const pinIcon = L.divIcon({className: 'custom-pin-marker', html: `<div style="font-size:28px;">📍</div>`, iconSize: [32,32], iconAnchor: [16,32]});
     
-    const destLat = window.cachedDestLat || (SafeStorage.getItem('smd_dest_lat') ? parseFloat(SafeStorage.getItem('smd_dest_lat')) : null);
-    const destLng = window.cachedDestLng || (SafeStorage.getItem('smd_dest_lng') ? parseFloat(SafeStorage.getItem('smd_dest_lng')) : null);
+    const destLat = parseFloat(SafeStorage.getItem('smd_dest_lat'));
+    const destLng = parseFloat(SafeStorage.getItem('smd_dest_lng'));
 
-    if (destLat && destLng) {
+    if (!isNaN(destLat) && !isNaN(destLng)) {
         window.driverDestMarker = L.marker([destLat, destLng], {icon: pinIcon}).addTo(window.driverMap);
     }
 
@@ -147,9 +278,13 @@ async function initDriverActiveMap() {
     const initialSnap = await db.ref('broadcasts/' + window.activeSessionId).once('value');
     const initData = initialSnap.val() || { lat: 29.9902, lng: -95.2636 };
 
-    if (destLat && destLng) {
+    if (!isNaN(destLat) && !isNaN(destLng)) {
         fullRouteCoords = await fetchDynamicRoute(initData.lat, initData.lng, destLat, destLng);
         window.routePolyline = L.polyline(fullRouteCoords, {color: '#38bdf8', weight: 5, opacity: 0.8}).addTo(window.driverMap);
+        try {
+            const bounds = L.latLngBounds([[initData.lat, initData.lng], [destLat, destLng]]);
+            window.driverMap.fitBounds(bounds, { padding: [40, 40] });
+        } catch(e) {}
     }
 
     window.activeFirebaseListener = db.ref('broadcasts/' + window.activeSessionId).on('value', async (snap) => {
@@ -186,28 +321,44 @@ async function initDriverActiveMap() {
             window.driverMapMarker.setIcon(truckIcon);
             window.driverMapLabelMarker.setLatLng([lat, lng]);
         }
-
-        if (window.routePolyline && fullRouteCoords.length > 0) {
-            let closestIndex = 0;
-            let minDistance = Infinity;
-            
-            for (let i = 0; i < fullRouteCoords.length; i++) {
-                const pt = fullRouteCoords[i];
-                const dist = Math.pow(pt[0] - lat, 2) + Math.pow(pt[1] - lng, 2);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    closestIndex = i;
-                }
-            }
-
-            if (closestIndex > 0) {
-                fullRouteCoords = fullRouteCoords.slice(closestIndex);
-                window.routePolyline.setLatLngs(fullRouteCoords);
-            }
-        }
     });
 }
 
-function stopRealTimeTracking() {
-    SafeStorage.removeItem('smd_active_broadcast');
-}
+// --- MAP CONTROL BUTTON ACTIONS ---
+window.recenterMap = function() {
+    if (window.driverMap && window.lastLat && window.lastLng) {
+        window.driverFollowTruck = true;
+        window.driverMap.setView([window.lastLat, window.lastLng], 16, { animate: true });
+    }
+};
+
+window.fitBothMap = function() {
+    if (!window.driverMap) return;
+    window.driverFollowTruck = false;
+    
+    const destLat = parseFloat(SafeStorage.getItem('smd_dest_lat'));
+    const destLng = parseFloat(SafeStorage.getItem('smd_dest_lng'));
+    
+    if (window.lastLat && window.lastLng && !isNaN(destLat) && !isNaN(destLng)) {
+        try {
+            const bounds = L.latLngBounds([[window.lastLat, window.lastLng], [destLat, destLng]]);
+            window.driverMap.fitBounds(bounds, { padding: [40, 40], animate: true });
+        } catch(e) {}
+    } else if (window.lastLat && window.lastLng) {
+        window.driverMap.setView([window.lastLat, window.lastLng], 15, { animate: true });
+    }
+};
+
+window.openDirections = function() {
+    const destLat = SafeStorage.getItem('smd_dest_lat');
+    const destLng = SafeStorage.getItem('smd_dest_lng');
+    const destAddress = SafeStorage.getItem('smd_cust_address') || '';
+
+    if (destLat && destLng) {
+        window.open(`https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}`, '_blank');
+    } else if (destAddress) {
+        window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destAddress)}`, '_blank');
+    } else {
+        alert('No destination address set for directions.');
+    }
+};
