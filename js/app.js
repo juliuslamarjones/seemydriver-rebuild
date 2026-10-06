@@ -20,6 +20,7 @@ window.driverMapFitted = false;
 window.driverFollowTruck = true;
 window.custMapFitted = false;
 window.custFollowTruck = true;
+window.geoWatchId = null;
 
 function isBroadcastLocked() {
     return window.SafeStorage.getItem('smd_active_broadcast') === 'true' && !!window.SafeStorage.getItem('smd_session_id');
@@ -84,7 +85,7 @@ function handleSignOut() {
 }
 window.handleSignOut = handleSignOut;
 
-// --- BROADCAST LAUNCH ---
+// --- BROADCAST LAUNCH WITH CONTINUOUS GPS WATCHER ---
 async function launchLiveBroadcast() {
     const custName = document.getElementById('job-cust-name').value.trim() || 'Client';
     const custPhone = document.getElementById('job-cust-phone').value.trim();
@@ -101,15 +102,6 @@ async function launchLiveBroadcast() {
     window.SafeStorage.setItem('smd_cust_address', custAddress);
     window.SafeStorage.setItem('smd_active_broadcast', 'true');
 
-    let livePos = { lat: 29.9902, lng: -95.2636, speed: 15 };
-    if (navigator.geolocation) {
-        try {
-            navigator.geolocation.getCurrentPosition(pos => {
-                livePos = { lat: pos.coords.latitude, lng: pos.coords.longitude, speed: pos.coords.speed ? pos.coords.speed * 2.23694 : 15 };
-            }, err => {}, { enableHighAccuracy: true, timeout: 5000 });
-        } catch(e) {}
-    }
-
     if (!cachedDestLat || !cachedDestLng) {
         try {
             const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(custAddress)}&limit=1`);
@@ -123,12 +115,30 @@ async function launchLiveBroadcast() {
         } catch(err) {}
     }
 
-    await db.ref('broadcasts/' + window.activeSessionId).set({
-        driverName, driverPhone, custName, custPhone, custAddress,
-        destLat: cachedDestLat, destLng: cachedDestLng,
-        lat: livePos.lat, lng: livePos.lng, speed: Math.round(livePos.speed),
-        timestamp: Date.now()
-    });
+    // Start continuous hardware watchPosition loop
+    if (navigator.geolocation) {
+        if (window.geoWatchId !== null) {
+            navigator.geolocation.clearWatch(window.geoWatchId);
+        }
+        window.geoWatchId = navigator.geolocation.watchPosition(async (pos) => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const speedMph = pos.coords.speed ? Math.round(pos.coords.speed * 2.23694) : 0;
+
+            await db.ref('broadcasts/' + window.activeSessionId).update({
+                driverName, driverPhone, custName, custPhone, custAddress,
+                destLat: cachedDestLat, destLng: cachedDestLng,
+                lat: lat, lng: lng, speed: speedMph,
+                timestamp: Date.now()
+            });
+        }, (err) => {
+            console.warn("Geolocation watch error:", err);
+        }, {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 10000
+        });
+    }
 
     window.activeTrackingUrl = `${getAppBaseUrl()}/?view=customer&session=${window.activeSessionId}`;
     prompt("Broadcast live! Copy client tracking link:", window.activeTrackingUrl);
@@ -136,9 +146,16 @@ async function launchLiveBroadcast() {
 }
 window.launchLiveBroadcast = launchLiveBroadcast;
 
+function stopRealTimeTracking() {
+    if (window.geoWatchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(window.geoWatchId);
+        window.geoWatchId = null;
+    }
+    SafeStorage.removeItem('smd_active_broadcast');
+}
+
 function endBroadcastAndHome() {
     stopRealTimeTracking();
-    window.SafeStorage.removeItem('smd_active_broadcast');
     switchView('job-setup');
 }
 window.endBroadcastAndHome = endBroadcastAndHome;
@@ -148,6 +165,17 @@ window.addEventListener('DOMContentLoaded', () => {
         switchView('customer');
     } else if (isBroadcastLocked()) {
         switchView('active-broadcast');
+        // Resume watchPosition if reloading while broadcast is active
+        if (navigator.geolocation && window.geoWatchId === null) {
+            window.geoWatchId = navigator.geolocation.watchPosition(async (pos) => {
+                await db.ref('broadcasts/' + window.activeSessionId).update({
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    speed: pos.coords.speed ? Math.round(pos.coords.speed * 2.23694) : 0,
+                    timestamp: Date.now()
+                });
+            }, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+        }
     } else if (window.SafeStorage.getItem('smd_is_logged_in') === 'true') {
         switchView('job-setup');
     } else {
