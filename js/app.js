@@ -346,7 +346,6 @@ window.loadFleetTelemetryData = function() {
 function switchView(viewId, cleanUrl = false) {
     viewId = String(viewId).replace(/-view$/, '');
     
-    // Gate fleet access by tier
     if (viewId === 'fleet-dashboard' && SafeStorage.getItem('smd_user_tier') !== 'fleet') {
         viewId = 'job-setup';
     }
