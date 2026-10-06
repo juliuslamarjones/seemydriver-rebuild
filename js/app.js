@@ -546,7 +546,14 @@ function handleSignIn() {
     SafeStorage.setItem('smd_is_logged_in', 'true');
     SafeStorage.setItem('smd_user_email', email);
 
-    switchView('job-setup');
+    if (SafeStorage.getItem('smd_user_tier') === 'fleet') {
+        switchView('fleet-dashboard');
+        if (typeof window.initFleetMasterMap === 'function') {
+            window.initFleetMasterMap();
+        }
+    } else {
+        switchView('job-setup');
+    }
 }
 window.handleSignIn = handleSignIn;
 
