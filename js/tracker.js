@@ -1,5 +1,5 @@
 // ==========================================
-// SEEMYDRIVER - DYNAMIC ROUTING & TRACKER ENGINE
+// SEEMYDRIVER - PURE REAL-WORLD TRACKER ENGINE
 // ==========================================
 
 if (typeof window.driverMap === 'undefined') window.driverMap = null;
@@ -16,7 +16,6 @@ if (typeof window.cachedDestLng === 'undefined') {
 }
 
 if (typeof window.activeFirebaseListener === 'undefined') window.activeFirebaseListener = null;
-if (typeof window.simulationInterval === 'undefined') window.simulationInterval = null;
 
 // --- AUTOCOMPLETE ADDRESS GEOCODER LISTENER ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -123,56 +122,7 @@ async function fetchDynamicRoute(startLat, startLng, destLat, destLng) {
     return [[startLat, startLng], [destLat, destLng]];
 }
 
-// --- DESKTOP BROWSER SIMULATOR WITH DYNAMIC SNAPPING ---
-window.simulateTestDrive = async function() {
-    const destLat = window.cachedDestLat || (SafeStorage.getItem('smd_dest_lat') ? parseFloat(SafeStorage.getItem('smd_dest_lat')) : null);
-    const destLng = window.cachedDestLng || (SafeStorage.getItem('smd_dest_lng') ? parseFloat(SafeStorage.getItem('smd_dest_lng')) : null);
-
-    if (!destLat || !destLng) {
-        alert('Please select a valid destination address from the drop-down list in job setup first.');
-        return;
-    }
-    alert('Simulation started! Driving along dynamic route from your desk.');
-    
-    let currentLat = 29.9902, currentLng = -95.2636;
-    try {
-        const snap = await db.ref('broadcasts/' + window.activeSessionId).once('value');
-        if (snap.val()) {
-            currentLat = snap.val().lat;
-            currentLng = snap.val().lng;
-        }
-    } catch(e){}
-
-    let coords = await fetchDynamicRoute(currentLat, currentLng, destLat, destLng);
-    let index = 0;
-
-    if (window.simulationInterval) clearInterval(window.simulationInterval);
-
-    window.simulationInterval = setInterval(async () => {
-        if (index >= coords.length) {
-            clearInterval(window.simulationInterval);
-            return;
-        }
-
-        const pt = coords[index];
-        
-        db.ref('broadcasts/' + window.activeSessionId).update({
-            lat: pt[0],
-            lng: pt[1],
-            speed: 32,
-            timestamp: Date.now()
-        });
-
-        index++;
-
-        if (index % 15 === 0 && index < coords.length - 10) {
-            coords = await fetchDynamicRoute(pt[0], pt[1], destLat, destLng);
-            index = 0;
-        }
-    }, 1000);
-};
-
-// --- ACTIVE MAP & TRACKING LOOP WITH TRAIL CLEANUP ---
+// --- ACTIVE MAP & REAL-WORLD TRACKING LOOP ---
 async function initDriverActiveMap() {
     const container = document.getElementById('driver-map-container');
     if (!container) return;
@@ -259,6 +209,5 @@ async function initDriverActiveMap() {
 }
 
 function stopRealTimeTracking() {
-    if (window.simulationInterval) clearInterval(window.simulationInterval);
     SafeStorage.removeItem('smd_active_broadcast');
 }
