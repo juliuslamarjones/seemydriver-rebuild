@@ -1,6 +1,6 @@
 {
   "buildCommand": "",
-  "outputDirectory": ".",
+  "outputDirectory": "www",
   "rewrites": [
     {
       "source": "/(.*)",
