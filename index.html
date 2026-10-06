@@ -1,160 +1,26 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#090a0f">
-    <meta name="color-scheme" content="dark">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="manifest" href="manifest.json">
-    <title>SeeMyDriver - Real-Time GPS Telemetry</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Leaflet CSS & JS for Map -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
-    <style>
-        @keyframes wave-hand {
-            0% { transform: rotate(0deg); }
-            20% { transform: rotate(14deg); }
-            40% { transform: rotate(-8deg); }
-            60% { transform: rotate(14deg); }
-            80% { transform: rotate(-4deg); }
-            100% { transform: rotate(0deg); }
-        }
-        .animate-wave { display: inline-block; animation: wave-hand 2s infinite; transform-origin: 70% 70%; }
-        .truck-marker-container { transition: transform 0.3s ease-out; }
-    </style>
-    <script>
-        window.SafeStorage = {
-            getItem(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
-            setItem(key, value) { try { localStorage.setItem(key, value); } catch (e) {} },
-            removeItem(key) { try { localStorage.removeItem(key); } catch (e) {} },
-            clear() { try { localStorage.clear(); } catch (e) {} }
-        };
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyAft3ZCE8DEmjsf4FLIQDgdYIQL1woIJOI",
-            authDomain: "seemydriver-prod.firebaseapp.com",
-            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",
-            projectId: "seemydriver-prod",
-            storageBucket: "seemydriver-prod.firebasestorage.app",
-            messagingSenderId: "16366013329",
-            appId: "1:16366013329:web:7e993e6ee37f940a04a064"
-        };
-
-        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
-        const db = firebase.database();
-        try { db.goOnline(); } catch (e) {}
-
-        let activeSessionId = SafeStorage.getItem('smd_session_id') || ('session_' + Math.random().toString(36).substring(2, 11));
-        SafeStorage.setItem('smd_session_id', activeSessionId);
-    </script>
-    <!-- Modular Scripts -->
-    <script src="js/tracker.js" defer></script>
-    <script src="js/app.js" defer></script>
-</head>
-<body class="bg-[#090a0f] text-neutral-100 min-h-screen flex flex-col justify-between selection:bg-amber-400 selection:text-black">
-
-    <!-- Header -->
-    <header class="w-full max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between border-b border-neutral-900 bg-[#090a0f]/85 backdrop-blur-md sticky top-0 z-50">
-        <div class="flex items-center gap-2">
-            <span class="text-[28px] font-black tracking-tight text-white cursor-pointer flex items-center gap-2" onclick="window.switchView('job-setup', true)">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center text-black text-xl font-black">👀</div>
-                <span>See<span class="text-amber-400">My</span>Driver</span>
-            </span>
-        </div>
-        <div id="header-nav-actions" class="flex items-center gap-2">
-            <button onclick="window.handleSignOut()" class="bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-neutral-300 hover:text-white text-xs px-3.5 py-2 rounded-xl font-bold cursor-pointer transition">Sign Out</button>
-        </div>
-    </header>
-
-    <main class="w-full max-w-5xl mx-auto px-4 py-6 flex-1 flex flex-col items-center justify-center">
+<!-- ACTIVE BROADCAST VIEW (SOLO STEP 2) -->
+<div id="active-broadcast-view" class="w-full max-w-md flex flex-col items-center text-center gap-3" style="display: none !important;">
+    <div class="inline-flex items-center gap-1.5 bg-emerald-400/10 border border-emerald-400/30 text-emerald-400 font-black text-[11px] px-3 py-1 rounded-full uppercase tracking-wide mb-1">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+        <span>🚀 Live Dispatch Active</span>
+    </div>
+    <div class="w-full bg-[#12141c] border border-neutral-800 p-4 rounded-3xl text-left flex flex-col gap-3 shadow-xl">
         
-        <!-- JOB SETUP VIEW (SOLO STEP 1) -->
-        <div id="job-setup-view" class="w-full max-w-sm flex flex-col items-center text-center gap-3" style="display: flex !important; flex-direction: column !important;">
-            <div class="w-full mx-auto mt-2">
-                <div class="inline-flex items-center gap-1.5 bg-amber-400/10 border border-amber-400/30 text-amber-400 font-black text-[11px] px-3 py-1 rounded-full mb-2 uppercase tracking-wide">
-                    <span>📍 Solo Driver Dispatch</span>
-                </div>
-                <h2 class="text-2xl font-black tracking-tight text-white mb-3">Customer & <span class="text-amber-400">Destination</span></h2>
-                <div class="w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3.5 shadow-xl">
-                    <div>
-                        <label class="block text-[11px] font-bold text-neutral-300 mb-1">Driver Name</label>
-                        <input type="text" id="job-driver-name" placeholder="Driver Name" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
-                    </div>
-                    <div>
-                        <label class="block text-[11px] font-bold text-neutral-300 mb-1">Driver Phone</label>
-                        <input type="tel" id="job-driver-phone" placeholder="(555) 000-0000" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
-                    </div>
-                    <div>
-                        <label class="block text-[11px] font-bold text-neutral-300 mb-1">Client Name</label>
-                        <input type="text" id="job-cust-name" placeholder="John Smith" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
-                    </div>
-                    <div>
-                        <label class="block text-[11px] font-bold text-neutral-300 mb-1">Client Mobile Number</label>
-                        <input type="tel" id="job-cust-phone" placeholder="(555) 000-0000" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
-                    </div>
-                    <div class="relative">
-                        <label class="block text-[11px] font-bold text-neutral-300 mb-1">Destination Address *</label>
-                        <input type="text" id="job-cust-address" placeholder="Enter street address..." autocomplete="off" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
-                        <div id="address-dropdown" class="absolute left-0 right-0 mt-1 bg-[#161923] border border-neutral-800 rounded-xl shadow-2xl max-h-48 overflow-y-auto z-50 hidden"></div>
-                    </div>
-                    <button onclick="window.launchLiveBroadcast()" class="w-full bg-amber-400 hover:bg-amber-300 active:scale-95 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer mt-1">Start Cloud Broadcast 🚀</button>
-                </div>
+        <!-- Map Container -->
+        <div id="driver-map-container" class="w-full rounded-2xl overflow-hidden border border-neutral-800 shadow-inner"></div>
+
+        <!-- Bottom Controls & Speed Bar -->
+        <div class="flex items-center justify-between gap-2 mt-1">
+            <div class="grid grid-cols-4 gap-1.5 flex-1">
+                <button onclick="window.recenterMap()" class="bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-neutral-300 hover:text-amber-400 text-[10px] font-bold py-2.5 px-1 rounded-xl transition flex items-center justify-center cursor-pointer">Recenter</button>
+                <button onclick="window.fitBothMap()" class="bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-neutral-300 hover:text-amber-400 text-[10px] font-bold py-2.5 px-1 rounded-xl transition flex items-center justify-center cursor-pointer">Fit Both</button>
+                <button onclick="window.openDirections()" class="bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-neutral-300 hover:text-amber-400 text-[10px] font-bold py-2.5 px-1 rounded-xl transition flex items-center justify-center cursor-pointer">Directions</button>
+                <button onclick="window.endBroadcastAndHome()" class="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold text-[10px] py-2.5 px-1 rounded-xl transition flex items-center justify-center cursor-pointer">End</button>
+            </div>
+            <div class="bg-[#161923] border border-neutral-800 rounded-xl px-3 py-2 text-right min-w-[70px]">
+                <div class="text-[9px] text-neutral-400 uppercase font-bold">Speed</div>
+                <div id="driver-map-speed" class="text-xs font-black text-amber-400">0 mph</div>
             </div>
         </div>
-
-        <!-- ACTIVE BROADCAST VIEW (SOLO STEP 2) -->
-        <div id="active-broadcast-view" class="w-full max-w-md flex flex-col items-center text-center gap-3" style="display: none !important;">
-            <div class="inline-flex items-center gap-1.5 bg-emerald-400/10 border border-emerald-400/30 text-emerald-400 font-black text-[11px] px-3 py-1 rounded-full uppercase tracking-wide mb-2">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                <span>🚀 Live Dispatch Active</span>
-            </div>
-            <div class="w-full bg-[#12141c] border border-neutral-800 p-5 rounded-3xl text-left flex flex-col gap-4 shadow-xl">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <div class="text-[10px] text-neutral-400 font-bold uppercase">Current Ground Speed</div>
-                        <div id="driver-map-speed" class="text-2xl font-black text-amber-400">0 mph</div>
-                    </div>
-                    <button onclick="window.endBroadcastAndHome()" class="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold text-xs px-3 py-2 rounded-xl transition cursor-pointer">End Broadcast</button>
-                </div>
-                <div id="driver-map-container" class="w-full rounded-2xl overflow-hidden border border-neutral-800 shadow-inner"></div>
-            </div>
-        </div>
-
-        <!-- PREMIUM CUSTOMER VIEW -->
-        <div id="customer-view-view" class="w-full max-w-md flex flex-col gap-4 mx-auto relative" style="display: none !important;">
-        </div>
-
-        <!-- SIGN IN VIEW -->
-        <div id="signin-view" class="w-full max-w-md flex flex-col items-center text-center gap-2 mx-auto" style="display: none !important;">
-            <div class="flex flex-col items-center gap-1.5 my-4">
-                <h2 class="font-black text-white tracking-tight flex items-center gap-3">
-                    <span class="text-[36px]">Welcome Back</span>
-                    <span class="animate-wave text-[38px]">👋</span>
-                </h2>
-                <p class="text-sm text-neutral-400">Sign in to manage your live driver telemetry.</p>
-            </div>
-            <div class="w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-4 shadow-xl">
-                <div>
-                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Email Address</label>
-                    <input type="email" id="signin-email" placeholder="name@company.com" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
-                </div>
-                <div>
-                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Password</label>
-                    <input type="password" id="signin-password" placeholder="••••••••" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
-                </div>
-                <button onclick="window.handleSignIn()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer">Sign In →</button>
-            </div>
-        </div>
-    </main>
-
-    <footer class="w-full max-w-5xl mx-auto px-4 py-3 text-center border-t border-neutral-900 text-neutral-500 text-[10px]">
-        © 2026 SeeMyDriver. All rights reserved. Secure Cloud GPS Telemetry.
-    </footer>
-</body>
-</html>
+    </div>
+</div>
