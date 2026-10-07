@@ -31,10 +31,32 @@ function isCustomerLink() {
     return p.get('view') === 'customer' || p.has('s') || (p.has('session') && p.get('view') !== 'job-setup');
 }
 
-// --- VIEW CONTROLLER ---
+// --- VIEW CONTROLLER (STRICTLY LOCKED DURING BROADCAST & HEADER SIGN-OUT CONTROL) ---
 function switchView(viewId, cleanUrl = false) {
     viewId = String(viewId).replace(/-view$/, '');
-    const views = ['landing-view', 'plans-view', 'job-setup-view', 'active-broadcast-view', 'customer-view-view', 'signin-view', 'register-view'];
+
+    // SECURITY LOCK: If broadcast is active, block any attempt to switch away from active broadcast or signin/setup
+    if (isBroadcastLocked() && viewId !== 'active-broadcast' && viewId !== 'customer') {
+        console.warn("Broadcast is active. Navigation locked until broadcast is terminated.");
+        viewId = 'active-broadcast';
+    }
+
+    // SECURITY LOCK: Customers are strictly restricted to the customer view
+    if (isCustomerLink() && viewId !== 'customer') {
+        viewId = 'customer';
+    }
+
+    // Manage Sign-Out Button Visibility in Header (Hidden during active broadcast or customer view)
+    const signoutBtn = document.getElementById('header-signout-btn');
+    if (signoutBtn) {
+        if (isBroadcastLocked() || isCustomerLink()) {
+            signoutBtn.style.setProperty('display', 'none', 'important');
+        } else {
+            signoutBtn.style.setProperty('display', 'block', 'important');
+        }
+    }
+
+    const views = ['landing-view', 'plans-view', 'job-setup-view', 'active-broadcast-view', 'customer-view-view', 'signin-view', 'register-view', 'fleet-dashboard-view'];
     
     views.forEach(v => {
         const el = document.getElementById(v);
@@ -58,19 +80,22 @@ function switchView(viewId, cleanUrl = false) {
     }
 
     if (viewId === 'job-setup') {
-        document.getElementById('job-driver-name').value = window.SafeStorage.getItem('smd_driver_name') || '';
-        document.getElementById('job-driver-phone').value = window.SafeStorage.getItem('smd_driver_phone') || '';
+        const driverNameEl = document.getElementById('job-driver-name');
+        const driverPhoneEl = document.getElementById('job-driver-phone');
+        if (driverNameEl) driverNameEl.value = window.SafeStorage.getItem('smd_driver_name') || '';
+        if (driverPhoneEl) driverPhoneEl.value = window.SafeStorage.getItem('smd_driver_phone') || '';
     }
 
     if (viewId === 'active-broadcast') {
-        setTimeout(() => initDriverActiveMap(), 150);
+        setTimeout(() => { if (typeof initDriverActiveMap === 'function') initDriverActiveMap(); }, 150);
     }
 }
 window.switchView = switchView;
 
-// --- AUTH (SOLO ONLY) ---
+// --- AUTH ---
 function handleSignIn() {
-    const email = document.getElementById('signin-email').value.trim();
+    const emailElem = document.getElementById('signin-email');
+    const email = emailElem ? emailElem.value.trim() : '';
     if (!email) { alert('Email required.'); return; }
     window.SafeStorage.setItem('smd_is_logged_in', 'true');
     window.SafeStorage.setItem('smd_user_email', email);
@@ -78,20 +103,89 @@ function handleSignIn() {
 }
 window.handleSignIn = handleSignIn;
 
+function handleRegister() {
+    const emailElem = document.getElementById('reg-email');
+    const email = emailElem ? emailElem.value.trim() : '';
+    if (!email) { alert('Email required.'); return; }
+    window.SafeStorage.setItem('smd_is_logged_in', 'true');
+    window.SafeStorage.setItem('smd_user_email', email);
+    switchView('job-setup');
+}
+window.handleRegister = handleRegister;
+
 function handleSignOut() {
+    if (isBroadcastLocked()) {
+        alert('Cannot sign out while a live broadcast is active. Please end the broadcast first.');
+        return;
+    }
     window.SafeStorage.clear();
     stopRealTimeTracking();
     switchView('signin');
 }
 window.handleSignOut = handleSignOut;
 
-// --- BROADCAST LAUNCH WITH CONTINUOUS GPS WATCHER ---
+// --- NATIVE SMS / SHARE TRIGGER FOR CLIENT LINK ---
+window.textTrackingLink = function() {
+    const baseUrl = getAppBaseUrl() + window.location.pathname;
+    const sessionId = window.activeSessionId || window.SafeStorage.getItem('smd_session_id') || 'demo';
+    const trackingUrl = baseUrl + '?view=customer&session=' + sessionId;
+    const custPhone = document.getElementById('job-cust-phone') ? document.getElementById('job-cust-phone').value.trim() : '';
+    const custName = document.getElementById('job-cust-name') ? document.getElementById('job-cust-name').value.trim() : 'Client';
+    
+    const message = `Hi ${custName}, track my live arrival in real-time here: ${trackingUrl}`;
+
+    if (navigator.share) {
+        navigator.share({
+            title: 'SeeMyDriver Live Tracking',
+            text: message,
+            url: trackingUrl,
+        }).catch(() => {});
+    } else if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        window.location.href = `sms:${custPhone}?body=${encodeURIComponent(message)}`;
+    } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = trackingUrl;
+        textArea.style.position = 'fixed';
+        textArea.style.top = '0';
+        textArea.style.left = '0';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            alert('Desktop mode: Customer tracking link copied to clipboard!\n\n' + trackingUrl);
+        } catch (err) {
+            prompt('Copy this customer link manually:', trackingUrl);
+        }
+        document.body.removeChild(textArea);
+    }
+};
+
+window.copyTrackingLink = function() {
+    const baseUrl = getAppBaseUrl() + window.location.pathname;
+    const sessionId = window.activeSessionId || window.SafeStorage.getItem('smd_session_id') || 'demo';
+    const trackingUrl = baseUrl + '?view=customer&session=' + sessionId;
+    navigator.clipboard.writeText(trackingUrl).then(() => {
+        alert('Customer tracking link copied to clipboard!');
+    }).catch(() => {
+        prompt('Copy tracking link:', trackingUrl);
+    });
+};
+
+// --- BROADCAST LAUNCH & GPS WATCHER ---
 async function launchLiveBroadcast() {
-    const custName = document.getElementById('job-cust-name').value.trim() || 'Client';
-    const custPhone = document.getElementById('job-cust-phone').value.trim();
-    const custAddress = document.getElementById('job-cust-address').value.trim();
-    const driverName = document.getElementById('job-driver-name').value.trim() || 'Driver';
-    const driverPhone = document.getElementById('job-driver-phone').value.trim();
+    const custNameElem = document.getElementById('job-cust-name');
+    const custPhoneElem = document.getElementById('job-cust-phone');
+    const custAddressElem = document.getElementById('job-cust-address');
+    const driverNameElem = document.getElementById('job-driver-name');
+    const driverPhoneElem = document.getElementById('job-driver-phone');
+
+    const custName = custNameElem ? custNameElem.value.trim() || 'Client' : 'Client';
+    const custPhone = custPhoneElem ? custPhoneElem.value.trim() : '';
+    const custAddress = custAddressElem ? custAddressElem.value.trim() : '';
+    const driverName = driverNameElem ? driverNameElem.value.trim() || 'Driver' : 'Driver';
+    const driverPhone = driverPhoneElem ? driverPhoneElem.value.trim() : '';
 
     if (!custAddress) { alert('Please enter a destination address.'); return; }
 
@@ -115,33 +209,22 @@ async function launchLiveBroadcast() {
         } catch(err) {}
     }
 
-    // Start continuous hardware watchPosition loop
-    if (navigator.geolocation) {
-        if (window.geoWatchId !== null) {
-            navigator.geolocation.clearWatch(window.geoWatchId);
-        }
-        window.geoWatchId = navigator.geolocation.watchPosition(async (pos) => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-            const speedMph = pos.coords.speed ? Math.round(pos.coords.speed * 2.23694) : 0;
-
-            await db.ref('broadcasts/' + window.activeSessionId).update({
-                driverName, driverPhone, custName, custPhone, custAddress,
-                destLat: cachedDestLat, destLng: cachedDestLng,
-                lat: lat, lng: lng, speed: speedMph,
-                timestamp: Date.now()
-            });
-        }, (err) => {
-            console.warn("Geolocation watch error:", err);
-        }, {
-            enableHighAccuracy: true,
-            maximumAge: 0,
-            timeout: 10000
+    try {
+        await db.ref('broadcasts/' + window.activeSessionId).set({
+            driverName,
+            driverPhone,
+            custName,
+            custPhone,
+            custAddress,
+            destLat: cachedDestLat || 29.9902,
+            destLng: cachedDestLng || -95.2636,
+            lat: 29.9902,
+            lng: -95.2636,
+            speed: 0,
+            timestamp: Date.now()
         });
-    }
+    } catch(e) {}
 
-    window.activeTrackingUrl = `${getAppBaseUrl()}/?view=customer&session=${window.activeSessionId}`;
-    prompt("Broadcast live! Copy client tracking link:", window.activeTrackingUrl);
     switchView('active-broadcast');
 }
 window.launchLiveBroadcast = launchLiveBroadcast;
@@ -156,29 +239,74 @@ function stopRealTimeTracking() {
 
 function endBroadcastAndHome() {
     stopRealTimeTracking();
+    db.ref('broadcasts/' + window.activeSessionId).update({
+        status: 'ended',
+        timestamp: Date.now()
+    }).catch(() => {});
     switchView('job-setup');
 }
 window.endBroadcastAndHome = endBroadcastAndHome;
 
+// Plan selection helpers
+window.setRegTier = function(tier) {
+    const soloCard = document.getElementById('solo-plan-card');
+    const fleetCard = document.getElementById('fleet-plan-card');
+    if (tier === 'solo') {
+        if (soloCard) soloCard.className = "w-full bg-[#12141c] border-2 border-amber-400 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
+        if (fleetCard) fleetCard.className = "w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
+    } else {
+        if (fleetCard) fleetCard.className = "w-full bg-[#12141c] border-2 border-amber-400 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
+        if (soloCard) soloCard.className = "w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
+    }
+};
+
+window.selectAndRegister = function(tier) {
+    if (tier === 'fleet') {
+        switchView('fleet-dashboard');
+    } else {
+        switchView('register');
+    }
+};
+
+window.upgradeToFleet = function() {
+    switchView('fleet-dashboard');
+};
+
+window.handleAddressInput = function(val) {
+    // Optional address suggestions autocomplete stub
+};
+
+// --- SMART ENVIRONMENT & ENTRY ROUTER ---
 window.addEventListener('DOMContentLoaded', () => {
+    const origin = window.location.origin || '';
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view');
+    
+    const isNativeApp = origin.includes('localhost') || 
+                        origin.includes('capacitor') || 
+                        origin.includes('file://') || 
+                        window.location.protocol === 'file:' ||
+                        window.Capacitor;
+
     if (isCustomerLink()) {
         switchView('customer');
-    } else if (isBroadcastLocked()) {
-        switchView('active-broadcast');
-        // Resume watchPosition if reloading while broadcast is active
-        if (navigator.geolocation && window.geoWatchId === null) {
-            window.geoWatchId = navigator.geolocation.watchPosition(async (pos) => {
-                await db.ref('broadcasts/' + window.activeSessionId).update({
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude,
-                    speed: pos.coords.speed ? Math.round(pos.coords.speed * 2.23694) : 0,
-                    timestamp: Date.now()
-                });
-            }, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
-        }
-    } else if (window.SafeStorage.getItem('smd_is_logged_in') === 'true') {
-        switchView('job-setup');
-    } else {
+        return;
+    }
+
+    // Explicit override: if web user requests signin or register via query param
+    if (viewParam === 'signin') {
         switchView('signin');
+        return;
+    }
+    if (viewParam === 'register') {
+        switchView('register');
+        return;
+    }
+
+    if (isNativeApp) {
+        switchView(isBroadcastLocked() ? 'active-broadcast' : (window.SafeStorage.getItem('smd_is_logged_in') === 'true' ? 'job-setup' : 'signin'));
+    } else {
+        // Web browser traffic hitting seemydriver.com directly loads the public landing page!
+        switchView('landing');
     }
 });
