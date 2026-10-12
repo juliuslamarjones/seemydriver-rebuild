@@ -1,13 +1,13 @@
 // ==========================================================
-// SEEMYDRIVER - APP CONTROLLER v4.2
-// - Laptop strictly defaults to Landing Page for pitching/demos
+// SEEMYDRIVER - APP CONTROLLER v4.3
+// - Laptop strictly defaults to Landing Page on boot
 // - Mobile OS check preserves active broadcast & sign-in resume flow
 // - Wrapped in an IIFE (no global name collisions)
 // ==========================================================
 (function () {
 'use strict';
 
-const APP_VERSION = 'app.js v4.2';
+const APP_VERSION = 'app.js v4.3';
 console.log('[SeeMyDriver] ' + APP_VERSION + ' loaded');
 
 const LS = window.SafeStorage || {
@@ -174,10 +174,10 @@ const boot = () => {
         return;
     }
 
-    // Strictly check for mobile operating systems (ignoring laptop screen resize/width triggers)
+    // Check if user is on a mobile device OS
     const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-    // Laptop/Desktop: Always default to landing page for pitching and demos
+    // Laptop/Desktop: ALWAYS default to landing page on initial load
     if (!isMobileDevice) {
         window.switchView('landing');
         return;
