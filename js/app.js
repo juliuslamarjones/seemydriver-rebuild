@@ -1,13 +1,15 @@
 // ==========================================================
 // SEEMYDRIVER - APP CONTROLLER v4
 // - URL-first customer lock: a customer/brand link can NEVER land on sign-in
-// - Wrapped in an IIFE again (no global name collisions with other scripts)
+// - Laptop/Desktop strictly boots to Landing Page
+// - Mobile preserves active broadcast & sign-in resume flow
+// - Wrapped in an IIFE (no global name collisions with other scripts)
 // - Clean, proprietary SeeMyDriver tracking engine
 // ==========================================================
 (function () {
 'use strict';
 
-const APP_VERSION = 'app.js v4';
+const APP_VERSION = 'app.js v4.4';
 console.log('[SeeMyDriver] ' + APP_VERSION + ' loaded');
 
 const LS = window.SafeStorage || {
@@ -175,6 +177,16 @@ const boot = () => {
         return;
     }
 
+    // Check if user is on a mobile device OS
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    // Laptop/Desktop: ALWAYS force landing page view on boot
+    if (!isMobileDevice) {
+        window.switchView('landing');
+        return;
+    }
+
+    // Mobile device behavior (keeps field resume & sign-in flow)
     const loggedIn = isLoggedIn();
     const hasActiveBroadcast = LS.getItem('smd_active_broadcast') === 'true';
 
