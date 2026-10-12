@@ -1,6 +1,6 @@
 // ==========================================================
 // SEEMYDRIVER - MAPBOX GL JS GPS ENGINE & TELEMETRY (PRODUCTION)
-// - Fixed manual address input fallback to force-resolve coordinates
+// - Dropdown removed completely; freeform address input enabled
 // ==========================================================
 (function () {
 'use strict';
@@ -41,28 +41,27 @@ window.launchLiveBroadcast = async function () {
     const custPhone = $('job-cust-phone').value.trim();
     const address = $('job-cust-address').value.trim();
 
-    let destLat = parseFloat(LS.getItem('smd_dest_lat'));
-    let destLng = parseFloat(LS.getItem('smd_dest_lng'));
-
     if (!driverName || !address) {
         alert('Please enter a driver name and destination address.');
         return;
     }
 
-    // Hardened Fallback: If coordinates aren't selected or cached, resolve the typed string instantly
-    if (isNaN(destLat) || isNaN(destLng) || (destLat === 0 && destLng === 0)) {
-        const resolved = await resolveAddressToCoords(address);
-        if (resolved) {
-            destLat = resolved.lat;
-            destLng = resolved.lng;
-            LS.setItem('smd_dest_lat', destLat);
-            LS.setItem('smd_dest_lng', destLng);
-        } else {
-            alert('Could not resolve destination address. Please select a suggestion from the dropdown or check the street number.');
-            return;
-        }
+    // Instantly hide any suggestions box if left over
+    const suggestions = $('address-suggestions');
+    if (suggestions) { suggestions.classList.add('hidden'); suggestions.style.display = 'none'; }
+
+    // Geocode whatever text the user typed freely
+    let destLat = 29.9902; // Default fallback center (Humble/Houston area)
+    let destLng = -95.2636;
+
+    const resolved = await resolveAddressToCoords(address);
+    if (resolved) {
+        destLat = resolved.lat;
+        destLng = resolved.lng;
     }
 
+    LS.setItem('smd_dest_lat', destLat);
+    LS.setItem('smd_dest_lng', destLng);
     LS.setItem('smd_driver_name', driverName);
     LS.setItem('smd_driver_phone', driverPhone);
     LS.setItem('smd_cust_name', custName);
@@ -103,67 +102,14 @@ window.launchLiveBroadcast = async function () {
     }
 };
 
-let geocodeTimer = null;
-window.handleAddressInput = async function (value) {
-    window.cachedDestLat = null;
-    window.cachedDestLng = null;
-    LS.removeItem('smd_dest_lat');
-    LS.removeItem('smd_dest_lng');
-
+// Disabled dropdown list so it never blocks the user interface
+window.handleAddressInput = function (value) {
     const suggestions = $('address-suggestions');
-    if (!suggestions) return;
-
-    clearTimeout(geocodeTimer);
-    const query = String(value || '').trim();
-
-    if (query.length < 3) {
+    if (suggestions) {
         suggestions.classList.add('hidden');
         suggestions.style.display = 'none';
         suggestions.innerHTML = '';
-        return;
     }
-
-    geocodeTimer = setTimeout(async () => {
-        try {
-            const res = await fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(query) + '&limit=5');
-            const data = await res.json();
-            suggestions.innerHTML = '';
-
-            if (!data.features || data.features.length === 0) {
-                suggestions.classList.add('hidden');
-                suggestions.style.display = 'none';
-                return;
-            }
-
-            data.features.forEach((f) => {
-                const props = f.properties || {};
-                const nameParts = [props.name, props.street, props.housenumber, props.city, props.state, props.country].filter(Boolean);
-                const name = Array.from(new Set(nameParts)).join(', ');
-                const coords = (f.geometry && f.geometry.coordinates) || null;
-                if (!coords) return;
-
-                const div = document.createElement('div');
-                div.className = 'px-4 py-3 text-xs text-neutral-200 hover:bg-neutral-800 hover:text-amber-400 cursor-pointer border-b border-neutral-800/80 transition font-medium';
-                div.innerText = name;
-                div.onpointerdown = (e) => {
-                    e.preventDefault();
-                    $('job-cust-address').value = name;
-                    window.cachedDestLat = coords[1];
-                    window.cachedDestLng = coords[0];
-                    LS.setItem('smd_dest_lat', window.cachedDestLat);
-                    LS.setItem('smd_dest_lng', window.cachedDestLng);
-                    suggestions.classList.add('hidden');
-                    suggestions.style.display = 'none';
-                };
-                suggestions.appendChild(div);
-            });
-
-            suggestions.classList.remove('hidden');
-            suggestions.style.display = 'block';
-        } catch (e) {
-            console.error('Geocoder lookup error:', e);
-        }
-    }, 300);
 };
 
 function distM(lat1, lng1, lat2, lng2) {
