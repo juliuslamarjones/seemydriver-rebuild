@@ -1,7 +1,6 @@
 // ==========================================================
 // SEEMYDRIVER - MAPBOX GL JS GPS ENGINE & TELEMETRY (PRODUCTION)
-// - Restored Custom SVG Truck Marker & Route Line Rendering
-// - Freeform Address Input (No blocking dropdowns)
+// - Mapbox Light Style (`light-v11`) Active
 // ==========================================================
 (function () {
 'use strict';
@@ -378,7 +377,7 @@ function mapboxRouteManager(map, lineColor) {
                     type: 'line',
                     source: sourceId,
                     layout: { 'line-join': 'round', 'line-cap': 'round' },
-                    paint: { 'line-color': lineColor || '#1d4ed8', 'line-width': 6, 'line-opacity': 0.9 }
+                    paint: { 'line-color': lineColor || '#2563eb', 'line-width': 6, 'line-opacity': 0.9 }
                 });
             } catch (e) {}
         }
@@ -386,7 +385,7 @@ function mapboxRouteManager(map, lineColor) {
 }
 
 // ==========================================================
-// MAPBOX MAP CONTROLLER (DRIVER & CUSTOMER)
+// MAPBOX MAP CONTROLLER (DRIVER & CUSTOMER) - LIGHT STYLE
 // ==========================================================
 let D = null;
 function teardownDriver() {
@@ -404,7 +403,7 @@ window.initDriverActiveMap = function () {
 
     const map = new mapboxgl.Map({
         container: 'driver-map-container',
-        style: 'mapbox://styles/mapbox/dark-v11',
+        style: 'mapbox://styles/mapbox/light-v11', // Light Map Background
         center: [-95.2636, 29.9902],
         zoom: 15
     });
@@ -412,11 +411,11 @@ window.initDriverActiveMap = function () {
     const host = box.parentElement;
     const badge = document.createElement('div');
     badge.className = 'smd-gps-badge';
-    badge.style.cssText = 'position:absolute;top:12px;left:12px;z-index:20;background:rgba(0,0,0,.8);border:1px solid #262626;border-radius:10px;padding:4px 10px;font:700 11px ui-monospace,monospace;color:#fbbf24;pointer-events:none';
+    badge.style.cssText = 'position:absolute;top:12px;left:12px;z-index:20;background:rgba(255,255,255,.9);border:1px solid #d1d5db;border-radius:10px;padding:4px 10px;font:700 11px ui-monospace,monospace;color:#b45309;pointer-events:none;box-shadow:0 2px 4px rgba(0,0,0,0.1)';
     badge.textContent = 'GPS: acquiring…';
     host.appendChild(badge);
 
-    D = { map: map, follow: true, marker: null, destMarker: null, viewSet: false, route: mapboxRouteManager(map, '#3b82f6') };
+    D = { map: map, follow: true, marker: null, destMarker: null, viewSet: false, route: mapboxRouteManager(map, '#2563eb') };
     const me = D;
 
     map.on('dragstart', () => { me.follow = false; });
@@ -522,7 +521,7 @@ window.endBroadcastAndHome = async function () {
 };
 
 // ==========================================================
-// CUSTOMER MAP (MAPBOX LIVE TRACKING)
+// CUSTOMER MAP (MAPBOX LIVE TRACKING) - LIGHT STYLE
 // ==========================================================
 let C = null;
 function teardownCustomer() {
@@ -539,7 +538,7 @@ window.initCustomerMapLive = function () {
 
     const q = new URLSearchParams(window.location.search);
     const sid = q.get('session') || q.get('s');
-    const head = $('cust-driver-header'), sub = $('cust-eta-sub'), pill = $('cust-status-pill'), distEl = $('cust-distance'), speedEl = $('cust-speed');
+    const head = $('cust-driver-header'), sub = $('cust-eta-sub'), pill =$('cust-status-pill'), distEl = $('cust-distance'), speedEl =$('cust-speed');
     if (!sid) { if (head) head.textContent = 'Invalid tracking link'; return; }
 
     const database = getDb();
@@ -547,7 +546,7 @@ window.initCustomerMapLive = function () {
 
     const map = new mapboxgl.Map({
         container: 'customer-map-container',
-        style: 'mapbox://styles/mapbox/dark-v11',
+        style: 'mapbox://styles/mapbox/light-v11', // Light Map Background
         center: [-95.2636, 29.9902],
         zoom: 15
     });
@@ -589,7 +588,7 @@ window.initCustomerMapLive = function () {
 
         const phoneDigits = data.driverPhone ? String(data.driverPhone).replace(/[^\d+]/g, '') : '';
         if (phoneDigits) {
-            const callBtn = $('cust-call-btn'), msgBtn = $('cust-msg-btn');
+            const callBtn = $('cust-call-btn'), msgBtn =$('cust-msg-btn');
             if (callBtn) callBtn.href = 'tel:' + phoneDigits;
             if (msgBtn) msgBtn.href = 'sms:' + phoneDigits;
         }
