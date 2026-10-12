@@ -1,6 +1,7 @@
 // ==========================================================
 // SEEMYDRIVER - MAPBOX GL JS GPS ENGINE & TELEMETRY (PRODUCTION)
-// - Dropdown removed completely; freeform address input enabled
+// - Restored Custom SVG Truck Marker & Route Line Rendering
+// - Freeform Address Input (No blocking dropdowns)
 // ==========================================================
 (function () {
 'use strict';
@@ -46,12 +47,10 @@ window.launchLiveBroadcast = async function () {
         return;
     }
 
-    // Instantly hide any suggestions box if left over
     const suggestions = $('address-suggestions');
     if (suggestions) { suggestions.classList.add('hidden'); suggestions.style.display = 'none'; }
 
-    // Geocode whatever text the user typed freely
-    let destLat = 29.9902; // Default fallback center (Humble/Houston area)
+    let destLat = 29.9902; 
     let destLng = -95.2636;
 
     const resolved = await resolveAddressToCoords(address);
@@ -102,7 +101,6 @@ window.launchLiveBroadcast = async function () {
     }
 };
 
-// Disabled dropdown list so it never blocks the user interface
 window.handleAddressInput = function (value) {
     const suggestions = $('address-suggestions');
     if (suggestions) {
@@ -312,6 +310,81 @@ function subscribe(fn, replay) {
     };
 }
 
+// Helper for Custom SVG Truck Marker
+function getTruckElement(bearing) {
+    bearing = bearing || 0;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'transform: rotate(' + bearing + 'deg); transform-origin: 50% 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0px 6px 10px rgba(0,0,0,0.7));';
+    wrap.innerHTML = '<svg viewBox="0 0 24 36" width="30" height="45" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+        '<rect x="1.5" y="9" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/>' +
+        '<rect x="19" y="9" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/>' +
+        '<rect x="1.5" y="25" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/>' +
+        '<rect x="19" y="25" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/>' +
+        '<rect x="4" y="12" width="16" height="21" rx="2.5" fill="#0b0f19" stroke="#374151" stroke-width="1.5"/>' +
+        '<rect x="4" y="21" width="16" height="3.5" fill="#f59e0b"/>' +
+        '<line x1="4" y1="22.75" x2="20" y2="22.75" stroke="#ffffff" stroke-width="0.75" opacity="0.8"/>' +
+        '<path d="M6 12H18V5.5C18 3.84315 16.6569 2.5 15 2.5H9C7.34315 2.5 6 3.84315 6 5.5V12Z" fill="#111827" stroke="#4b5563" stroke-width="1.5"/>' +
+        '<path d="M7.5 8H16.5L15.5 4.5H8.5L7.5 8Z" fill="#38bdf8" fill-opacity="0.9" stroke="#bae6fd" stroke-width="0.5"/>' +
+        '<line x1="9" y1="6" x2="15" y2="6" stroke="#ffffff" stroke-width="0.75" opacity="0.6"/>' +
+        '<circle cx="7" cy="3.5" r="1.1" fill="#fbbf24"/>' +
+        '<circle cx="17" cy="3.5" r="1.1" fill="#fbbf24"/>' +
+        '<circle cx="7" cy="3.5" r="0.5" fill="#ffffff"/>' +
+        '<circle cx="17" cy="3.5" r="0.5" fill="#ffffff"/>' +
+        '</svg>';
+    return wrap;
+}
+
+// OSRM Route Manager for Mapbox
+function mapboxRouteManager(map, lineColor) {
+    let currentRouteId = null;
+
+    async function fetchRoute(lat, lng, dLat, dLng) {
+        const base = 'https://router.project-osrm.org/route/v1/driving/' + lng + ',' + lat + ';' + dLng + ',' + dLat + '?overview=full&geometries=geojson';
+        try {
+            const res = await fetch(base);
+            const data = await res.json();
+            if (data.code === 'Ok' && data.routes && data.routes[0]) {
+                return data.routes[0].geometry.coordinates; // [[lng, lat], ...]
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    return {
+        async update(lat, lng, dLat, dLng) {
+            const coords = await fetchRoute(lat, lng, dLat, dLng);
+            if (!coords || coords.length < 2) return;
+
+            const sourceId = 'route-source-' + Math.random();
+            const layerId = 'route-layer-' + Math.random();
+
+            if (currentRouteId && map.getLayer(currentRouteId + '-layer')) {
+                map.removeLayer(currentRouteId + '-layer');
+                map.removeSource(currentRouteId);
+            }
+            currentRouteId = sourceId;
+
+            try {
+                map.addSource(sourceId, {
+                    type: 'geojson',
+                    data: {
+                        type: 'Feature',
+                        properties: {},
+                        geometry: { type: 'LineString', coordinates: coords }
+                    }
+                });
+                map.addLayer({
+                    id: layerId,
+                    type: 'line',
+                    source: sourceId,
+                    layout: { 'line-join': 'round', 'line-cap': 'round' },
+                    paint: { 'line-color': lineColor || '#1d4ed8', 'line-width': 6, 'line-opacity': 0.9 }
+                });
+            } catch (e) {}
+        }
+    };
+}
+
 // ==========================================================
 // MAPBOX MAP CONTROLLER (DRIVER & CUSTOMER)
 // ==========================================================
@@ -343,7 +416,7 @@ window.initDriverActiveMap = function () {
     badge.textContent = 'GPS: acquiring…';
     host.appendChild(badge);
 
-    D = { map: map, follow: true, marker: null, destMarker: null, viewSet: false };
+    D = { map: map, follow: true, marker: null, destMarker: null, viewSet: false, route: mapboxRouteManager(map, '#3b82f6') };
     const me = D;
 
     map.on('dragstart', () => { me.follow = false; });
@@ -353,22 +426,28 @@ window.initDriverActiveMap = function () {
         const el = document.createElement('div');
         el.innerHTML = '<div style="font-size:28px;">📍</div>';
         me.destMarker = new mapboxgl.Marker(el).setLngLat([dest.lng, dest.lat]).addTo(map);
-        map.setCenter([dest.lng, dest.lat]);
     }
 
     me.off = subscribe((fix) => {
         if (D !== me) return;
-        const lat = fix.lat, lng = fix.lng;
+        const lat = fix.lat, lng = fix.lng, heading = fix.heading;
+
+        if (dest) {
+            me.route.update(lat, lng, dest.lat, dest.lng);
+        }
 
         if (!me.marker) {
-            const truckEl = document.createElement('div');
-            truckEl.innerHTML = '<div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;"><svg width="32" height="32" viewBox="0 0 24 24" fill="#fbbf24"><path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"/></svg></div>';
+            const truckEl = getTruckElement(heading);
             me.marker = new mapboxgl.Marker(truckEl).setLngLat([lng, lat]).addTo(map);
             map.setCenter([lng, lat]);
             map.setZoom(17);
             me.viewSet = true;
         } else {
             me.marker.setLngLat([lng, lat]);
+            const el = me.marker.getElement();
+            if (el && el.firstElementChild) {
+                el.firstElementChild.style.transform = 'rotate(' + (heading || 0) + 'deg)';
+            }
             if (me.follow) {
                 map.panTo([lng, lat], { animate: false });
             }
@@ -473,7 +552,7 @@ window.initCustomerMapLive = function () {
         zoom: 15
     });
 
-    const me = C = { map: map, follow: true, marker: null, destMarker: null, fitted: false };
+    const me = C = { map: map, follow: true, marker: null, destMarker: null, fitted: false, route: mapboxRouteManager(map, '#1e3a8a') };
 
     const setPill = (txt, good) => {
         if (!pill) return;
@@ -501,6 +580,7 @@ window.initCustomerMapLive = function () {
 
         let lat = parseFloat(data.lat), lng = parseFloat(data.lng);
         const dLat = parseFloat(data.destLat), dLng = parseFloat(data.destLng);
+        const heading = parseFloat(data.heading) || 0;
         const name = data.driverName || 'Driver';
         if (head) head.textContent = name;
 
@@ -531,14 +611,21 @@ window.initCustomerMapLive = function () {
         const speedMph = Math.round(data.speed || 0);
         if (speedEl) speedEl.textContent = speedMph + ' mph';
 
+        if (haveDest) {
+            me.route.update(lat, lng, dLat, dLng);
+        }
+
         if (!me.marker) {
-            const truckEl = document.createElement('div');
-            truckEl.innerHTML = '<div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;"><svg width="32" height="32" viewBox="0 0 24 24" fill="#fbbf24"><path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"/></svg></div>';
+            const truckEl = getTruckElement(heading);
             me.marker = new mapboxgl.Marker(truckEl).setLngLat([lng, lat]).addTo(map);
             map.setCenter([lng, lat]);
             map.setZoom(16);
         } else {
             me.marker.setLngLat([lng, lat]);
+            const el = me.marker.getElement();
+            if (el && el.firstElementChild) {
+                el.firstElementChild.style.transform = 'rotate(' + heading + 'deg)';
+            }
             if (me.follow && me.fitted) {
                 map.panTo([lng, lat], { animate: false });
             }
