@@ -16,7 +16,7 @@ const $ = (id) => document.getElementById(id);
 const MPS_TO_MPH = 2.23694;
 
 // Mapbox Token Integration
-const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQi...'/* truncated for safety */;
+const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
 const TILE_URL = 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}@2x?access_token=' + MAPBOX_TOKEN;
 
 const DEBUG_SPEED = false;
