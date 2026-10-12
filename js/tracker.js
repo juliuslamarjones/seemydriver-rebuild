@@ -1,6 +1,6 @@
 // ==========================================================
 // SEEMYDRIVER - GPS ENGINE + MAPS & TELEMETRY (PRODUCTION MASTER)
-// v3 + Mutation Observer ETA Guard + Mapbox Integration
+// v3 + Mutation Observer ETA Guard (Fully Corrected)
 // NOTE: app.js owns cold-boot/resume. There is intentionally NO
 //       DOMContentLoaded block in this file.
 // ==========================================================
@@ -14,10 +14,7 @@ const LS = window.SafeStorage || {
 };
 const $ = (id) => document.getElementById(id);
 const MPS_TO_MPH = 2.23694;
-
-// Mapbox Token Integration via Environment Variable / window injection
-const MAPBOX_TOKEN = window.MAPBOX_TOKEN || '';
-const TILE_URL = 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}@2x?access_token=' + MAPBOX_TOKEN;
+const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 const DEBUG_SPEED = false;
 const getDb = () => window.db || (typeof db !== 'undefined' ? db : null);
@@ -104,7 +101,7 @@ window.handleAddressInput = async function (value) {
 
     geocodeTimer = setTimeout(async () => {
         try {
-            const res = await fetch('https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(query) + '.json?access_token=' + MAPBOX_TOKEN + '&limit=5&autocomplete=true');
+            const res = await fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(query) + '&limit=5');
             const data = await res.json();
             suggestions.innerHTML = '';
 
@@ -115,7 +112,9 @@ window.handleAddressInput = async function (value) {
             }
 
             data.features.forEach((f) => {
-                const name = f.place_name;
+                const props = f.properties || {};
+                const nameParts = [props.name, props.street, props.housenumber, props.city, props.state, props.country].filter(Boolean);
+                const name = Array.from(new Set(nameParts)).join(', ');
                 const coords = (f.geometry && f.geometry.coordinates) || null;
                 if (!coords) return;
 
@@ -138,7 +137,7 @@ window.handleAddressInput = async function (value) {
             suggestions.classList.remove('hidden');
             suggestions.style.display = 'block';
         } catch (e) {
-            console.error('Mapbox geocoder lookup error:', e);
+            console.error('Geocoder lookup error:', e);
         }
     }, 300);
 };
@@ -592,7 +591,7 @@ function makeMap(box, zoomControl) {
         maxZoom: 19,
         keepBuffer: 4,
         updateWhenIdle: false,
-        attribution: '&copy; <a href="https://www.mapbox.com/">Mapbox</a>'
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
     [0, 250, 700].forEach((ms) => setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, ms));
     return map;
@@ -773,7 +772,7 @@ function trackingUrl() {
     let u = window.activeTrackingUrl || (base + '/?view=customer&session=' + sessionId());
     if (bk && u.indexOf('brand=') === -1) u += (u.indexOf('?') === -1 ? '?' : '&') + 'brand=' + encodeURIComponent(bk);
     return u;
-};
+}
 
 window.copyTrackingLink = async function () {
     const u = trackingUrl();
