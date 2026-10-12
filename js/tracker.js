@@ -15,8 +15,8 @@ const LS = window.SafeStorage || {
 const $ = (id) => document.getElementById(id);
 const MPS_TO_MPH = 2.23694;
 
-// Mapbox Token Integration
-const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+// Mapbox Token Integration via Environment Variable / window injection
+const MAPBOX_TOKEN = window.MAPBOX_TOKEN || '';
 const TILE_URL = 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}@2x?access_token=' + MAPBOX_TOKEN;
 
 const DEBUG_SPEED = false;
@@ -104,7 +104,6 @@ window.handleAddressInput = async function (value) {
 
     geocodeTimer = setTimeout(async () => {
         try {
-            // Mapbox Geocoding API replacing Photon
             const res = await fetch('https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(query) + '.json?access_token=' + MAPBOX_TOKEN + '&limit=5&autocomplete=true');
             const data = await res.json();
             suggestions.innerHTML = '';
@@ -126,7 +125,7 @@ window.handleAddressInput = async function (value) {
                 div.onpointerdown = (e) => {
                     e.preventDefault();
                     $('job-cust-address').value = name;
-                    window.cachedDestLat = coords[1]; // Mapbox returns [lng, lat]
+                    window.cachedDestLat = coords[1];
                     window.cachedDestLng = coords[0];
                     LS.setItem('smd_dest_lat', window.cachedDestLat);
                     LS.setItem('smd_dest_lng', window.cachedDestLng);
@@ -774,7 +773,7 @@ function trackingUrl() {
     let u = window.activeTrackingUrl || (base + '/?view=customer&session=' + sessionId());
     if (bk && u.indexOf('brand=') === -1) u += (u.indexOf('?') === -1 ? '?' : '&') + 'brand=' + encodeURIComponent(bk);
     return u;
-}
+};
 
 window.copyTrackingLink = async function () {
     const u = trackingUrl();

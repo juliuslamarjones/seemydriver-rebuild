@@ -1,63 +1,15 @@
-// ==========================================
-// SEEMYDRIVER - 100% PURE SOLO PRODUCTION CORE
-// ==========================================
+// ==========================================================
+// SEEMYDRIVER - APP CONTROLLER & VIEW SWITCHER (ITEM #1 FIXED)
+// ==========================================================
+(function () {
+'use strict';
 
-window.activeSessionId = window.SafeStorage.getItem('smd_session_id') || ('session_' + Math.random().toString(36).substring(2, 11));
-window.SafeStorage.setItem('smd_session_id', window.activeSessionId);
+const LS = window.SafeStorage;
+const $ = (id) => document.getElementById(id);
 
-function getAppBaseUrl() {
-    const origin = window.location.origin;
-    if (!origin || origin.includes('localhost') || origin.includes('capacitor') || origin.includes('file://')) {
-        return 'https://seemydriver.com';
-    }
-    return origin;
-}
-
-let cachedDestLat = window.SafeStorage.getItem('smd_dest_lat') ? parseFloat(window.SafeStorage.getItem('smd_dest_lat')) : null;
-let cachedDestLng = window.SafeStorage.getItem('smd_dest_lng') ? parseFloat(window.SafeStorage.getItem('smd_dest_lng')) : null;
-
-window.driverMapFitted = false;
-window.driverFollowTruck = true;
-window.custMapFitted = false;
-window.custFollowTruck = true;
-window.geoWatchId = null;
-
-function isBroadcastLocked() {
-    return window.SafeStorage.getItem('smd_active_broadcast') === 'true' && !!window.SafeStorage.getItem('smd_session_id');
-}
-
-function isCustomerLink() {
-    const p = new URLSearchParams(window.location.search);
-    return p.get('view') === 'customer' || p.has('s') || (p.has('session') && p.get('view') !== 'job-setup');
-}
-
-// --- VIEW CONTROLLER (STRICTLY LOCKED DURING BROADCAST & HEADER SIGN-OUT CONTROL) ---
-function switchView(viewId, cleanUrl = false) {
-    viewId = String(viewId).replace(/-view$/, '');
-
-    // SECURITY LOCK: If broadcast is active, block any attempt to switch away from active broadcast or signin/setup
-    if (isBroadcastLocked() && viewId !== 'active-broadcast' && viewId !== 'customer') {
-        console.warn("Broadcast is active. Navigation locked until broadcast is terminated.");
-        viewId = 'active-broadcast';
-    }
-
-    // SECURITY LOCK: Customers are strictly restricted to the customer view
-    if (isCustomerLink() && viewId !== 'customer') {
-        viewId = 'customer';
-    }
-
-    // Manage Sign-Out Button Visibility in Header (Hidden during active broadcast or customer view)
-    const signoutBtn = document.getElementById('header-signout-btn');
-    if (signoutBtn) {
-        if (isBroadcastLocked() || isCustomerLink()) {
-            signoutBtn.style.setProperty('display', 'none', 'important');
-        } else {
-            signoutBtn.style.setProperty('display', 'block', 'important');
-        }
-    }
-
+// ---------- View Controller & Navigation ----------
+window.switchView = function(viewId, cleanUrl = false) {
     const views = ['landing-view', 'plans-view', 'job-setup-view', 'active-broadcast-view', 'customer-view-view', 'signin-view', 'register-view', 'fleet-dashboard-view'];
-    
     views.forEach(v => {
         const el = document.getElementById(v);
         if (el) {
@@ -79,234 +31,99 @@ function switchView(viewId, cleanUrl = false) {
         target.style.setProperty('flex-direction', 'column', 'important');
     }
 
-    if (viewId === 'job-setup') {
-        const driverNameEl = document.getElementById('job-driver-name');
-        const driverPhoneEl = document.getElementById('job-driver-phone');
-        if (driverNameEl) driverNameEl.value = window.SafeStorage.getItem('smd_driver_name') || '';
-        if (driverPhoneEl) driverPhoneEl.value = window.SafeStorage.getItem('smd_driver_phone') || '';
-    }
-
-    if (viewId === 'active-broadcast') {
-        setTimeout(() => { if (typeof initDriverActiveMap === 'function') initDriverActiveMap(); }, 150);
-    }
-}
-window.switchView = switchView;
-
-// --- AUTH ---
-function handleSignIn() {
-    const emailElem = document.getElementById('signin-email');
-    const email = emailElem ? emailElem.value.trim() : '';
-    if (!email) { alert('Email required.'); return; }
-    window.SafeStorage.setItem('smd_is_logged_in', 'true');
-    window.SafeStorage.setItem('smd_user_email', email);
-    switchView('job-setup');
-}
-window.handleSignIn = handleSignIn;
-
-function handleRegister() {
-    const emailElem = document.getElementById('reg-email');
-    const email = emailElem ? emailElem.value.trim() : '';
-    if (!email) { alert('Email required.'); return; }
-    window.SafeStorage.setItem('smd_is_logged_in', 'true');
-    window.SafeStorage.setItem('smd_user_email', email);
-    switchView('job-setup');
-}
-window.handleRegister = handleRegister;
-
-function handleSignOut() {
-    if (isBroadcastLocked()) {
-        alert('Cannot sign out while a live broadcast is active. Please end the broadcast first.');
-        return;
-    }
-    window.SafeStorage.clear();
-    stopRealTimeTracking();
-    switchView('signin');
-}
-window.handleSignOut = handleSignOut;
-
-// --- NATIVE SMS / SHARE TRIGGER FOR CLIENT LINK ---
-window.textTrackingLink = function() {
-    const baseUrl = getAppBaseUrl() + window.location.pathname;
-    const sessionId = window.activeSessionId || window.SafeStorage.getItem('smd_session_id') || 'demo';
-    const trackingUrl = baseUrl + '?view=customer&session=' + sessionId;
-    const custPhone = document.getElementById('job-cust-phone') ? document.getElementById('job-cust-phone').value.trim() : '';
-    const custName = document.getElementById('job-cust-name') ? document.getElementById('job-cust-name').value.trim() : 'Client';
-    
-    const message = `Hi ${custName}, track my live arrival in real-time here: ${trackingUrl}`;
-
-    if (navigator.share) {
-        navigator.share({
-            title: 'SeeMyDriver Live Tracking',
-            text: message,
-            url: trackingUrl,
-        }).catch(() => {});
-    } else if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-        window.location.href = `sms:${custPhone}?body=${encodeURIComponent(message)}`;
-    } else {
-        const textArea = document.createElement('textarea');
-        textArea.value = trackingUrl;
-        textArea.style.position = 'fixed';
-        textArea.style.top = '0';
-        textArea.style.left = '0';
-        textArea.style.opacity = '0';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        try {
-            document.execCommand('copy');
-            alert('Desktop mode: Customer tracking link copied to clipboard!\n\n' + trackingUrl);
-        } catch (err) {
-            prompt('Copy this customer link manually:', trackingUrl);
+    const navActions = document.getElementById('header-nav-actions');
+    if (navActions) {
+        if (viewId === 'active-broadcast' || viewId === 'active-broadcast-view' || viewId === 'customer') {
+            navActions.style.setProperty('display', 'none', 'important');
+        } else {
+            navActions.style.setProperty('display', 'flex', 'important');
         }
-        document.body.removeChild(textArea);
+    }
+
+    if (viewId === 'active-broadcast' || viewId === 'active-broadcast-view') {
+        setTimeout(() => { if (typeof window.initDriverActiveMap === 'function') window.initDriverActiveMap(); }, 150);
+    }
+    if (viewId === 'customer') {
+        setTimeout(() => { if (typeof window.initCustomerMapLive === 'function') window.initCustomerMapLive(); }, 150);
     }
 };
 
-window.copyTrackingLink = function() {
-    const baseUrl = getAppBaseUrl() + window.location.pathname;
-    const sessionId = window.activeSessionId || window.SafeStorage.getItem('smd_session_id') || 'demo';
-    const trackingUrl = baseUrl + '?view=customer&session=' + sessionId;
-    navigator.clipboard.writeText(trackingUrl).then(() => {
-        alert('Customer tracking link copied to clipboard!');
-    }).catch(() => {
-        prompt('Copy tracking link:', trackingUrl);
-    });
-};
+// ---------- Authentication Handlers ----------
+window.handleSignIn = function() {
+    const emailInput = document.getElementById('signin-email');
+    const passwordInput = document.getElementById('signin-password');
+    const email = emailInput ? emailInput.value.trim() : '';
+    const password = passwordInput ? passwordInput.value.trim() : '';
 
-// --- BROADCAST LAUNCH & GPS WATCHER ---
-async function launchLiveBroadcast() {
-    const custNameElem = document.getElementById('job-cust-name');
-    const custPhoneElem = document.getElementById('job-cust-phone');
-    const custAddressElem = document.getElementById('job-cust-address');
-    const driverNameElem = document.getElementById('job-driver-name');
-    const driverPhoneElem = document.getElementById('job-driver-phone');
-
-    const custName = custNameElem ? custNameElem.value.trim() || 'Client' : 'Client';
-    const custPhone = custPhoneElem ? custPhoneElem.value.trim() : '';
-    const custAddress = custAddressElem ? custAddressElem.value.trim() : '';
-    const driverName = driverNameElem ? driverNameElem.value.trim() || 'Driver' : 'Driver';
-    const driverPhone = driverPhoneElem ? driverPhoneElem.value.trim() : '';
-
-    if (!custAddress) { alert('Please enter a destination address.'); return; }
-
-    window.SafeStorage.setItem('smd_driver_name', driverName);
-    window.SafeStorage.setItem('smd_driver_phone', driverPhone);
-    window.SafeStorage.setItem('smd_cust_name', custName);
-    window.SafeStorage.setItem('smd_cust_phone', custPhone);
-    window.SafeStorage.setItem('smd_cust_address', custAddress);
-    window.SafeStorage.setItem('smd_active_broadcast', 'true');
-
-    if (!cachedDestLat || !cachedDestLng) {
-        try {
-            const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(custAddress)}&limit=1`);
-            const data = await res.json();
-            if (data.features && data.features.length > 0) {
-                cachedDestLng = data.features[0].geometry.coordinates[0];
-                cachedDestLat = data.features[0].geometry.coordinates[1];
-                window.SafeStorage.setItem('smd_dest_lat', cachedDestLat);
-                window.SafeStorage.setItem('smd_dest_lng', cachedDestLng);
-            }
-        } catch(err) {}
+    if (!email || !password) {
+        alert('Please enter your email and password.');
+        return;
     }
+    LS.setItem('smd_is_logged_in', 'true');
+    LS.setItem('smd_user_email', email);
+    window.switchView('job-setup');
+};
 
-    try {
-        await db.ref('broadcasts/' + window.activeSessionId).set({
-            driverName,
-            driverPhone,
-            custName,
-            custPhone,
-            custAddress,
-            destLat: cachedDestLat || 29.9902,
-            destLng: cachedDestLng || -95.2636,
-            lat: 29.9902,
-            lng: -95.2636,
-            speed: 0,
-            timestamp: Date.now()
-        });
-    } catch(e) {}
+window.handleRegister = function() {
+    const emailInput = document.getElementById('reg-email');
+    const passwordInput = document.getElementById('reg-password');
+    const email = emailInput ? emailInput.value.trim() : '';
+    const password = passwordInput ? passwordInput.value.trim() : '';
 
-    switchView('active-broadcast');
-}
-window.launchLiveBroadcast = launchLiveBroadcast;
-
-function stopRealTimeTracking() {
-    if (window.geoWatchId !== null && navigator.geolocation) {
-        navigator.geolocation.clearWatch(window.geoWatchId);
-        window.geoWatchId = null;
+    if (!email || !password) {
+        alert('Please enter an email and password.');
+        return;
     }
-    SafeStorage.removeItem('smd_active_broadcast');
-}
-
-function endBroadcastAndHome() {
-    stopRealTimeTracking();
-    db.ref('broadcasts/' + window.activeSessionId).update({
-        status: 'ended',
-        timestamp: Date.now()
-    }).catch(() => {});
-    switchView('job-setup');
-}
-window.endBroadcastAndHome = endBroadcastAndHome;
-
-// Plan selection helpers
-window.setRegTier = function(tier) {
-    const soloCard = document.getElementById('solo-plan-card');
-    const fleetCard = document.getElementById('fleet-plan-card');
-    if (tier === 'solo') {
-        if (soloCard) soloCard.className = "w-full bg-[#12141c] border-2 border-amber-400 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
-        if (fleetCard) fleetCard.className = "w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
-    } else {
-        if (fleetCard) fleetCard.className = "w-full bg-[#12141c] border-2 border-amber-400 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
-        if (soloCard) soloCard.className = "w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
-    }
+    LS.setItem('smd_is_logged_in', 'true');
+    LS.setItem('smd_user_email', email);
+    window.switchView('job-setup');
 };
 
-window.selectAndRegister = function(tier) {
-    if (tier === 'fleet') {
-        switchView('fleet-dashboard');
-    } else {
-        switchView('register');
-    }
-};
-
-window.upgradeToFleet = function() {
-    switchView('fleet-dashboard');
-};
-
-window.handleAddressInput = function(val) {
-    // Optional address suggestions autocomplete stub
-};
-
-// --- SMART ENVIRONMENT & ENTRY ROUTER ---
-window.addEventListener('DOMContentLoaded', () => {
-    const origin = window.location.origin || '';
-    const params = new URLSearchParams(window.location.search);
-    const viewParam = params.get('view');
+window.handleSignOut = function() {
+    LS.removeItem('smd_is_logged_in');
+    LS.removeItem('smd_user_tier');
+    LS.removeItem('smd_active_broadcast');
     
-    const isNativeApp = origin.includes('localhost') || 
-                        origin.includes('capacitor') || 
-                        origin.includes('file://') || 
-                        window.location.protocol === 'file:' ||
-                        window.Capacitor;
-
-    if (isCustomerLink()) {
-        switchView('customer');
-        return;
+    const sid = window.activeSessionId || LS.getItem('smd_session_id');
+    const database = window.db;
+    
+    if (sid && database) {
+        database.ref('broadcasts/' + sid).update({ ended: true, timestamp: Date.now() })
+            .catch((err) => { console.error("Sign-out broadcast end error:", err); });
     }
 
-    // Explicit override: if web user requests signin or register via query param
-    if (viewParam === 'signin') {
-        switchView('signin');
-        return;
+    if (typeof window.stopRealTimeTracking === 'function') {
+        window.stopRealTimeTracking();
     }
-    if (viewParam === 'register') {
-        switchView('register');
-        return;
+    if (typeof window.teardownDriverMap === 'function') {
+        window.teardownDriverMap();
     }
 
-    if (isNativeApp) {
-        switchView(isBroadcastLocked() ? 'active-broadcast' : (window.SafeStorage.getItem('smd_is_logged_in') === 'true' ? 'job-setup' : 'signin'));
-    } else {
-        // Web browser traffic hitting seemydriver.com directly loads the public landing page!
-        switchView('landing');
+    ['smd_driver_name', 'smd_driver_phone', 'smd_cust_name', 'smd_cust_phone', 'smd_cust_address',
+     'smd_dest_lat', 'smd_dest_lng', 'smd_session_id', 'smd_last_tx'].forEach((k) => LS.removeItem(k));
+    window.activeSessionId = undefined;
+
+    window.switchView('signin');
+};
+
+// ---------- Strict Cold Boot Logic (Item #1) ----------
+document.addEventListener('DOMContentLoaded', () => {
+    const q = new URLSearchParams(window.location.search);
+    
+    // 1. If it's a customer tracking link via URL, show customer view
+    if (q.has('session') || q.has('s') || q.get('view') === 'customer') {
+        window.switchView('customer');
+    } 
+    // 2. Only resume job-setup if there is an active broadcast flag AND user is logged in
+    else if (LS.getItem('smd_active_broadcast') === 'true' && LS.getItem('smd_is_logged_in') === 'true') {
+        window.switchView('job-setup');
+    } 
+    // 3. COLD BOOT FIX: Absolutely force Sign In on every fresh startup and wipe old flags
+    else {
+        LS.removeItem('smd_active_broadcast');
+        LS.removeItem('smd_is_logged_in');
+        window.switchView('signin');
     }
 });
+
+})();
