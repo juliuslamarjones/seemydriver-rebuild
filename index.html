@@ -30,16 +30,16 @@
         }
     </script>
 
-    <!-- Leaflet CSS & JS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Mapbox GL JS CSS & JS -->
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
 
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 
-    <!-- Embedded Bulletproof SafeStorage & Firebase Init -->
+    <!-- Embedded SafeStorage & Firebase Init -->
     <script>
         window.SafeStorage = {
             getItem(key) {
@@ -69,8 +69,7 @@
     <!-- Custom Styling -->
     <link rel="stylesheet" href="css/style.css">
     <style>
-        .leaflet-container { background: #0b0f19 !important; }
-        .dark-tiles { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3); }
+        .mapboxgl-popup-content { background: #12141c !important; color: #fff !important; border-radius: 12px; border: 1px solid #262626; }
         .pro-vehicle-marker { background: transparent !important; border: none !important; }
         
         #brand-logo, .brand-logo {
@@ -125,7 +124,7 @@
                 </p>
                 <div class="flex flex-col sm:flex-row items-center gap-3 w-full max-w-md mt-2">
                     <button id="pwa-install-btn" onclick="window.installPWA ? window.installPWA() : alert('PWA Install ready!')" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs sm:text-sm py-3.5 sm:py-4 px-6 sm:px-8 rounded-2xl transition shadow-[0_0_30px_rgba(251,191,36,0.25)] text-center cursor-pointer flex items-center justify-center gap-2.5 transform hover:-translate-y-0.5">
-                        <span>Install App to Home Screen</span> 📱
+                        <span>Add App to Home Screen</span> 📱
                     </button>
                     <button onclick="window.switchView('signin')" class="w-full sm:w-auto bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition border border-neutral-800 cursor-pointer whitespace-nowrap">
                         Driver Sign In →
@@ -153,7 +152,7 @@
                             <span id="preview-speed" class="text-amber-400 font-bold">45 mph</span>
                         </div>
                         <div id="landing-preview-map" class="w-full h-48 bg-[#0b0f19] rounded-xl border border-neutral-800 relative overflow-hidden z-10 shadow-inner"></div>
-                        <div class="text-[10px] text-neutral-500 text-center font-mono">Production Telemetry Engine Demo</div>
+                        <div class="text-[10px] text-neutral-500 text-center font-mono">Mapbox Production Demo</div>
                     </div>
                 </div>
             </div>
@@ -253,7 +252,7 @@
                     <div class="w-9 h-9 rounded-xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-400 text-lg shrink-0 mt-0.5 shadow-sm">💡</div>
                     <div class="flex flex-col gap-1">
                         <span class="text-xs font-black tracking-wide text-amber-300 uppercase">Quick Dispatch Guide</span>
-                        <p class="text-[11px] sm:text-xs text-neutral-300 leading-relaxed">Fill out client details below to generate an <strong>instant live tracking link</strong>. Once accepted, you'll advance to broadcast your live route directly to your customer.</p>
+                        <p class="text-[11px] sm:text-xs text-neutral-300 leading-relaxed">Fill out client details below to generate an <strong>instant live tracking link</strong>. Type any address or pick from suggestions to start broadcasting.</p>
                     </div>
                 </div>
 
@@ -297,7 +296,7 @@
                     🚀 DISPATCH ACTIVE
                 </div>
                 <p class="text-xs text-neutral-300 leading-relaxed max-w-xl">
-                    <strong class="text-amber-400">Heads Up:</strong> After texting your link, <strong class="text-white underline">switch right back to this screen</strong> to keep your live GPS streaming!
+                    <strong class="text-amber-400">Heads Up:</strong> Keep this screen open or phone plugged in to maintain live GPS streaming!
                 </p>
             </div>
 
@@ -395,66 +394,63 @@
         document.addEventListener("DOMContentLoaded", () => {
             setTimeout(() => {
                 const previewEl = document.getElementById('landing-preview-map');
-                if (previewEl && !previewEl._leaflet_id && typeof L !== 'undefined') {
-                    const simMap = L.map('landing-preview-map', {
-                        zoomControl: false,
-                        attributionControl: false,
-                        dragging: false,
-                        scrollWheelZoom: false
-                    }).setView([29.9902, -95.2636], 15);
-
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        maxZoom: 19,
-                        className: 'dark-tiles'
-                    }).addTo(simMap);
-
-                    const routePath = [
-                        [29.9700, -95.2850],
-                        [29.9750, -95.2800],
-                        [29.9800, -95.2750],
-                        [29.9850, -95.2700],
-                        [29.9900, -95.2650],
-                        [29.9950, -95.2600],
-                        [30.0000, -95.2550]
-                    ];
-
-                    const polyline = L.polyline(routePath, { color: '#3b82f6', weight: 6, opacity: 0.9 }).addTo(simMap);
-
-                    const vehicleSvg = `
-                        <div style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));">
-                            <svg width="32" height="32" viewBox="0 0 24 24" fill="#fbbf24" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"/>
-                            </svg>
-                        </div>
-                    `;
-
-                    const vehicleIcon = L.divIcon({
-                        className: 'pro-vehicle-marker',
-                        html: vehicleSvg,
-                        iconSize: [36, 36],
-                        iconAnchor: [18, 18]
+                if (previewEl && !previewEl._mapbox_init && typeof mapboxgl !== 'undefined') {
+                    previewEl._mapbox_init = true;
+                    mapboxgl.accessToken = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+                    
+                    const simMap = new mapboxgl.Map({
+                        container: 'landing-preview-map',
+                        style: 'mapbox://styles/mapbox/dark-v11',
+                        center: [-95.2636, 29.9902],
+                        zoom: 14,
+                        interactive: false
                     });
 
-                    const centerLat = 29.9850;
-                    const centerLng = -95.2700;
-                    let vehicleMarker = L.marker([centerLat, centerLng], { icon: vehicleIcon }).addTo(simMap);
+                    simMap.on('load', () => {
+                        const routePath = [
+                            [-95.2850, 29.9700],
+                            [-95.2800, 29.9750],
+                            [-95.2750, 29.9800],
+                            [-95.2700, 29.9850],
+                            [-95.2650, 29.9900],
+                            [-95.2600, 29.9950],
+                            [-95.2550, 30.0000]
+                        ];
 
-                    let latOffset = 0;
-                    let lngOffset = 0;
+                        simMap.addSource('sim-route', {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                properties: {},
+                                geometry: { type: 'LineString', coordinates: routePath }
+                            }
+                        });
 
-                    setInterval(() => {
-                        latOffset += 0.0002;
-                        lngOffset += 0.0002;
+                        simMap.addLayer({
+                            id: 'sim-route-layer',
+                            type: 'line',
+                            source: 'sim-route',
+                            layout: { 'line-join': 'round', 'line-cap': 'round' },
+                            paint: { 'line-color': '#3b82f6', 'line-width': 5, 'line-opacity': 0.9 }
+                        });
 
-                        const shiftedPath = routePath.map(pt => [pt[0] - latOffset, pt[1] - lngOffset]);
-                        polyline.setLatLngs(shiftedPath);
-                        simMap.setView([centerLat, centerLng], 15, { animate: false });
+                        const el = document.createElement('div');
+                        el.innerHTML = '<svg width="32" height="32" viewBox="0 0 24 24" fill="#fbbf24"><path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"/></svg>';
+                        const marker = new mapboxgl.Marker(el).setLngLat([-95.2700, 29.9850]).addTo(simMap);
 
-                        if (latOffset > 0.004) {
-                            latOffset = 0;
-                            lngOffset = 0;
-                        }
-                    }, 50);
+                        let offset = 0;
+                        setInterval(() => {
+                            offset += 0.0002;
+                            const shifted = routePath.map(pt => [pt[0] - offset, pt[1] - offset]);
+                            simMap.getSource('sim-route').setData({
+                                type: 'Feature',
+                                properties: {},
+                                geometry: { type: 'LineString', coordinates: shifted }
+                            });
+                            marker.setLngLat([-95.2700 - offset, 29.9850 - offset]);
+                            if (offset > 0.004) offset = 0;
+                        }, 50);
+                    });
                 }
             }, 300);
         });
