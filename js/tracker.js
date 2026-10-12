@@ -1,26 +1,30 @@
 // ==========================================================
-// SEEMYDRIVER - GPS ENGINE + MAPS & TELEMETRY (TESTING MODE)
-// ⚠️ REMINDER FOR GEORGE & JULIUS: 
-// Before final production APK / release rollout, remember to:
-//   1. Flip STRICT_PRODUCTION_GPS to true (sets accuracy gate to 100m).
+// SEEMYDRIVER - GPS ENGINE + MAPS & TELEMETRY (PRODUCTION MASTER)
+// v3 + Mutation Observer ETA Guard (Fully Corrected)
+// NOTE: app.js owns cold-boot/resume. There is intentionally NO
+//       DOMContentLoaded block in this file.
 // ==========================================================
 (function () {
 'use strict';
 
-const LS = window.SafeStorage;
+const LS = window.SafeStorage || {
+    getItem: (k) => localStorage.getItem(k),
+    setItem: (k, v) => localStorage.setItem(k, v),
+    removeItem: (k) => localStorage.removeItem(k)
+};
 const $ = (id) => document.getElementById(id);
 const MPS_TO_MPH = 2.23694;
 const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
+const DEBUG_SPEED = false;
 const getDb = () => window.db || (typeof db !== 'undefined' ? db : null);
 
-// ---------- Broadcast Launch Handler (Zero Fallbacks) ----------
-window.launchLiveBroadcast = function() {
-    const driverName = document.getElementById('job-driver-name').value.trim();
-    const driverPhone = document.getElementById('job-driver-phone').value.trim();
-    const custName = document.getElementById('job-cust-name').value.trim();
-    const custPhone = document.getElementById('job-cust-phone').value.trim();
-    const address = document.getElementById('job-cust-address').value.trim();
+window.launchLiveBroadcast = function () {
+    const driverName = $('job-driver-name').value.trim();
+    const driverPhone = $('job-driver-phone').value.trim();
+    const custName = $('job-cust-name').value.trim();
+    const custPhone = $('job-cust-phone').value.trim();
+    const address = $('job-cust-address').value.trim();
 
     const destLat = parseFloat(LS.getItem('smd_dest_lat'));
     const destLng = parseFloat(LS.getItem('smd_dest_lng'));
@@ -41,10 +45,11 @@ window.launchLiveBroadcast = function() {
     LS.setItem('smd_cust_phone', custPhone);
     LS.setItem('smd_cust_address', address);
     LS.setItem('smd_active_broadcast', 'true');
+    LS.setItem('smd_last_tx', String(Date.now()));
 
     const buffer = new Uint8Array(8);
     window.crypto.getRandomValues(buffer);
-    window.activeSessionId = 'smd_' + Array.from(buffer, b => b.toString(16).padStart(2, '0')).join('');
+    window.activeSessionId = 'smd_' + Array.from(buffer, (b) => b.toString(16).padStart(2, '0')).join('');
     LS.setItem('smd_session_id', window.activeSessionId);
 
     const sid = sessionId();
@@ -54,16 +59,17 @@ window.launchLiveBroadcast = function() {
         database.ref('broadcasts/' + sid).set({
             driverName: driverName,
             driverPhone: driverPhone,
-            lat: null, 
+            lat: null,
             lng: null,
             destLat: destLat,
             destLng: destLng,
             destAddress: address,
+            brandKey: LS.getItem('smd_brand_key') || '',
             speed: 0,
             heading: 0,
             timestamp: Date.now()
         }).catch((err) => {
-            console.error("Firebase broadcast initialization failed:", err);
+            console.error('Firebase broadcast initialization failed:', err);
         });
     }
 
@@ -74,18 +80,18 @@ window.launchLiveBroadcast = function() {
 };
 
 let geocodeTimer = null;
-window.handleAddressInput = async function(value) {
+window.handleAddressInput = async function (value) {
     window.cachedDestLat = null;
     window.cachedDestLng = null;
     LS.removeItem('smd_dest_lat');
     LS.removeItem('smd_dest_lng');
-    
-    const suggestions = document.getElementById('address-suggestions');
+
+    const suggestions = $('address-suggestions');
     if (!suggestions) return;
 
     clearTimeout(geocodeTimer);
-    const query = value.trim();
-    
+    const query = String(value || '').trim();
+
     if (query.length < 3) {
         suggestions.classList.add('hidden');
         suggestions.style.display = 'none';
@@ -95,7 +101,7 @@ window.handleAddressInput = async function(value) {
 
     geocodeTimer = setTimeout(async () => {
         try {
-            const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`);
+            const res = await fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(query) + '&limit=5');
             const data = await res.json();
             suggestions.innerHTML = '';
 
@@ -105,18 +111,19 @@ window.handleAddressInput = async function(value) {
                 return;
             }
 
-            data.features.forEach(f => {
+            data.features.forEach((f) => {
                 const props = f.properties || {};
                 const nameParts = [props.name, props.street, props.housenumber, props.city, props.state, props.country].filter(Boolean);
                 const name = Array.from(new Set(nameParts)).join(', ');
-                const coords = f.geometry?.coordinates || [0, 0];
+                const coords = (f.geometry && f.geometry.coordinates) || null;
+                if (!coords) return;
 
                 const div = document.createElement('div');
-                div.className = "px-4 py-3 text-xs text-neutral-200 hover:bg-neutral-800 hover:text-amber-400 cursor-pointer border-b border-neutral-800/80 transition font-medium";
+                div.className = 'px-4 py-3 text-xs text-neutral-200 hover:bg-neutral-800 hover:text-amber-400 cursor-pointer border-b border-neutral-800/80 transition font-medium';
                 div.innerText = name;
                 div.onpointerdown = (e) => {
                     e.preventDefault();
-                    document.getElementById('job-cust-address').value = name;
+                    $('job-cust-address').value = name;
                     window.cachedDestLat = coords[1];
                     window.cachedDestLng = coords[0];
                     LS.setItem('smd_dest_lat', window.cachedDestLat);
@@ -153,7 +160,15 @@ const sessionId = () => window.activeSessionId || LS.getItem('smd_session_id');
 
 function getDest() {
     const lat = parseFloat(LS.getItem('smd_dest_lat')), lng = parseFloat(LS.getItem('smd_dest_lng'));
-    return (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) ? null : { lat, lng };
+    return (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) ? null : { lat: lat, lng: lng };
+}
+
+function startsReversed(pts, heading) {
+    if (!pts || pts.length < 2 || !Number.isFinite(heading)) return false;
+    let i = 1;
+    while (i < pts.length - 1 && distM(pts[0][0], pts[0][1], pts[i][0], pts[i][1]) < 50) i++;
+    const b = bearingDeg(pts[0][0], pts[0][1], pts[i][0], pts[i][1]);
+    return Math.abs(angDelta(heading, b)) > 120;
 }
 
 function toast(msg) {
@@ -167,7 +182,8 @@ function toast(msg) {
 const gps = {
     running: false, kind: null, handle: null, gen: 0,
     last: null, lastAlive: 0, lastMoved: null, speedMps: 0, heading: 0,
-    subs: new Set(), sent: { t: 0, lat: 0, lng: 0 }, stopTimer: null, denied: false, badSince: 0
+    subs: new Set(), sent: { t: 0, lat: 0, lng: 0 }, stopTimer: null, denied: false, badSince: 0,
+    restarts: 0
 };
 window.__smdGps = gps;
 
@@ -188,25 +204,26 @@ function setStatus(text, ok) {
 const fromWeb = (p) => ({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, speed: p.coords.speed, heading: p.coords.heading, t: p.timestamp || Date.now() });
 const fromBg = (l) => ({ lat: l.latitude, lng: l.longitude, acc: l.accuracy, speed: l.speed, heading: l.bearing, t: l.time || Date.now() });
 
-const BAD_ACC_M = 500;          // Set to 500m for desktop/Wi-Fi testing (Will be tightened to 100m on production lock)
-const BAD_ACC_GRACE_MS = 5000;  
-const STALE_PREV_MS = 30000;    
-const FRESH_MS = 10000;         
+const STALE_PREV_MS = 30000;
+const FRESH_MS = 10000;
 const isFresh = (fix, ms) => !!fix && (Date.now() - fix.t) < (ms || FRESH_MS);
 
 function ingest(r) {
     gps.lastAlive = Date.now();
-    if (!isFinite(r.lat) || !isFinite(r.lng)) return;
-    const acc = isFinite(r.acc) ? r.acc : 999;
+    gps.restarts = 0;
+    if (!Number.isFinite(r.lat) || !Number.isFinite(r.lng)) return;
+    const acc = Number.isFinite(r.acc) ? r.acc : 999;
 
-    if (acc > BAD_ACC_M) {
-        if (!gps.badSince) gps.badSince = Date.now();
-        if (Date.now() - gps.badSince < BAD_ACC_GRACE_MS) {
-            setStatus('GPS: acquiring \u00B1' + Math.round(acc) + ' m', false);
+    if (acc > 100) {
+        const haveRecent = gps.last && (Date.now() - gps.last.t) < 30000;
+        if (haveRecent) {
+            setStatus('GPS: weak signal ±' + Math.round(acc) + ' m', false);
             return;
         }
-    } else {
-        gps.badSince = 0;
+        if (acc > 300) {
+            setStatus('GPS: acquiring ±' + Math.round(acc) + ' m', false);
+            return;
+        }
     }
 
     let prev = gps.last;
@@ -219,30 +236,33 @@ function ingest(r) {
         d = distM(prev.lat, prev.lng, r.lat, r.lng);
     }
 
-    let v = (isFinite(r.speed) && r.speed >= 0) ? r.speed : (prev ? d / dt : 0);
-    gps.speedMps = prev ? gps.speedMps * 0.5 + v * 0.5 : v;
-    if (gps.speedMps < 0.8) gps.speedMps = 0;
+    const hasSpeed = Number.isFinite(r.speed) && r.speed >= 0;
+    let v = hasSpeed ? r.speed : (prev ? d / dt : 0);
+    if (hasSpeed && r.speed === 0 && prev && acc < 30 && dt < 5 && d > Math.max(10, acc) && (d / dt) > 2) {
+        v = d / dt;
+    }
+    gps.speedMps = prev ? gps.speedMps * 0.3 + v * 0.7 : v;
+    if (gps.speedMps < 0.5) gps.speedMps = 0;
 
     let lat = r.lat, lng = r.lng;
-    if (prev && gps.speedMps === 0 && d < Math.max(4, acc * 0.6)) { lat = prev.lat; lng = prev.lng; }
+    if (prev && gps.speedMps === 0 && d < Math.max(3, acc * 0.5)) { lat = prev.lat; lng = prev.lng; }
 
-    if (gps.speedMps >= 1.5) {
-        let h = null;
-        if (isFinite(r.heading)) { h = r.heading; gps.lastMoved = { lat, lng }; }
-        else if (!gps.lastMoved) { gps.lastMoved = { lat, lng }; }
-        else if (distM(gps.lastMoved.lat, gps.lastMoved.lng, lat, lng) >= 8) {
-            h = bearingDeg(gps.lastMoved.lat, gps.lastMoved.lng, lat, lng);
-            gps.lastMoved = { lat, lng };
+    let h = gps.heading;
+    if (gps.speedMps >= 1.0) {
+        if (Number.isFinite(r.heading) && r.heading >= 0) {
+            h = r.heading;
+        } else if (prev && d >= 3) {
+            h = bearingDeg(prev.lat, prev.lng, lat, lng);
         }
-        if (h !== null) gps.heading = (gps.heading + angDelta(gps.heading, h) * 0.6 + 360) % 360;
+        gps.heading = (gps.heading + angDelta(gps.heading, h) * 0.8 + 360) % 360;
     }
 
-    const fix = { lat, lng, acc, speedMph: Math.round(gps.speedMps * MPS_TO_MPH), heading: gps.heading, t: r.t };
+    const fix = { lat: lat, lng: lng, acc: acc, speedMph: Math.round(gps.speedMps * MPS_TO_MPH), heading: gps.heading, t: r.t };
     gps.last = fix;
     window.lastLat = lat; window.lastLng = lng; window.lastHeading = fix.heading;
 
-    setStatus('GPS \u00B1' + Math.round(acc) + ' m', true);
-    gps.subs.forEach((fn) => { try { fn(fix); } catch (e) {} });
+    setStatus('GPS ±' + Math.round(acc) + ' m' + (DEBUG_SPEED ? ' · raw ' + r.speed : ''), true);
+    gps.subs.forEach((fn) => { try { fn(fix); } catch (e) { console.error('GPS subscriber error:', e); } });
     send(fix, false);
 }
 
@@ -253,10 +273,10 @@ function send(fix, force) {
     if (!sid) return;
     const now = Date.now(), s = gps.sent;
     const moved = distM(s.lat, s.lng, fix.lat, fix.lng);
-    if (!force && !(now - s.t >= 2000 || (now - s.t >= 1000 && moved >= 15))) return;
+    if (!force && !(now - s.t >= 2000 || (now - s.t >= 1000 && moved >= 10))) return;
     gps.sent = { t: now, lat: fix.lat, lng: fix.lng };
     LS.setItem('smd_last_tx', String(now));
-    
+
     database.ref('broadcasts/' + sid).update({
         lat: fix.lat,
         lng: fix.lng,
@@ -265,7 +285,7 @@ function send(fix, force) {
         accuracy: Math.round(fix.acc),
         timestamp: now
     }).catch((err) => {
-        console.error("Firebase telemetry update error:", err);
+        console.error('Firebase telemetry update error:', err);
     });
 }
 
@@ -289,20 +309,20 @@ function startGps() {
             backgroundMessage: 'Sharing your location with your customer.',
             requestPermissions: true, stale: false, distanceFilter: 0
         }, (loc, err) => {
-            if (err) { console.error("BackgroundGeolocation error:", err); if (err.code === 'NOT_AUTHORIZED') permissionDenied(); return; }
+            if (err) { console.error('BackgroundGeolocation error:', err); if (err.code === 'NOT_AUTHORIZED') permissionDenied(); return; }
             if (loc) ingest(fromBg(loc));
-        }).then((id) => { if (gen === gps.gen) gps.handle = id; else BG.removeWatcher({ id }); }).catch((err) => { console.error("BG watcher failed:", err); });
+        }).then((id) => { if (gen === gps.gen) gps.handle = id; else BG.removeWatcher({ id: id }); }).catch((err) => { console.error('BG watcher failed:', err); });
     } else if (NG) {
         gps.kind = 'native';
         NG.watchPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }, (pos, err) => {
-            if (err) { console.error("Native Geolocation error:", err); if (err.code === 1 || /denied/i.test(err.message || '')) permissionDenied(); return; }
+            if (err) { console.error('Native Geolocation error:', err); if (err.code === 1 || /denied/i.test(err.message || '')) permissionDenied(); return; }
             if (pos) ingest(fromWeb(pos));
-        }).then((id) => { if (gen === gps.gen) gps.handle = id; else NG.clearWatch({ id }); }).catch((err) => { console.error("Native watch failed:", err); });
+        }).then((id) => { if (gen === gps.gen) gps.handle = id; else NG.clearWatch({ id: id }); }).catch((err) => { console.error('Native watch failed:', err); });
     } else if (navigator.geolocation) {
         gps.kind = 'web';
         gps.handle = navigator.geolocation.watchPosition(
             (p) => ingest(fromWeb(p)),
-            (e) => { console.error("Web Geolocation error:", e); if (e.code === 1) permissionDenied(); else setStatus('GPS: searching\u2026', false); },
+            (e) => { console.error('Web Geolocation error:', e); if (e.code === 1) permissionDenied(); else setStatus('GPS: searching…', false); },
             { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
         );
     } else {
@@ -324,8 +344,11 @@ function stopGps() {
 function restartGps() { stopGps(); startGps(); }
 
 setInterval(() => {
-    if (gps.running && !gps.denied && Date.now() - gps.lastAlive > 15000) {
-        setStatus('GPS: reconnecting\u2026', false);
+    if (!gps.running || gps.denied) return;
+    const limit = 15000 * Math.min(1 + gps.restarts, 4);
+    if (Date.now() - gps.lastAlive > limit) {
+        gps.restarts++;
+        setStatus('GPS: reconnecting…', false);
         restartGps();
     }
 }, 4000);
@@ -388,73 +411,169 @@ window.stopRealTimeTracking = async function () {
 };
 
 function resetGpsState() {
-    gps.last = null; gps.lastMoved = null; gps.speedMps = 0; gps.badSince = 0;
+    gps.last = null; gps.lastMoved = null; gps.speedMps = 0; gps.badSince = 0; gps.restarts = 0;
     gps.sent = { t: 0, lat: 0, lng: 0 };
 }
-window.teardownDriverMap = function() {
+window.teardownDriverMap = function () {
     teardownDriver();
     stopGps();
     resetGpsState();
 };
 
-function getTruckIcon(bearing = 0) {
+function getTruckIcon(bearing) {
+    bearing = bearing || 0;
     return L.divIcon({
         className: 'custom-truck-svg-marker',
-        html: `
-            <div style="transform: translate(-50%, -50%) rotate(${bearing}deg); width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0px 6px 10px rgba(0,0,0,0.7));">
-                <svg viewBox="0 0 24 36" width="30" height="45" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="1.5" y="9" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/>
-                    <rect x="19" y="9" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/>
-                    <rect x="1.5" y="25" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/>
-                    <rect x="19" y="25" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/>
-                    <rect x="4" y="12" width="16" height="21" rx="2.5" fill="#0b0f19" stroke="#374151" stroke-width="1.5"/>
-                    <rect x="4" y="21" width="16" height="3.5" fill="#f59e0b"/>
-                    <line x1="4" y1="22.75" x2="20" y2="22.75" stroke="#ffffff" stroke-width="0.75" opacity="0.8"/>
-                    <path d="M6 12H18V5.5C18 3.84315 16.6569 2.5 15 2.5H9C7.34315 2.5 6 3.84315 6 5.5V12Z" fill="#111827" stroke="#4b5563" stroke-width="1.5"/>
-                    <path d="M7.5 8H16.5L15.5 4.5H8.5L7.5 8Z" fill="#38bdf8" fill-opacity="0.9" stroke="#bae6fd" stroke-width="0.5"/>
-                    <line x1="9" y1="6" x2="15" y2="6" stroke="#ffffff" stroke-width="0.75" opacity="0.6"/>
-                    <circle cx="7" cy="3.5" r="1.1" fill="#fbbf24"/>
-                    <circle cx="17" cy="3.5" r="1.1" fill="#fbbf24"/>
-                    <circle cx="7" cy="3.5" r="0.5" fill="#ffffff"/>
-                    <circle cx="17" cy="3.5" r="0.5" fill="#ffffff"/>
-                </svg>
-            </div>
-        `,
+        html: '' +
+            '<div style="transform: rotate(' + bearing + 'deg); transform-origin: 50% 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0px 6px 10px rgba(0,0,0,0.7));">' +
+            '<svg viewBox="0 0 24 36" width="30" height="45" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+            '<rect x="1.5" y="9" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/>' +
+            '<rect x="19" y="9" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/>' +
+            '<rect x="1.5" y="25" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/>' +
+            '<rect x="19" y="25" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/>' +
+            '<rect x="4" y="12" width="16" height="21" rx="2.5" fill="#0b0f19" stroke="#374151" stroke-width="1.5"/>' +
+            '<rect x="4" y="21" width="16" height="3.5" fill="#f59e0b"/>' +
+            '<line x1="4" y1="22.75" x2="20" y2="22.75" stroke="#ffffff" stroke-width="0.75" opacity="0.8"/>' +
+            '<path d="M6 12H18V5.5C18 3.84315 16.6569 2.5 15 2.5H9C7.34315 2.5 6 3.84315 6 5.5V12Z" fill="#111827" stroke="#4b5563" stroke-width="1.5"/>' +
+            '<path d="M7.5 8H16.5L15.5 4.5H8.5L7.5 8Z" fill="#38bdf8" fill-opacity="0.9" stroke="#bae6fd" stroke-width="0.5"/>' +
+            '<line x1="9" y1="6" x2="15" y2="6" stroke="#ffffff" stroke-width="0.75" opacity="0.6"/>' +
+            '<circle cx="7" cy="3.5" r="1.1" fill="#fbbf24"/>' +
+            '<circle cx="17" cy="3.5" r="1.1" fill="#fbbf24"/>' +
+            '<circle cx="7" cy="3.5" r="0.5" fill="#ffffff"/>' +
+            '<circle cx="17" cy="3.5" r="0.5" fill="#ffffff"/>' +
+            '</svg></div>',
         iconSize: [36, 36],
         iconAnchor: [18, 18]
     });
 }
 
-function getDriverLabelIcon(name = 'Driver') {
-    const safeName = String(name || 'Driver').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
+function getDriverLabelIcon(name) {
+    const safeName = String(name || 'Driver').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
     return L.divIcon({
         className: 'custom-driver-label-marker',
-        html: `<div style="transform: translate(-50%, -100%); font-size: 11px; font-weight: 900; color: #000; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff; white-space: nowrap; letter-spacing: 0.08em; text-transform: uppercase;">${safeName}</div>`,
+        html: '<div style="transform: translate(-50%, -100%); font-size: 11px; font-weight: 900; color: #000; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff; white-space: nowrap; letter-spacing: 0.08em; text-transform: uppercase;">' + safeName + '</div>',
         iconSize: [0, 0], iconAnchor: [0, -25]
     });
 }
 
+function buildTrack(pts, dur, dist) {
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) {
+        cum.push(cum[i - 1] + distM(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]));
+    }
+    return { pts: pts, cum: cum, total: cum[cum.length - 1], dur: dur, dist: dist };
+}
+
+function trackPoint(tr, s) {
+    const pts = tr.pts, cum = tr.cum, n = pts.length;
+    if (s <= 0) return { lat: pts[0][0], lng: pts[0][1], i: 0 };
+    if (s >= tr.total) return { lat: pts[n - 1][0], lng: pts[n - 1][1], i: Math.max(0, n - 2) };
+    let lo = 0, hi = n - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (cum[mid] <= s) lo = mid; else hi = mid; }
+    const L2 = cum[hi] - cum[lo], k = L2 > 0 ? (s - cum[lo]) / L2 : 0;
+    return {
+        lat: pts[lo][0] + (pts[hi][0] - pts[lo][0]) * k,
+        lng: pts[lo][1] + (pts[hi][1] - pts[lo][1]) * k,
+        i: lo
+    };
+}
+
+function trackBearing(tr, s) {
+    const a = trackPoint(tr, Math.max(0, s - 6)), b = trackPoint(tr, Math.min(tr.total, s + 24));
+    if (distM(a.lat, a.lng, b.lat, b.lng) < 1) return null;
+    return bearingDeg(a.lat, a.lng, b.lat, b.lng);
+}
+
+function trackProject(tr, lat, lng, fromS, ahead) {
+    const pts = tr.pts, cum = tr.cum, n = pts.length;
+    let i0 = 0;
+    if (fromS !== null && fromS !== undefined) {
+        const lo = Math.max(0, fromS - 60);
+        let a = 0, b = n - 1;
+        while (a < b) { const m = (a + b) >> 1; if (cum[m + 1] >= lo) b = m; else a = m + 1; }
+        i0 = a;
+    }
+    const cosL = Math.cos(lat * Math.PI / 180), K = 111320;
+    let best = null;
+    for (let i = i0; i <= n - 2; i++) {
+        if (fromS !== null && fromS !== undefined && cum[i] > fromS + ahead) break;
+        const ax = (pts[i][1] - lng) * cosL * K, ay = (pts[i][0] - lat) * K;
+        const bx = (pts[i + 1][1] - lng) * cosL * K, by = (pts[i + 1][0] - lat) * K;
+        const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+        let t = l2 > 0 ? -(ax * dx + ay * dy) / l2 : 0;
+        t = t < 0 ? 0 : (t > 1 ? 1 : t);
+        const px = ax + t * dx, py = ay + t * dy, d = Math.sqrt(px * px + py * py);
+        if (!best || d < best.d) best = { d: d, s: cum[i] + t * (cum[i + 1] - cum[i]) };
+    }
+    return best;
+}
+
 function makeMover(marker, label, onFrame) {
-    let cur = null, curH = 0, from, to, hFrom, hTo, t0 = 0, dur = 1, raf = 0, lastCall = 0;
-    function frame() {
-        const k = Math.max(0, Math.min(1, (performance.now() - t0) / dur));
-        cur = { lat: from.lat + (to.lat - from.lat) * k, lng: from.lng + (to.lng - from.lng) * k };
-        curH = (hFrom + angDelta(hFrom, hTo) * k + 360) % 360;
+    let cur = null, curH = 0, raf = 0, lastCall = 0, lastFrame = 0;
+    let mode = 'll', from, to, hFrom, hTo, t0 = 0, dur = 1;
+    let tr = null, curS = 0, sFrom = 0, sTo = 0, offLat = 0, offLng = 0;
+    let vMps = 0;
+    const MAX_COAST_MS = 15000;
+
+    function paint() {
         marker.setLatLng(cur);
         if (label) label.setLatLng(cur);
         const el = marker.getElement();
-        if (el && el.firstElementChild) el.firstElementChild.style.transform = 'translate(-50%, -50%) rotate(' + curH + 'deg)';
-        if (onFrame) onFrame(cur);
-        raf = k < 1 ? requestAnimationFrame(frame) : 0;
+        if (el && el.firstElementChild) el.firstElementChild.style.transform = 'rotate(' + curH + 'deg)';
     }
+
+    function frame() {
+        const nowT = performance.now();
+        const k = Math.max(0, Math.min(1, (nowT - t0) / dur));
+        let coasting = false;
+        if (mode === 's') {
+            if (k < 1) {
+                curS = sFrom + (sTo - sFrom) * k;
+            } else {
+                const c = Math.min(nowT - (t0 + dur), MAX_COAST_MS);
+                curS = Math.min(tr.total, sTo + vMps * (c / 1000) * (1 - c / (2 * MAX_COAST_MS)));
+                coasting = vMps > 0.5 && c < MAX_COAST_MS && curS < tr.total;
+            }
+            const p = trackPoint(tr, curS), rest = 1 - k;
+            cur = { lat: p.lat + offLat * rest, lng: p.lng + offLng * rest };
+            const b = trackBearing(tr, curS);
+            if (b !== null) {
+                const dtf = lastFrame ? Math.min(50, nowT - lastFrame) : 16;
+                const a = 1 - Math.exp(-dtf / 150);
+                curH = (curH + angDelta(curH, b) * a + 360) % 360;
+            }
+        } else {
+            cur = { lat: from.lat + (to.lat - from.lat) * k, lng: from.lng + (to.lng - from.lng) * k };
+            curH = (hFrom + angDelta(hFrom, hTo) * k + 360) % 360;
+        }
+        lastFrame = nowT;
+        paint();
+        if (onFrame) onFrame(cur, mode === 's' ? curS : null, mode === 's' ? tr : null);
+        raf = (k < 1 || coasting) ? requestAnimationFrame(frame) : 0;
+    }
+
     return {
-        moveTo(lat, lng, h) {
+        moveTo(lat, lng, h, track, s, ms, speedMps) {
             const now = performance.now();
             cancelAnimationFrame(raf);
-            if (!cur) { cur = { lat, lng }; curH = h; }
-            from = cur; hFrom = curH; to = { lat, lng }; hTo = h; t0 = now;
-            dur = lastCall ? Math.max(400, Math.min(1500, now - lastCall)) : 1;
-            lastCall = now;
+            vMps = (Number.isFinite(speedMps) && speedMps > 0) ? speedMps : 0;
+            if (!cur) { cur = { lat: lat, lng: lng }; curH = Number.isFinite(h) ? h : 0; }
+            dur = Math.max(300, Math.min(4000, ms || (lastCall ? now - lastCall : 1)));
+            lastCall = now; t0 = now;
+
+            if (track && s !== null && s !== undefined) {
+                if (tr !== track || mode !== 's') {
+                    const pr = trackProject(track, cur.lat, cur.lng, s, 150);
+                    curS = (pr && pr.d < 100) ? pr.s : s;
+                }
+                tr = track; mode = 's';
+                sFrom = curS; sTo = Math.max(s, curS);
+                const p0 = trackPoint(track, sFrom);
+                offLat = cur.lat - p0.lat; offLng = cur.lng - p0.lng;
+            } else {
+                mode = 'll'; tr = null;
+                from = cur; hFrom = curH; to = { lat: lat, lng: lng }; hTo = Number.isFinite(h) ? h : curH;
+            }
             frame();
         },
         pos: () => cur,
@@ -463,54 +582,100 @@ function makeMover(marker, label, onFrame) {
 }
 
 function pinIcon() {
-    return L.divIcon({ className: 'custom-pin-marker', html: '<div style="font-size:28px;">\uD83D\uDCCD</div>', iconSize: [32, 32], iconAnchor: [16, 32] });
+    return L.divIcon({ className: 'custom-pin-marker', html: '<div style="font-size:28px;">📍</div>', iconSize: [32, 32], iconAnchor: [16, 32] });
 }
 
 function makeMap(box, zoomControl) {
     const map = L.map(box, { zoomControl: zoomControl, zoomAnimation: true });
-    L.tileLayer(TILE_URL, { 
-        maxZoom: 19, 
-        keepBuffer: 4, 
-        updateWhenIdle: false, 
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' 
+    L.tileLayer(TILE_URL, {
+        maxZoom: 19,
+        keepBuffer: 4,
+        updateWhenIdle: false,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
     [0, 250, 700].forEach((ms) => setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, ms));
     return map;
 }
 
 function routeManager(map, color) {
-    let line = null, coords = [], lastFetch = 0, busy = false;
-    async function fetchRoute(lat, lng, dLat, dLng) {
-        const url = 'https://router.project-osrm.org/route/v1/driving/' + lng + ',' + lat + ';' + dLng + ',' + dLat + '?overview=full&geometries=geojson';
-        const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 8000);
-        try {
-            const j = await (await fetch(url, { signal: ctl.signal })).json();
-            if (j.code === 'Ok' && j.routes && j.routes[0]) {
-                return { pts: j.routes[0].geometry.coordinates.map((c) => [c[1], c[0]]), dur: j.routes[0].duration, dist: j.routes[0].distance };
-            }
-        } catch (e) {} finally { clearTimeout(to); }
+    let line = null, track = null, lastFetch = 0, busy = false;
+    let offCount = 0, offSince = 0, prog = null, destKey = '', lastTrim = 0;
+    const HOLD_MS = 6000, HOLD_MAX_OFFSET = 90;
+
+    async function fetchRoute(lat, lng, dLat, dLng, heading) {
+        const base = 'https://router.project-osrm.org/route/v1/driving/' + lng + ',' + lat + ';' + dLng + ',' + dLat + '?overview=full&geometries=geojson';
+        const urls = (Number.isFinite(heading) ? [base + '&bearings=' + Math.round(heading) + ',60;'] : []).concat([base]);
+        for (const url of urls) {
+            const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 8000);
+            try {
+                const j = await (await fetch(url, { signal: ctl.signal })).json();
+                if (j.code === 'Ok' && j.routes && j.routes[0]) {
+                    return { pts: j.routes[0].geometry.coordinates.map((c) => [c[1], c[0]]), dur: j.routes[0].duration, dist: j.routes[0].distance };
+                }
+            } catch (e) {} finally { clearTimeout(to); }
+        }
         return null;
     }
-    function offRoute(lat, lng) {
-        let best = Infinity;
-        for (let i = 0; i < coords.length; i++) { const d = distM(lat, lng, coords[i][0], coords[i][1]); if (d < best) best = d; }
-        return best > 80;
-    }
+
     return {
-        async update(lat, lng, dLat, dLng, force) {
-            const now = Date.now();
-            if (busy || now - lastFetch < (coords.length ? 8000 : 5000)) return null;
-            if (coords.length && !force && now - lastFetch < 30000 && !offRoute(lat, lng)) return null;
+        async update(lat, lng, dLat, dLng, opts) {
+            opts = opts || {};
+            const now = Date.now(), key = dLat + ',' + dLng, off = offSince > 0 && (now - offSince) >= HOLD_MS;
+            const need = !track || key !== destKey || off || opts.force;
+            if (busy || !need) return null;
+            if (now - lastFetch < (off ? 2000 : 3000)) return null;
             busy = true; lastFetch = now;
-            const r = await fetchRoute(lat, lng, dLat, dLng);
+            const r = await fetchRoute(lat, lng, dLat, dLng, opts.moving ? opts.heading : NaN);
             busy = false;
             if (r && r.pts.length > 1) {
-                coords = r.pts;
+                if (opts.moving && Number.isFinite(opts.heading) && startsReversed(r.pts, opts.heading)) return null;
+                track = buildTrack(r.pts, r.dur, r.dist);
+                destKey = key; offCount = 0; offSince = 0; prog = null;
                 try { if (line) line.setLatLngs(r.pts); else line = L.polyline(r.pts, { color: color, weight: 6, opacity: 0.95, lineJoin: 'round' }).addTo(map); } catch (e) {}
                 return r;
             }
             return null;
-        }
+        },
+
+        snap(lat, lng, acc, moving, dtSec, speedMps) {
+            if (!track) return { snapped: false };
+            const limit = Math.min(150, Math.max(30, (Number.isFinite(acc) ? acc : 0) * 1.5));
+            const ahead = Math.max(300, (speedMps || 0) * (dtSec || 0) * 1.5 + 150);
+            const r = trackProject(track, lat, lng, prog, ahead);
+            if (r && r.d <= limit) {
+                offCount = 0; offSince = 0;
+                prog = prog === null ? r.s : Math.max(prog, r.s);
+                const p = trackPoint(track, prog);
+                return {
+                    snapped: true, lat: p.lat, lng: p.lng, bearing: trackBearing(track, prog),
+                    track: track, s: prog, remaining: track.total - prog,
+                    etaSec: track.total > 0 ? track.dur * (track.total - prog) / track.total : 0
+                };
+            }
+            const nowMs = Date.now();
+            if (!offSince) offSince = nowMs;
+            offCount++;
+            if (prog !== null && r && r.d < HOLD_MAX_OFFSET && (speedMps || 0) > 1 && (nowMs - offSince) < HOLD_MS) {
+                prog = Math.min(track.total, prog + (speedMps || 0) * Math.min(dtSec || 0, 3));
+                const hp = trackPoint(track, prog);
+                return {
+                    snapped: true, held: true, lat: hp.lat, lng: hp.lng, bearing: trackBearing(track, prog),
+                    track: track, s: prog, remaining: track.total - prog,
+                    etaSec: track.total > 0 ? track.dur * (track.total - prog) / track.total : 0
+                };
+            }
+            return { snapped: false, off: (nowMs - offSince) >= HOLD_MS };
+        },
+
+        trim(tr, s) {
+            if (!line || tr !== track) return;
+            const now = performance.now();
+            if (now - lastTrim < 300) return;
+            lastTrim = now;
+            const p = trackPoint(tr, s);
+            try { line.setLatLngs([[p.lat, p.lng]].concat(tr.pts.slice(p.i + 1))); } catch (e) {}
+        },
+        getTrack: () => track
     };
 }
 
@@ -534,10 +699,10 @@ window.initDriverActiveMap = function () {
     const badge = document.createElement('div');
     badge.className = 'smd-gps-badge';
     badge.style.cssText = 'position:absolute;top:12px;left:12px;z-index:20;background:rgba(0,0,0,.8);border:1px solid #262626;border-radius:10px;padding:4px 10px;font:700 11px ui-monospace,monospace;color:#fbbf24;pointer-events:none';
-    badge.textContent = 'GPS: acquiring\u2026';
+    badge.textContent = 'GPS: acquiring…';
     host.appendChild(badge);
 
-    D = { map: map, follow: true, mover: null, route: routeManager(map, '#1d4ed8'), viewSet: false, truck: null, label: null };
+    D = { map: map, follow: true, mover: null, route: routeManager(map, '#1d4ed8'), viewSet: false, truck: null, label: null, lastT: 0 };
     const me = D;
     map.on('dragstart', () => { me.follow = false; });
 
@@ -549,17 +714,35 @@ window.initDriverActiveMap = function () {
 
     me.off = subscribe((fix) => {
         if (D !== me) return;
-        if (!me.viewSet) {
-            map.setView([fix.lat, fix.lng], 17, { animate: false });
-            me.viewSet = true;
-            me.truck = L.marker([fix.lat, fix.lng], { icon: getTruckIcon(fix.heading) }).addTo(map);
-            me.label = L.marker([fix.lat, fix.lng], { icon: getDriverLabelIcon(LS.getItem('smd_driver_name') || 'Driver') }).addTo(map);
-            me.mover = makeMover(me.truck, me.label, (p) => { if (me.follow) map.panTo([p.lat, p.lng], { animate: false }); });
+
+        let lat = fix.lat, lng = fix.lng, heading = fix.heading, trk = null, sPos = null;
+        const moving = fix.speedMph > 2;
+        const gap = me.lastT ? fix.t - me.lastT : 0;
+        me.lastT = fix.t;
+        const spMps = fix.speedMph / MPS_TO_MPH;
+
+        if (dest) {
+            me.route.update(lat, lng, dest.lat, dest.lng, { heading: fix.heading, moving: moving });
+            const sn = me.route.snap(lat, lng, fix.acc, moving, gap / 1000, spMps);
+            if (sn.snapped) {
+                lat = sn.lat; lng = sn.lng; trk = sn.track; sPos = sn.s;
+                if (sn.bearing !== null) heading = sn.bearing;
+            }
         }
-        me.mover.moveTo(fix.lat, fix.lng, fix.heading);
+
+        if (!me.viewSet) {
+            map.setView([lat, lng], 17, { animate: false });
+            me.viewSet = true;
+            me.truck = L.marker([lat, lng], { icon: getTruckIcon(heading) }).addTo(map);
+            me.label = L.marker([lat, lng], { icon: getDriverLabelIcon(LS.getItem('smd_driver_name') || 'Driver') }).addTo(map);
+            me.mover = makeMover(me.truck, me.label, (p, sNow, tr) => {
+                if (me.follow) map.panTo([p.lat, p.lng], { animate: false });
+                if (tr) me.route.trim(tr, sNow);
+            });
+        }
+        me.mover.moveTo(lat, lng, heading, trk, sPos, gap > 0 ? gap : 1000, spMps);
         const sp = $('driver-map-speed');
         if (sp) sp.textContent = fix.speedMph + ' mph';
-        if (dest) me.route.update(fix.lat, fix.lng, dest.lat, dest.lng, false);
     });
 };
 
@@ -583,9 +766,16 @@ window.openDriverDirections = function () {
     else alert('No destination address set for directions.');
 };
 
-window.copyTrackingLink = async function () {
+function trackingUrl() {
     const base = 'https://www.seemydriver.com';
-    const u = window.activeTrackingUrl || (base + '/?view=customer&session=' + sessionId());
+    const bk = LS.getItem('smd_brand_key');
+    let u = window.activeTrackingUrl || (base + '/?view=customer&session=' + sessionId());
+    if (bk && u.indexOf('brand=') === -1) u += (u.indexOf('?') === -1 ? '?' : '&') + 'brand=' + encodeURIComponent(bk);
+    return u;
+}
+
+window.copyTrackingLink = async function () {
+    const u = trackingUrl();
     try { await navigator.clipboard.writeText(u); }
     catch (e) {
         const t = document.createElement('textarea');
@@ -597,34 +787,69 @@ window.copyTrackingLink = async function () {
     toast('Tracking link copied');
 };
 window.textTrackingLink = function () {
-    const base = 'https://www.seemydriver.com';
-    const u = window.activeTrackingUrl || (base + '/?view=customer&session=' + sessionId());
+    const u = trackingUrl();
     const phone = (LS.getItem('smd_cust_phone') || '').replace(/[^\d+]/g, '');
     const name = LS.getItem('smd_driver_name') || 'Your driver';
     window.location.href = 'sms:' + phone + '?body=' + encodeURIComponent(name + ' is on the way. Track live: ' + u);
 };
+
 window.endBroadcastAndHome = async function () {
     if (!confirm('End this broadcast? Your customer will stop seeing your location.')) return;
     const sid = sessionId();
     const database = getDb();
-    try { 
+    try {
         if (sid && database) {
-            await database.ref('broadcasts/' + sid).update({ ended: true, timestamp: Date.now() }); 
+            await Promise.race([
+                database.ref('broadcasts/' + sid).update({ ended: true, timestamp: Date.now() }),
+                new Promise((resolve) => setTimeout(resolve, 3000))
+            ]);
         }
     } catch (e) {
-        console.error("End broadcast error:", e);
+        console.error('End broadcast error:', e);
     }
     await window.stopRealTimeTracking();
     teardownDriver();
     resetGpsState();
-    LS.removeItem('smd_dest_lat'); 
+    LS.removeItem('smd_dest_lat');
     LS.removeItem('smd_dest_lng');
     LS.removeItem('smd_session_id');
     window.activeSessionId = undefined;
-    window.cachedDestLat = undefined; 
+    window.cachedDestLat = undefined;
     window.cachedDestLng = undefined;
     window.switchView('job-setup-view');
 };
+
+// ----------------------------------------------------------
+// CUSTOMER MAP & ETA GUARD
+// ----------------------------------------------------------
+function humanizeEtaText(t) {
+    return t.replace(/(\d[\d,]*)\s*(?:mins?|minutes?)\b/gi, (m, num) => {
+        const total = parseInt(num.replace(/,/g, ''), 10);
+        if (!(total >= 60)) return m;
+        const h = Math.floor(total / 60), r = total % 60;
+        const hw = h === 1 ? ' hr' : ' hrs';
+        return r ? h + hw + ' ' + r + ' mins' : h + hw;
+    });
+}
+
+function installEtaGuard() {
+    const root = $('customer-view-view');
+    if (!root || root.__etaGuard) return;
+    root.__etaGuard = true;
+    const sweep = () => {
+        const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        let n;
+        while ((n = w.nextNode())) {
+            const t = n.nodeValue;
+            if (t && /min/i.test(t)) {
+                const out = humanizeEtaText(t);
+                if (out !== t) n.nodeValue = out;
+            }
+        }
+    };
+    new MutationObserver(sweep).observe(root, { childList: true, subtree: true, characterData: true });
+    sweep();
+}
 
 let C = null;
 function teardownCustomer() {
@@ -637,14 +862,15 @@ function teardownCustomer() {
 }
 
 window.initCustomerMapLive = function () {
+    installEtaGuard();
     const box = $('customer-map-container');
     if (!box || typeof L === 'undefined') return;
     teardownCustomer();
 
     const q = new URLSearchParams(window.location.search);
     const sid = q.get('session') || q.get('s');
-    const head = $('cust-driver-header'), sub = $('cust-eta-sub'), pill =$('cust-status-pill'), distEl = $('cust-distance'), speedEl =$('cust-speed');
-    if (!sid) { if (head) head.textContent = 'Invalid tracking link'; return; }
+    const head = $('cust-driver-header'), sub = $('cust-eta-sub'), pill = $('cust-status-pill'), distEl = $('cust-distance'), speedEl = $('cust-speed');
+    if (!sid) { if (head) head.textContent = (q.get('brand') || q.get('co')) ? 'Waiting for your driver…' : 'Invalid tracking link'; return; }
 
     const database = getDb();
     if (!database) return;
@@ -662,6 +888,16 @@ window.initCustomerMapLive = function () {
             : 'bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold px-3 py-1 rounded-full';
     };
 
+    const formatEta = (totalMins) => {
+        const mins = Math.max(1, Math.round(totalMins));
+        if (mins >= 60) {
+            const hrs = Math.floor(mins / 60), m = mins % 60;
+            const hw = hrs === 1 ? ' hr' : ' hrs';
+            return m > 0 ? hrs + hw + ' ' + m + ' mins' : hrs + hw;
+        }
+        return mins + ' mins';
+    };
+
     me.ref = database.ref('broadcasts/' + sid);
     me.cb = me.ref.on('value', (snap) => {
         if (C !== me) return;
@@ -669,22 +905,26 @@ window.initCustomerMapLive = function () {
 
         if (!data) {
             me.waiting = true;
-            if (head) head.textContent = 'Waiting for driver\u2026';
-            setPill('\u25CF Waiting', false);
+            if (head) head.textContent = 'Waiting for driver…';
+            setPill('● Waiting', false);
             return;
         }
 
-        if (data.timestamp !== me.lastTs) { me.lastTs = data.timestamp; me.lastChange = Date.now(); }
+        const fresh = data.timestamp !== me.lastTs;
+        const tsGap = (fresh && me.lastTs) ? (data.timestamp - me.lastTs) : 0;
+        if (fresh) { me.lastTs = data.timestamp; me.lastChange = Date.now(); }
         if (data.ended) {
             me.ended = true; me.waiting = false;
-            if (head) head.textContent = (data.driverName || 'Driver') + ' \u2014 trip ended';
-            setPill('\u25CF Trip ended', false);
+            if (head) head.textContent = (data.driverName || 'Driver') + ' — trip ended';
+            setPill('● Trip ended', false);
             return;
         }
 
-        const lat = parseFloat(data.lat), lng = parseFloat(data.lng);
+        let lat = parseFloat(data.lat), lng = parseFloat(data.lng);
         const dLat = parseFloat(data.destLat), dLng = parseFloat(data.destLng);
-        const heading = isFinite(parseFloat(data.heading)) ? parseFloat(data.heading) : 0;
+        const hRaw = parseFloat(data.heading);
+        let heading = Number.isFinite(hRaw) ? hRaw : 0;
+        let trk = null, sPos = null;
         const name = data.driverName || 'Driver';
         if (head) head.textContent = name;
 
@@ -693,7 +933,7 @@ window.initCustomerMapLive = function () {
 
         const phoneDigits = data.driverPhone ? String(data.driverPhone).replace(/[^\d+]/g, '') : '';
         if (phoneDigits) {
-            const callBtn = $('cust-call-btn'), msgBtn =$('cust-msg-btn');
+            const callBtn = $('cust-call-btn'), msgBtn = $('cust-msg-btn');
             if (callBtn) callBtn.href = 'tel:' + phoneDigits;
             if (msgBtn) msgBtn.href = 'sms:' + phoneDigits;
         }
@@ -711,10 +951,10 @@ window.initCustomerMapLive = function () {
             }
         }
 
-        const havePos = isFinite(lat) && isFinite(lng) && !(lat === 0 && lng === 0);
+        const havePos = Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
         if (!havePos) {
             me.waiting = true;
-            setPill('\u25CF Waiting for driver GPS\u2026', false);
+            setPill('● Waiting for driver GPS…', false);
             if (sub) sub.textContent = '-- mins';
             if (distEl) distEl.textContent = '-- mi';
             return;
@@ -722,35 +962,54 @@ window.initCustomerMapLive = function () {
         me.waiting = false;
 
         me.speed = Math.round(data.speed || 0);
-        setPill('\u25CF Connected', true);
+        const spMps = me.speed / MPS_TO_MPH;
+        setPill('● Connected', true);
         if (speedEl) speedEl.textContent = me.speed + ' mph';
+
+        if (haveDest) {
+            const moving = me.speed > 2;
+            me.route.update(lat, lng, dLat, dLng, { heading: heading, moving: moving }).then((r) => {
+                if (r && C === me) {
+                    me.etaMin = Math.max(1, Math.round(r.dur / 60));
+                    me.roadMi = r.dist / 1609.34;
+                    if (sub) sub.textContent = formatEta(me.etaMin);
+                    if (distEl) distEl.textContent = me.roadMi.toFixed(1) + ' mi';
+                }
+            });
+            const sn = me.route.snap(lat, lng, parseFloat(data.accuracy), moving, tsGap / 1000, spMps);
+            if (sn.snapped) {
+                lat = sn.lat; lng = sn.lng; trk = sn.track; sPos = sn.s;
+                if (sn.bearing !== null) heading = sn.bearing;
+                me.etaMin = Math.max(1, Math.round(sn.etaSec / 60));
+                me.roadMi = sn.remaining / 1609.34;
+                if (sub) sub.textContent = formatEta(me.etaMin);
+                if (distEl) distEl.textContent = me.roadMi.toFixed(1) + ' mi';
+            }
+        }
 
         if (!me.truck) {
             map.setView([lat, lng], 16, { animate: false });
             me.truck = L.marker([lat, lng], { icon: getTruckIcon(heading) }).addTo(map);
             me.label = L.marker([lat, lng], { icon: getDriverLabelIcon(name) }).addTo(map);
-            me.mover = makeMover(me.truck, me.label, (p) => { if (me.follow && me.fitted) map.panTo([p.lat, p.lng], { animate: false }); });
-        }
-        me.mover.moveTo(lat, lng, heading);
-
-        if (haveDest) {
-            if (!me.fitted) { me.fitted = true; map.fitBounds(L.latLngBounds([[lat, lng], [dLat, dLng]]), { padding: [60, 60], animate: false }); me.follow = false; }
-            me.route.update(lat, lng, dLat, dLng, false).then((r) => {
-                if (r && C === me) {
-                    me.etaMin = Math.max(1, Math.round(r.dur / 60));
-                    me.roadMi = r.dist / 1609.34;
-                    if (sub) sub.textContent = me.etaMin + ' mins';
-                    if (distEl) distEl.textContent = me.roadMi.toFixed(1) + ' mi';
-                }
+            me.mover = makeMover(me.truck, me.label, (p, sNow, tr) => {
+                if (me.follow && me.fitted) map.panTo([p.lat, p.lng], { animate: false });
+                if (tr) me.route.trim(tr, sNow);
             });
-        } else {
+        }
+        me.mover.moveTo(lat, lng, heading, trk, sPos, tsGap > 0 ? tsGap : 1500, spMps);
+
+        if (haveDest && !me.fitted) {
+            me.fitted = true;
+            map.fitBounds(L.latLngBounds([[lat, lng], [dLat, dLng]]), { padding: [60, 60], animate: false });
+            me.follow = false;
+        } else if (!haveDest) {
             me.fitted = true;
         }
     });
 
     me.staleTimer = setInterval(() => {
         if (!C || C.ended || me.waiting) return;
-        if (Date.now() - me.lastChange > 20000) setPill('\u25CF Signal lost \u2014 reconnecting', false);
+        if (Date.now() - me.lastChange > 20000) setPill('● GPS weak — estimating position', false);
     }, 3000);
 };
 
@@ -766,18 +1025,5 @@ window.fitCustomerMap = function () {
     C.follow = false;
     C.map.fitBounds(L.latLngBounds([[p.lat, p.lng], [d.lat, d.lng]]), { padding: [60, 60], animate: false });
 };
-
-document.addEventListener('DOMContentLoaded', () => {
-    const q = new URLSearchParams(window.location.search);
-    if (!q.has('session') && !q.has('s') && q.get('view') !== 'customer' && broadcasting()) {
-        const last = parseInt(LS.getItem('smd_last_tx') || '0', 10);
-        if (sessionId() && Date.now() - last < 6 * 3600 * 1000) {
-            window.switchView('active-broadcast');
-            window.startRealTimeTracking();
-        } else {
-            LS.removeItem('smd_active_broadcast');
-        }
-    }
-});
 
 })();
