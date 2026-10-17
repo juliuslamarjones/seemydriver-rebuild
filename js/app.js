@@ -18,7 +18,7 @@ window.installPWA = async function() {
         console.log('PWA install outcome:', outcome);
         deferredPrompt = null;
     } else {
-        alert('To install SeeMyDriver:\n\n• On Mobile: Tap your browser menu (3 dots or share icon) and select "Add to Home Screen".\n• On Desktop Chrome: Click the install icon in the right side of your browser address bar.');
+        alert('To install SeeMyDriver on your phone:\n\n1. Tap the three dots (⋮) in the top right corner of Chrome.\n2. Tap "Install app" or "Add to Home screen".\n3. Confirm to add SeeMyDriver straight to your device!');
     }
 };
 

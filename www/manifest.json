@@ -1,0 +1,16 @@
+{
+  "name": "SeeMyDriver",
+  "short_name": "SeeMyDriver v2",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090a0f",
+  "theme_color": "#090a0f",
+  "icons": [
+    {
+      "src": "/store_icon_v2.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
