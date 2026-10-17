@@ -34,6 +34,10 @@
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
 
+    <!-- Leaflet CSS & JS for Active/Customer Tracking Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
@@ -90,7 +94,7 @@
 </head>
 <body class="bg-black text-white min-h-screen flex flex-col font-sans selection:bg-amber-400 selection:text-black antialiased">
 
-    <!-- HEADER / NAVBAR -->
+    <!-- HEADER / NAVBAR (Clean, No Clutter) -->
     <header class="w-full border-b border-neutral-900 bg-black/80 backdrop-blur-md sticky top-0 z-50 px-3 sm:px-8 py-4 flex items-center justify-between">
         <div class="flex items-center gap-3 cursor-pointer" onclick="window.switchView('landing', true)">
             <div id="brand-logo" class="w-16 h-16 sm:w-20 sm:h-20 bg-amber-400 rounded-2xl flex items-center justify-center shadow-[0_0_25px_rgba(251,191,36,0.5)] shrink-0 overflow-hidden">
@@ -99,16 +103,15 @@
             <span id="brand-name" class="font-black tracking-tight text-3xl sm:text-4xl text-white">See<span class="text-amber-400">MyDriver</span></span>
         </div>
         <div id="header-nav-actions" class="flex items-center gap-2 shrink-0">
-            <button onclick="window.switchView('signin')" class="text-xs sm:text-sm text-neutral-300 hover:text-white font-bold px-3 py-1.5 cursor-pointer whitespace-nowrap">Sign In</button>
-            <button onclick="window.switchView('register')" class="bg-amber-400 hover:bg-amber-300 text-black text-xs sm:text-sm px-3.5 sm:px-4 py-2 rounded-xl font-black cursor-pointer shadow-lg transition-all whitespace-nowrap">Get Started</button>
+            <!-- Left intentionally clean for sub-views -->
         </div>
     </header>
 
     <!-- MAIN CONTAINER -->
     <main class="flex-1 flex flex-col items-center justify-start w-full relative">
 
-        <!-- LANDING VIEW -->
-        <div id="landing-view" class="w-full max-w-5xl flex flex-col items-center text-center gap-10 py-4 sm:py-8 px-3 sm:px-4">
+        <!-- LANDING VIEW (The ONLY view featuring Install & Get Started actions) -->
+        <div id="landing-view" class="app-view w-full max-w-5xl flex flex-col items-center text-center gap-10 py-4 sm:py-8 px-3 sm:px-4 hidden" style="display: none;">
             <div class="relative w-full flex flex-col items-center gap-4 sm:gap-6 pt-1">
                 <div class="absolute -top-12 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
                 <div class="inline-flex items-center gap-2 bg-gradient-to-r from-neutral-900 via-[#12141c] to-neutral-900 border border-amber-400/30 text-amber-300 font-bold text-[11px] sm:text-sm py-1.5 px-4 sm:px-6 rounded-full shadow-[0_0_25px_rgba(251,191,36,0.1)] backdrop-blur-md">
@@ -122,12 +125,17 @@
                 <p class="text-sm sm:text-lg text-neutral-400 leading-relaxed max-w-2xl px-1">
                     Stream your exact live GPS coordinates straight from your device browser to your clients in real time. Zero friction, sub-second latency, and total professional peace of mind.
                 </p>
-                <div class="flex flex-col sm:flex-row items-center gap-3 w-full max-w-md mt-2">
-                    <button id="pwa-install-btn" onclick="window.installPWA ? window.installPWA() : alert('PWA Install ready!')" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs sm:text-sm py-3.5 sm:py-4 px-6 sm:px-8 rounded-2xl transition shadow-[0_0_30px_rgba(251,191,36,0.25)] text-center cursor-pointer flex items-center justify-center gap-2.5 transform hover:-translate-y-0.5">
-                        <span>Add App to Home Screen</span> 📱
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-lg mt-2">
+                    <!-- PWA Install App Button -->
+                    <button id="pwa-install-btn" onclick="window.installPWA()" class="w-full sm:w-auto bg-neutral-800 hover:bg-neutral-700 text-amber-400 border border-amber-400/30 font-bold text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.15)] text-center cursor-pointer flex items-center justify-center gap-2">
+                        <span>Install App</span> 📱
+                    </button>
+                    <!-- Get Started Button -->
+                    <button onclick="window.switchView('register')" class="w-full sm:w-auto bg-amber-400 hover:bg-amber-300 text-black font-black text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition shadow-[0_0_30px_rgba(251,191,36,0.25)] text-center cursor-pointer flex items-center justify-center gap-2">
+                        <span>Get Started Free</span> →
                     </button>
                     <button onclick="window.switchView('signin')" class="w-full sm:w-auto bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition border border-neutral-800 cursor-pointer whitespace-nowrap">
-                        Driver Sign In →
+                        Sign In
                     </button>
                 </div>
                 <span class="text-[10px] sm:text-[11px] text-neutral-500">Works seamlessly on mobile browsers. Customers track instantly via any web link.</span>
@@ -178,7 +186,7 @@
         </div>
 
         <!-- SIGN IN VIEW -->
-        <div id="signin-view" class="w-full max-w-md flex flex-col items-center justify-center p-6 my-auto hidden" style="display: none;">
+        <div id="signin-view" class="app-view w-full max-w-md flex flex-col items-center justify-center p-6 my-auto hidden" style="display: none;">
             <div class="w-full bg-gradient-to-b from-[#161923] to-[#0f1117] border border-neutral-800 rounded-3xl p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex flex-col gap-8 text-left relative overflow-hidden">
                 <div class="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
                 <div class="flex flex-col gap-3">
@@ -208,7 +216,7 @@
         </div>
 
         <!-- REGISTER VIEW -->
-        <div id="register-view" class="w-full max-w-md flex flex-col items-center justify-center p-6 my-auto hidden" style="display: none;">
+        <div id="register-view" class="app-view w-full max-w-md flex flex-col items-center justify-center p-6 my-auto hidden" style="display: none;">
             <div class="w-full bg-[#12141c] border border-neutral-800 rounded-3xl p-8 shadow-2xl flex flex-col gap-6 text-left">
                 <div class="flex flex-col gap-2">
                     <h2 class="text-2xl font-black text-white">Get Started Free</h2>
@@ -234,7 +242,7 @@
         </div>
 
         <!-- JOB SETUP VIEW -->
-        <div id="job-setup-view" class="w-full max-w-xl flex flex-col items-center p-4 sm:p-6 my-auto hidden" style="display: none;">
+        <div id="job-setup-view" class="app-view w-full max-w-xl flex flex-col items-center p-4 sm:p-6 my-auto hidden" style="display: none;">
             <div class="w-full bg-[#12141c] border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col gap-6 text-left">
                 <div class="flex items-center justify-between">
                     <div class="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/20 text-amber-300 font-bold text-xs py-1.5 px-4 rounded-full w-fit">
@@ -290,7 +298,7 @@
         </div>
 
         <!-- ACTIVE BROADCAST VIEW -->
-        <div id="active-broadcast-view" class="w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4 hidden" style="display: none;">
+        <div id="active-broadcast-view" class="app-view w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4 hidden" style="display: none;">
             <div class="w-full max-w-4xl bg-[#12141c] border border-neutral-800 rounded-2xl p-4 flex flex-col items-center gap-2 text-center shadow-lg">
                 <div class="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/20 text-amber-300 font-black text-xs py-1 px-3.5 rounded-full">
                     🚀 DISPATCH ACTIVE
@@ -328,7 +336,7 @@
         </div>
 
         <!-- CUSTOMER TRACKING VIEW -->
-        <div id="customer-view-view" class="w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4 hidden" style="display: none;">
+        <div id="customer-view-view" class="app-view w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4 hidden" style="display: none;">
             <div class="w-full max-w-4xl bg-[#12141c] border border-neutral-800 rounded-2xl p-6 sm:p-8 flex flex-col items-center text-center gap-2 shadow-lg">
                 <h2 class="text-xl sm:text-2xl font-black text-amber-400 tracking-tight">Thank you for being a valued customer!</h2>
                 <span id="cust-driver-header" class="text-3xl sm:text-4xl font-black text-white mt-1">Driver</span>
@@ -387,9 +395,9 @@
         <div class="font-bold text-neutral-400">Developed & Architected by Julius Jones</div>
     </footer>
 
-    <!-- Core App Logic & Tracker Scripts -->
-    <script src="js/app.js?v=6"></script>
-    <script src="js/tracker.js"></script>
+    <!-- Core App Logic & Tracker Scripts (Version-Stamped to bypass cache -> v=12) -->
+    <script src="js/app.js?v=12"></script>
+    <script src="js/tracker.js?v=12"></script>
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             setTimeout(() => {
@@ -436,20 +444,28 @@
 
                         const el = document.createElement('div');
                         el.innerHTML = '<svg width="32" height="32" viewBox="0 0 24 24" fill="#fbbf24"><path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"/></svg>';
-                        const marker = new mapboxgl.Marker(el).setLngLat([-95.2700, 29.9850]).addTo(simMap);
+                        const marker = new mapboxgl.Marker(el).setLngLat(routePath[0]).addTo(simMap);
 
-                        let offset = 0;
-                        setInterval(() => {
-                            offset += 0.0002;
-                            const shifted = routePath.map(pt => [pt[0] - offset, pt[1] - offset]);
-                            simMap.getSource('sim-route').setData({
-                                type: 'Feature',
-                                properties: {},
-                                geometry: { type: 'LineString', coordinates: shifted }
-                            });
-                            marker.setLngLat([-95.2700 - offset, 29.9850 - offset]);
-                            if (offset > 0.004) offset = 0;
-                        }, 50);
+                        let progress = 0;
+                        function animateMarker() {
+                            progress += 0.0012; // Controls buttery glide speed
+                            if (progress > 1) progress = 0;
+
+                            const totalSegments = routePath.length - 1;
+                            const segmentIndex = Math.floor(progress * totalSegments);
+                            const segmentProgress = (progress * totalSegments) - segmentIndex;
+
+                            if (segmentIndex < totalSegments) {
+                                const p1 = routePath[segmentIndex];
+                                const p2 = routePath[segmentIndex + 1];
+                                const currentLng = p1[0] + (p2[0] - p1[0]) * segmentProgress;
+                                const currentLat = p1[1] + (p2[1] - p1[1]) * segmentProgress;
+
+                                marker.setLngLat([currentLng, currentLat]);
+                            }
+                            requestAnimationFrame(animateMarker);
+                        }
+                        requestAnimationFrame(animateMarker);
                     });
                 }
             }, 300);
