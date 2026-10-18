@@ -433,6 +433,22 @@
     <!-- Core App Logic & Tracker Scripts (Version-Stamped to bypass cache -> v=12) -->
     <script src="js/app.js?v=12"></script>
     <script src="js/tracker.js?v=12"></script>
+    
+    <!-- Automatic Map Dimension Fixer for Leaflet Containers -->
+    <script>
+        const originalSwitchView = window.switchView;
+        if (typeof originalSwitchView === 'function') {
+            window.switchView = function(viewId, force) {
+                originalSwitchView(viewId, force);
+                setTimeout(() => {
+                    window.dispatchEvent(new Event('resize'));
+                    if (window.D && window.D.map) { window.D.map.invalidateSize(); }
+                    if (window.C && window.C.map) { window.C.map.invalidateSize(); }
+                }, 200);
+            };
+        }
+    </script>
+
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             setTimeout(() => {
