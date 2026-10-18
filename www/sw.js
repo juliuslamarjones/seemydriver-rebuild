@@ -1,5 +1,5 @@
-const CACHE_NAME = 'seemydriver-v4';
-const ASSETS_TO_CACHE = ['/', '/manifest.json', '/icon-sv-192.png', '/icon-sv-512.png'];
+const CACHE_NAME = 'seemydriver-v5';
+const ASSETS_TO_CACHE = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
