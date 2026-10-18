@@ -621,7 +621,6 @@ function pinIcon() {
 
 function makeMap(box, zoomControl) {
     const map = L.map(box, { zoomControl: zoomControl, zoomAnimation: true });
-    // FIXED: Added crossOrigin and explicit subdomains to prevent graying out in PWA standalone WebAPK containers
     L.tileLayer(TILE_URL, { 
         maxZoom: 19, 
         keepBuffer: 4, 
@@ -758,6 +757,11 @@ window.initDriverActiveMap = function () {
     if (dest) {
         L.marker([dest.lat, dest.lng], { icon: pinIcon() }).addTo(map);
         map.setView([dest.lat, dest.lng], 13, { animate: false });
+        
+        // FIXED: Immediately trigger initial route fetch if GPS fix is already active
+        if (gps.last && isFinite(gps.last.lat)) {
+            me.route.update(gps.last.lat, gps.last.lng, dest.lat, dest.lng, { force: true });
+        }
     }
 
     me.off = subscribe((fix) => {
@@ -792,6 +796,10 @@ window.initDriverActiveMap = function () {
                 if (me.follow) map.panTo([p.lat, p.lng], { animate: false });
                 if (tr) me.route.trim(tr, sNow);
             });
+            // FIXED: Force route pull immediately upon first GPS lock if destination exists
+            if (dest) {
+                me.route.update(lat, lng, dest.lat, dest.lng, { force: true });
+            }
         }
         me.mover.moveTo(lat, lng, heading, trk, sPos, v);
         const sp = $('driver-map-speed');
@@ -938,7 +946,7 @@ window.initCustomerMapLive = function () {
 
         const phoneDigits = data.driverPhone ? String(data.driverPhone).replace(/[^\d+]/g, '') : '';
         if (phoneDigits) {
-            const callBtn = $('cust-call-btn'), msgBtn =$('cust-msg-btn');
+            const callBtn = $('cust-call-btn'), msgBtn = $('cust-msg-btn');
             if (callBtn) callBtn.href = 'tel:' + phoneDigits;
             if (msgBtn) msgBtn.href = 'sms:' + phoneDigits;
         }
