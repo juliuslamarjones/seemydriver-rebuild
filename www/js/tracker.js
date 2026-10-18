@@ -758,10 +758,18 @@ window.initDriverActiveMap = function () {
         L.marker([dest.lat, dest.lng], { icon: pinIcon() }).addTo(map);
         map.setView([dest.lat, dest.lng], 13, { animate: false });
         
-        // FIXED: Immediately trigger initial route fetch if GPS fix is already active
         if (gps.last && isFinite(gps.last.lat)) {
             me.route.update(gps.last.lat, gps.last.lng, dest.lat, dest.lng, { force: true });
         }
+    }
+
+    // FIXED: Immediately request an active high-accuracy hardware position lock on mobile boot
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (p) => ingest(fromWeb(p)),
+            (e) => console.error("Initial mobile GPS lock error:", e),
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
     }
 
     me.off = subscribe((fix) => {
@@ -796,7 +804,6 @@ window.initDriverActiveMap = function () {
                 if (me.follow) map.panTo([p.lat, p.lng], { animate: false });
                 if (tr) me.route.trim(tr, sNow);
             });
-            // FIXED: Force route pull immediately upon first GPS lock if destination exists
             if (dest) {
                 me.route.update(lat, lng, dest.lat, dest.lng, { force: true });
             }
