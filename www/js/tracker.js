@@ -663,7 +663,7 @@ function routeManager(map, color) {
     return {
         async update(lat, lng, dLat, dLng, opts) {
             opts = opts || {};
-            if (opts.acc > 100) return null;
+            if (track && opts.acc > 100) return null; // Block reroutes on junk fixes, but allow the first fetch
             const now = Date.now(), key = dLat + ',' + dLng;
             const need = !track || key !== destKey || offConfirmed || wantReroute || opts.force;
             if (busy || !need) return null;
@@ -776,7 +776,16 @@ window.initDriverActiveMap = function () {
         const moving = fix.speedMph > 2;
         if (dest) {
             const fast = fix.speedMph > 8;
-            me.route.update(lat, lng, dest.lat, dest.lng, { heading: fix.heading, moving: moving, fast: fast, acc: fix.acc });
+            me.route.update(lat, lng, dest.lat, dest.lng, { heading: fix.heading, moving: moving, fast: fast, acc: fix.acc }).then((r) => {
+                if (r && D === me && !me.fitted && me.mover && me.mover.pos()) {
+                    me.fitted = true;
+                    if (!moving) {
+                        const p = me.mover.pos();
+                        map.fitBounds(L.latLngBounds([[p.lat, p.lng], [dest.lat, dest.lng]]), { padding: [60, 60], animate: false });
+                        me.follow = false;
+                    }
+                }
+            });
             const sn = me.route.snap(lat, lng, fix.acc, moving, fix.heading, fast);
             if (sn.snapped) {
                 lat = sn.lat; lng = sn.lng; trk = sn.track; sPos = sn.s;
