@@ -56,6 +56,7 @@ window.switchView = function (viewId) {
 window.handleSignOut = function () {
     localStorage.removeItem('smd_active_broadcast');
     localStorage.removeItem('smd_session_id');
+    localStorage.removeItem('seemydriver_logged_in');
     const isLocalApp = window.location.protocol === 'capacitor:' || window.location.protocol === 'file:' || window.Capacitor?.isNativePlatform();
     if (isLocalApp) {
         window.switchView('signin-view');
@@ -70,6 +71,7 @@ window.handleSignIn = function () {
         alert('Please enter your email address.');
         return;
     }
+    localStorage.setItem('seemydriver_logged_in', 'true');
     window.switchView('job-setup-view');
 };
 
@@ -87,6 +89,7 @@ window.handleRegister = function () {
         auth.createUserWithEmailAndPassword(email, password)
             .then((userCredential) => {
                 console.log('User registered successfully:', userCredential.user.email);
+                localStorage.setItem('seemydriver_logged_in', 'true');
                 window.switchView('job-setup-view');
             })
             .catch((error) => {
@@ -94,6 +97,7 @@ window.handleRegister = function () {
                 alert('Registration failed: ' + error.message);
             });
     } else {
+        localStorage.setItem('seemydriver_logged_in', 'true');
         window.switchView('job-setup-view');
     }
 };
@@ -110,11 +114,20 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Detect if running locally inside the mobile app container or file system
     const isLocalApp = window.location.protocol === 'capacitor:' || window.location.protocol === 'file:' || window.Capacitor?.isNativePlatform();
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    const isLoggedIn = localStorage.getItem('seemydriver_logged_in') === 'true';
     
     if (view === 'customer') {
         window.switchView('customer-view-view');
     } else if (localStorage.getItem('smd_active_broadcast') === 'true' && localStorage.getItem('smd_session_id')) {
         window.switchView('active-broadcast-view');
+    } else if (isLoggedIn || isStandalone) {
+        // If already signed in or launched from the installed PWA shortcut, bypass landing page
+        if (isLoggedIn) {
+            window.switchView('job-setup-view');
+        } else {
+            window.switchView('signin-view');
+        }
     } else {
         localStorage.removeItem('smd_active_broadcast');
         
@@ -122,7 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // MOBILE APP: Boots straight to sign-in / welcome back screen
             window.switchView('signin-view');
         } else {
-            // WEB BROWSERS (Desktop and Mobile Chrome typing seemydriver.com): Always shows the landing page
+            // WEB BROWSERS: Shows the landing page for unauthenticated visitors
             window.switchView('landing-view');
         }
     }
