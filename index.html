@@ -21,8 +21,13 @@
         })();
     </script>
 
-    <!-- PWA Manifest Link (Cache-busted to v=2.2 to force WebAPK icon refresh) -->
-    <link rel="manifest" href="/manifest.json?v=2.2">
+    <!-- PWA Manifest Link -->
+    <link rel="manifest" href="/manifest.json?v=2.3">
+
+    <!-- Explicit Mobile & Apple Touch Icon Overrides to Force Eyeballs Logo -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+    <link rel="apple-touch-icon" href="/icon-192.png">
 
     <!-- Service Worker Registration Script -->
     <script>
