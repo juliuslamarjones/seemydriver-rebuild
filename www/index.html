@@ -105,8 +105,8 @@
         window.db = db;
     </script>
 
-    <!-- Custom Styling -->
-    <link rel="stylesheet" href="css/style.css">
+    <!-- Custom Styling (Fixed Path) -->
+    <link rel="stylesheet" href="style.css">
     <style>
         .mapboxgl-popup-content { background: #12141c !important; color: #fff !important; border-radius: 12px; border: 1px solid #262626; }
         .pro-vehicle-marker { background: transparent !important; border: none !important; }
@@ -430,7 +430,7 @@
         <div class="font-bold text-neutral-400">Developed & Architected by Julius Jones</div>
     </footer>
 
-    <!-- Core App Logic & Tracker Scripts (Version-Stamped to bypass cache -> v=12) -->
+    <!-- Core App Logic & Tracker Scripts -->
     <script src="js/app.js?v=12"></script>
     <script src="js/tracker.js?v=12"></script>
     
@@ -499,7 +499,7 @@
 
                         let progress = 0;
                         function animateMarker() {
-                            progress += 0.0012; // Controls buttery glide speed
+                            progress += 0.0012;
                             if (progress > 1) progress = 0;
 
                             const totalSegments = routePath.length - 1;
