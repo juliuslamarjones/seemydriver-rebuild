@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Live Roadside Tracking - SeeMyDriver</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body class="bg-black text-white min-h-screen flex flex-col justify-between overflow-x-hidden selection:bg-yellow-400 selection:text-black">
+
+    <header class="w-full max-w-md mx-auto px-4 py-3 flex items-center justify-between border-b border-neutral-900">
+        <div class="flex items-center gap-2">
+            <span class="text-[20px] font-black tracking-tight text-white">See<span class="text-yellow-400">My</span>Driver</span>
+        </div>
+        <span id="connection-badge" class="inline-flex items-center gap-1.5 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-xl text-xs font-bold text-neutral-400">
+            <span class="w-2 h-2 rounded-full bg-neutral-600"></span> Tap to Connect
+        </span>
+    </header>
+
+    <main class="w-full max-w-md mx-auto px-4 py-6 flex-1 flex flex-col gap-4">
+        
+        <!-- Status / Action Card -->
+        <div class="w-full bg-neutral-950 border border-neutral-900 p-5 rounded-3xl flex flex-col gap-4 shadow-xl">
+            <div class="flex justify-between items-center border-b border-neutral-900 pb-3">
+                <div>
+                    <span class="text-[10px] font-bold text-yellow-400 uppercase tracking-wider" id="driver-header-label">Roadside Assistance</span>
+                    <h1 class="text-lg font-black text-white">Driver Is En Route</h1>
+                </div>
+                <span class="text-2xl">🚗</span>
+            </div>
+
+            <button id="start-share-btn" onclick="toggleClientSharing()" class="w-full bg-yellow-400 hover:bg-yellow-300 text-black font-black text-xs py-3.5 rounded-xl transition cursor-pointer shadow-lg shadow-yellow-400/25">
+                Start Live Sharing & View Driver 🚀
+            </button>
+
+            <div class="flex flex-col gap-1 text-xs text-neutral-400">
+                <div class="flex justify-between">
+                    <span>Your GPS Status:</span>
+                    <span id="gps-status-text" class="text-neutral-500 font-mono">Waiting for permission...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Map Feed Card for Client -->
+        <div class="w-full bg-neutral-950 border border-neutral-900 p-4 rounded-3xl flex flex-col gap-3 shadow-xl">
+            <div class="flex items-center justify-between text-xs font-bold text-neutral-300 px-2">
+                <span>Live Map (Driver & You)</span>
+                <span id="map-status" class="text-neutral-500 font-mono text-[11px]">Map Standby</span>
+            </div>
+            <div id="client-map" class="w-full h-80 bg-neutral-900 rounded-2xl relative overflow-hidden border border-neutral-800 z-0"></div>
+        </div>
+
+    </main>
+
+    <footer class="w-full max-w-md mx-auto px-4 py-3 text-center text-[10px] text-neutral-600 border-t border-neutral-900">
+        &copy; 2026 SeeMyDriver. Powered by Quick Tap Solutions.
+    </footer>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI",
+            authDomain: "seemydriver-prod.firebaseapp.com",
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",
+            projectId: "seemydriver-prod",
+            storageBucket: "seemydriver-prod.firebasestorage.app",
+            messagingSenderId: "163660133229",
+            appId: "1:163660133229:web:7e993e6ee37f940a04a064"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const rawCompanyId = urlParams.get('company') || 'MY25DOLLARMAJIC';
+        const companyId = rawCompanyId.replace(/[.#$\/\[\]]/g, '_');
+        const jobId = urlParams.get('job') || 'job_default';
+        const driverName = urlParams.get('driver') || 'Driver';
+        const sanitizedDriverId = driverName.replace(/[.#$\/\[\]]/g, '_');
+
+        document.getElementById('driver-header-label').textContent = `${driverName} is coming to you`;
+
+        let map, clientMarker, driverMarker, routeLine;
+        let watchId = null;
+        let mapInitialized = false;
+        let isSharing = false;
+
+        function initClientMap(lat, lng) {
+            if (mapInitialized) return;
+            mapInitialized = true;
+
+            map = L.map('client-map').setView([lat, lng], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            clientMarker = L.marker([lat, lng], {
+                icon: L.divIcon({className: 'custom-client-pin', html: '📍', iconSize: [24, 24]})
+            }).addTo(map).bindPopup('Your Location').openPopup();
+
+            driverMarker = L.marker([lat + 0.005, lng + 0.005]).addTo(map).bindPopup(`${driverName} (Driver)`);
+
+            routeLine = L.polyline([
+                [lat, lng],
+                [lat + 0.005, lng + 0.005]
+            ], {
+                color: '#3b82f6',
+                weight: 5,
+                opacity: 0.8,
+                dashArray: '6, 6'
+            }).addTo(map);
+
+            setTimeout(() => { if (map) map.invalidateSize(); }, 300);
+            listenToDriverFeed();
+        }
+
+        function updateRoute() {
+            if (routeLine && clientMarker && driverMarker) {
+                const cLatLng = clientMarker.getLatLng();
+                const dLatLng = driverMarker.getLatLng();
+                routeLine.setLatLngs([
+                    [cLatLng.lat, cLatLng.lng],
+                    [dLatLng.lat, dLatLng.lng]
+                ]);
+            }
+        }
+
+        function toggleClientSharing() {
+            const btn = document.getElementById('start-share-btn');
+            const badge = document.getElementById('connection-badge');
+            const gpsStatus = document.getElementById('gps-status-text');
+
+            if (!isSharing) {
+                if (!navigator.geolocation) {
+                    alert("Geolocation is not supported by your browser.");
+                    return;
+                }
+
+                btn.textContent = 'Requesting Permission... ⏳';
+                gpsStatus.textContent = 'Waiting for permission popup...';
+
+                watchId = navigator.geolocation.watchPosition(position => {
+                    if (!isSharing) return;
+
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+
+                    btn.textContent = 'Stop Live Sharing ⏹';
+                    btn.className = 'w-full bg-red-600 hover:bg-red-500 text-white font-black text-xs py-3.5 rounded-xl transition cursor-pointer shadow-lg shadow-red-600/25';
+                    
+                    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span> Connected';
+                    badge.className = 'inline-flex items-center gap-1.5 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-xl text-xs font-bold text-yellow-400';
+                    gpsStatus.textContent = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+                    document.getElementById('map-status').textContent = 'Live Feed Active';
+
+                    if (!mapInitialized) {
+                        initClientMap(lat, lng);
+                    } else {
+                        clientMarker.setLatLng([lat, lng]);
+                        updateRoute();
+                    }
+
+                    db.ref(`companies/${companyId}/customer_locations/${jobId}`).set({
+                        lat: lat,
+                        lng: lng,
+                        updatedAt: Date.now()
+                    });
+
+                }, error => {
+                    console.error(error);
+                    isSharing = false;
+                    btn.textContent = 'Start Live Sharing & View Driver 🚀';
+                    btn.className = 'w-full bg-yellow-400 hover:bg-yellow-300 text-black font-black text-xs py-3.5 rounded-xl transition cursor-pointer shadow-lg shadow-yellow-400/25';
+                    gpsStatus.textContent = 'Permission denied or error.';
+                    alert("GPS Error: " + error.message);
+                }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+
+                isSharing = true;
+
+            } else {
+                if (watchId !== null) {
+                    navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                }
+                isSharing = false;
+
+                btn.textContent = 'Start Live Sharing & View Driver 🚀';
+                btn.className = 'w-full bg-yellow-400 hover:bg-yellow-300 text-black font-black text-xs py-3.5 rounded-xl transition cursor-pointer shadow-lg shadow-yellow-400/25';
+                badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-neutral-600"></span> Tap to Connect';
+                badge.className = 'inline-flex items-center gap-1.5 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-xl text-xs font-bold text-neutral-400';
+                gpsStatus.textContent = 'Sharing stopped.';
+                document.getElementById('map-status').textContent = 'Paused';
+            }
+        }
+
+        function listenToDriverFeed() {
+            const driverRef = db.ref(`companies/${companyId}/trips/${sanitizedDriverId}`);
+            driverRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data && data.lat && data.lng) {
+                    const dLat = data.lat;
+                    const dLng = data.lng;
+
+                    if (driverMarker && map) {
+                        driverMarker.setLatLng([dLat, dLng]);
+                        updateRoute();
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
