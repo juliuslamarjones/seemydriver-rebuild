@@ -1,3 +1,4 @@
+
 // ==========================================================
 // SEEMYDRIVER - GPS ENGINE + MAPS & TELEMETRY (PRODUCTION MASTER)
 // v9: continuous-motion truck (no snaps), Mapbox search, live ETA countdown, hold-on-route, confirmed rerouting
@@ -27,7 +28,6 @@ function formatEta(seconds) {
 }
 
 // The truck artwork has its FRONT (cab + headlights) at the TOP, which matches heading 0 = north.
-// If you ever swap the artwork and it faces another way, set this: 90 = art faces right, 180 = down, 270 = left.
 const TRUCK_ICON_OFFSET_DEG = 0;
 
 // ---------- Broadcast Launch Handler ----------
@@ -111,7 +111,6 @@ window.handleAddressInput = async function(value) {
 
     geocodeTimer = setTimeout(async () => {
         try {
-            // Mapbox forward geocoding: exact house numbers; results biased toward where the driver is
             const prox = (gps.last && isFinite(gps.last.lat)) ? '&proximity=' + gps.last.lng + ',' + gps.last.lat : '';
             const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&autocomplete=true&types=address,poi&limit=5${prox}`);
             const data = await res.json();
@@ -125,7 +124,7 @@ window.handleAddressInput = async function(value) {
 
             data.features.forEach(f => {
                 const name = f.place_name || f.text || '';
-                const coords = f.center || (f.geometry && f.geometry.coordinates) || [0, 0];   // [lng, lat]
+                const coords = f.center || (f.geometry && f.geometry.coordinates) || [0, 0];
 
                 const div = document.createElement('div');
                 div.className = "px-4 py-3 text-xs text-neutral-200 hover:bg-neutral-800 hover:text-amber-400 cursor-pointer border-b border-neutral-800/80 transition font-medium";
@@ -208,25 +207,20 @@ const STALE_PREV_MS = 30000;
 const FRESH_MS = 10000;          
 const isFresh = (fix, ms) => !!fix && (Date.now() - fix.t) < (ms || FRESH_MS);
 
-// Dead-zone glide: when good GPS stops coming in, the truck keeps rolling along the route
-const COAST_AFTER_MS = 3000;   // no good fix for this long => start gliding
-const COAST_MAX_S    = 60;     // glide eases down to a stop over this many seconds
-const COAST_FACTOR   = 0.85;   // glide starts at 85% of the recent speed
-const COAST_MIN_MPS  = 1.5;    // if we were basically stopped, don't glide
+const COAST_AFTER_MS = 3000;   
+const COAST_MAX_S    = 60;     
+const COAST_FACTOR   = 0.85;   
+const COAST_MIN_MPS  = 1.5;    
 
-// Truck motion model: the truck ALWAYS keeps moving at its current speed and is only
-// nudged toward each real GPS fix, so it never freezes and never teleports.
-const FOLLOW_TAU  = 1.4;       // seconds to close the gap to the real position
-const CATCHUP_MAX = 30;        // m/s: fastest the truck may slide to catch up after a dead zone
-const LATERAL_TAU = 1.0;       // seconds for a sideways gap to fade onto the polyline
+const FOLLOW_TAU  = 1.4;       
+const CATCHUP_MAX = 30;        
+const LATERAL_TAU = 1.0;       
 
 function ingest(r) {
     gps.lastAlive = Date.now();
     if (!isFinite(r.lat) || !isFinite(r.lng)) return;
     const acc = isFinite(r.acc) ? r.acc : 999;
 
-    // Junk-fix filter: a fix with +/-100 m or worse is the phone guessing from cell/Wi-Fi.
-    // Ignore it while we have a recent usable fix. With no fix at all, wait for +/-300 m or better.
     if (acc > 100) {
         const haveRecent = gps.last && (Date.now() - gps.last.t) < 120000;
         if (haveRecent) {
@@ -250,7 +244,7 @@ function ingest(r) {
     }
 
     let v = (isFinite(r.speed) && r.speed >= 0) ? r.speed : (prev ? d / dt : 0);
-    gps.speedMps = prev ? gps.speedMps * 0.3 + v * 0.7 : v; // Faster response on speed changes
+    gps.speedMps = prev ? gps.speedMps * 0.3 + v * 0.7 : v;
     if (gps.speedMps < 0.5) gps.speedMps = 0;
 
     let lat = r.lat, lng = r.lng;
@@ -426,11 +420,6 @@ window.teardownDriverMap = function() {
     resetGpsState();
 };
 
-// ----------------------------------------------------------
-// TRUCK ICON  (FIX: removed the extra translate(-50%,-50%) that pushed the
-// truck ~25px up-left of its real position, and removed the CSS transition
-// that fought the per-frame rotation and spun the truck the long way round)
-// ----------------------------------------------------------
 function getTruckIcon(bearing = 0) {
     return L.divIcon({
         className: 'custom-truck-svg-marker',
@@ -468,10 +457,6 @@ function getDriverLabelIcon(name = 'Driver') {
     });
 }
 
-// ----------------------------------------------------------
-// ROUTE TRACK MATH  (the truck lives on this line, not on raw GPS)
-// A track = { pts:[[lat,lng]...], cum:[meters from start], total, dur, dist }
-// ----------------------------------------------------------
 function buildTrack(pts, dur, dist) {
     const cum = [0];
     for (let i = 1; i < pts.length; i++) {
@@ -480,7 +465,6 @@ function buildTrack(pts, dur, dist) {
     return { pts: pts, cum: cum, total: cum[cum.length - 1], dur: dur, dist: dist };
 }
 
-// Point at s meters along the track (+ index of the segment it sits on)
 function trackPoint(tr, s) {
     const pts = tr.pts, cum = tr.cum, n = pts.length;
     if (s <= 0) return { lat: pts[0][0], lng: pts[0][1], i: 0 };
@@ -495,15 +479,12 @@ function trackPoint(tr, s) {
     };
 }
 
-// Road direction at s, measured a little behind->ahead so corners turn smoothly
 function trackBearing(tr, s) {
     const a = trackPoint(tr, Math.max(0, s - 6)), b = trackPoint(tr, Math.min(tr.total, s + 24));
     if (distM(a.lat, a.lng, b.lat, b.lng) < 1) return null;
     return bearingDeg(a.lat, a.lng, b.lat, b.lng);
 }
 
-// Closest point on the track to (lat,lng). If fromS is given, only search
-// from 60 m behind it to `ahead` m in front (stops jumping to a parallel road).
 function trackProject(tr, lat, lng, fromS, ahead) {
     const pts = tr.pts, cum = tr.cum, n = pts.length;
     let i0 = 0;
@@ -517,7 +498,6 @@ function trackProject(tr, lat, lng, fromS, ahead) {
     let best = null;
     for (let i = i0; i <= n - 2; i++) {
         if (fromS !== null && cum[i] > fromS + ahead) break;
-        // local flat-earth meters, with longitude scaled by cos(lat)
         const ax = (pts[i][1] - lng) * cosL * K, ay = (pts[i][0] - lat) * K;
         const bx = (pts[i + 1][1] - lng) * cosL * K, by = (pts[i + 1][0] - lat) * K;
         const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
@@ -529,11 +509,6 @@ function trackProject(tr, lat, lng, fromS, ahead) {
     return best;
 }
 
-// ----------------------------------------------------------
-// MOVER  (animates ALONG the route line, not in straight chords between fixes)
-// ----------------------------------------------------------
-// Distance covered during `since` seconds of silence (no new fix): full speed for COAST_AFTER_MS,
-// then 85% easing down to a stop over COAST_MAX_S.
 function coastDist(v, since) {
     const t0 = COAST_AFTER_MS / 1000;
     if (since <= t0) return v * since;
@@ -543,9 +518,7 @@ function coastDist(v, since) {
 
 function makeMover(marker, label, onFrame) {
     let cur = null, curH = 0, raf = 0, lastTick = 0, mode = 'll', tr = null;
-    // on-route: S = displayed distance along the route, V = speed estimate (m/s)
     let S = 0, V = 0, sMeas = 0, tMeas = 0, prevS = null, prevT = 0, offLat = 0, offLng = 0;
-    // free (no route / confirmed off-route)
     let mLat = 0, mLng = 0, mvE = 0, mvN = 0, hMeas = 0;
 
     function paint() {
@@ -568,7 +541,6 @@ function makeMover(marker, label, onFrame) {
         return COAST_FACTOR * (1 - x * x);
     }
 
-    // one animation step; returns true while the truck is still moving
     function tick() {
         const nowT = performance.now();
         const dt = lastTick ? Math.min(0.1, (nowT - lastTick) / 1000) : 0.016;
@@ -577,13 +549,13 @@ function makeMover(marker, label, onFrame) {
         let busy = false;
         if (mode === 's') {
             const Vu = V * sf;
-            const target = sMeas + coastDist(V, since);       // where the truck should be right now
+            const target = sMeas + coastDist(V, since);
             const e = target - S;
-            let r = e / FOLLOW_TAU;                           // ease toward it...
-            r = Math.max(e < -25 ? -20 : -Vu, Math.min(CATCHUP_MAX, r));   // ...never reversing (except to undo a big overshoot)
+            let r = e / FOLLOW_TAU;
+            r = Math.max(e < -25 ? -20 : -Vu, Math.min(CATCHUP_MAX, r));
             S = Math.min(tr.total, Math.max(0, S + (Vu + r) * dt));
             const p = trackPoint(tr, S), kd = Math.exp(-dt / LATERAL_TAU);
-            offLat *= kd; offLng *= kd;                       // sideways gap fades onto the line
+            offLat *= kd; offLng *= kd;
             cur = { lat: p.lat + offLat, lng: p.lng + offLng };
             steer(trackBearing(tr, S), dt);
             busy = ((Vu + Math.abs(r) > 0.05) && S < tr.total) || (Math.abs(offLat) + Math.abs(offLng) > 2e-7);
@@ -606,7 +578,6 @@ function makeMover(marker, label, onFrame) {
     function loop() { raf = 0; if (tick()) raf = requestAnimationFrame(loop); }
 
     return {
-        // track + s are optional: pass them when the fix is snapped to the route. speedMps = current speed.
         moveTo(lat, lng, h, track, s, speedMps) {
             const now = performance.now();
             const v = (isFinite(speedMps) && speedMps >= 0) ? speedMps : 0;
@@ -614,8 +585,6 @@ function makeMover(marker, label, onFrame) {
 
             if (track && s !== null && s !== undefined) {
                 if (tr !== track || mode !== 's') {
-                    // new route, or rejoining the route: latch on from where the truck is now.
-                    // The sideways gap then fades away smoothly (the slide up onto the line).
                     const pr = trackProject(track, cur.lat, cur.lng, Math.max(0, s - 200), 400);
                     S = pr ? pr.s : s;
                     const p0 = trackPoint(track, S);
@@ -623,7 +592,6 @@ function makeMover(marker, label, onFrame) {
                     prevS = null; V = v;
                 }
                 tr = track; mode = 's';
-                // speed: trust GPS speed, but if it says ~0 while we clearly progressed along the route, trust the progress
                 let vp = 0;
                 if (prevS === null) { prevS = s; prevT = now; }
                 else if (now - prevT > 400) { vp = Math.max(0, (s - prevS) / ((now - prevT) / 1000)); prevS = s; prevT = now; }
@@ -638,7 +606,6 @@ function makeMover(marker, label, onFrame) {
             }
             if (!raf) { lastTick = 0; if (tick()) raf = requestAnimationFrame(loop); }
         },
-        // True while the truck is rolling on its own because GPS went quiet (dead zone).
         coast() {
             const silent = (performance.now() - tMeas) / 1000;
             return mode === 's' && silent > COAST_AFTER_MS / 1000 && V * silentFactor(performance.now()) > COAST_MIN_MPS * 0.5;
@@ -655,27 +622,24 @@ function pinIcon() {
 
 function makeMap(box, zoomControl) {
     const map = L.map(box, { zoomControl: zoomControl, zoomAnimation: true });
+    // FIXED: Added crossOrigin and explicit subdomains to prevent graying out in PWA standalone WebAPK containers
     L.tileLayer(TILE_URL, { 
         maxZoom: 19, 
         keepBuffer: 4, 
         updateWhenIdle: false, 
+        crossOrigin: true,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' 
     }).addTo(map);
     [0, 250, 700].forEach((ms) => setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, ms));
     return map;
 }
 
-// ----------------------------------------------------------
-// ROUTE MANAGER  (fetch, dynamic reroute, snap, trim)
-// ----------------------------------------------------------
 function routeManager(map, color) {
     let line = null, track = null, lastFetch = 0, busy = false;
     let offCount = 0, offAny = 0, offSince = 0, offConfirmed = false;
     let wrongCount = 0, wantReroute = false, strictFails = 0;
     let prog = null, destKey = '', lastTrim = 0, lastTrimS = -1e9, lastSnapT = 0;
 
-    // strict = we're moving fast with a trustworthy heading: only accept a route that
-    // starts out going the way the truck is facing (no U-turn routes from the wrong carriageway)
     async function fetchRoute(lat, lng, dLat, dLng, heading, strict) {
         const base = 'https://router.project-osrm.org/route/v1/driving/' + lng + ',' + lat + ';' + dLng + ',' + dLat + '?overview=full&geometries=geojson';
         const useB = isFinite(heading);
@@ -699,12 +663,10 @@ function routeManager(map, color) {
     }
 
     return {
-        // opts: { force, heading, moving, fast, acc }
         async update(lat, lng, dLat, dLng, opts) {
             opts = opts || {};
-            if (opts.acc > 100) return null;                 // never (re)route from a junk fix
+            if (opts.acc > 100) return null;
             const now = Date.now(), key = dLat + ',' + dLng;
-            // No timed refresh: re-fetching from a noisy raw position is what made the line flip and U-turn.
             const need = !track || key !== destKey || offConfirmed || wantReroute || opts.force;
             if (busy || !need) return null;
             if (now - lastFetch < ((offConfirmed || wantReroute) ? 2000 : 3000)) return null;
@@ -724,16 +686,10 @@ function routeManager(map, color) {
             return null;
         },
 
-        // Lock a GPS fix onto the route. Progress only moves forward, so the truck
-        // can't hop to a parallel street or jitter backwards.
-        // Returns { snapped:true,... }  - fix is on the route, use the snapped point
-        //         { hold:true }         - fix disagrees but we are NOT sure we left the route: keep the truck on the line
-        //         { off:true }          - we have really left the route: show the true position, reroute is under way
         snap(lat, lng, acc, moving, heading, fast) {
             if (!track) return { snapped: false };
             const now = Date.now(), a = isFinite(acc) ? acc : 0;
             const limit = Math.min(150, Math.max(40, a * 2));
-            // after a gap (dead zone) the truck may be well ahead of where we last saw it
             const gapS = lastSnapT ? Math.min(120, (now - lastSnapT) / 1000) : 0;
             const r = prog === null ? trackProject(track, lat, lng, 0, 600)
                                     : trackProject(track, lat, lng, prog, 300 + gapS * 35);
@@ -742,7 +698,6 @@ function routeManager(map, color) {
                 prog = prog === null ? r.s : Math.max(prog, r.s);
                 const p = trackPoint(track, prog);
                 const bearing = trackBearing(track, prog);
-                // facing the opposite way from the route for 3 fixes in a row => get a fresh route
                 if (fast && bearing !== null && isFinite(heading) && Math.abs(angDelta(heading, bearing)) > 120) {
                     if (++wrongCount >= 3) { wantReroute = true; wrongCount = 0; }
                 } else wrongCount = 0;
@@ -752,8 +707,6 @@ function routeManager(map, color) {
                     etaSec: track.total > 0 ? track.dur * (track.total - prog) / track.total : 0
                 };
             }
-            // Not on the route. One or two bad fixes (overpass, tall buildings) must NOT pull the truck
-            // off the line or trigger a reroute. Only confirmed, consistent evidence does.
             if (!offSince) offSince = now;
             offAny++;
             if (a <= 60) offCount++;
@@ -762,11 +715,10 @@ function routeManager(map, color) {
             return { snapped: false, off: offConfirmed, hold: !offConfirmed };
         },
 
-        // Erase the part of the line the truck already drove (Google-style)
         trim(tr, s) {
             if (!line || tr !== track) return;
             const now = performance.now();
-            if (now - lastTrim < 800 || Math.abs(s - lastTrimS) < 10) return;   // redrawing a long line is expensive: do it rarely
+            if (now - lastTrim < 800 || Math.abs(s - lastTrimS) < 10) return;
             lastTrim = now; lastTrimS = s;
             const p = trackPoint(tr, s);
             try { line.setLatLngs([[p.lat, p.lng]].concat(tr.pts.slice(p.i + 1))); } catch (e) {}
@@ -824,12 +776,12 @@ window.initDriverActiveMap = function () {
                 lat = sn.lat; lng = sn.lng; trk = sn.track; sPos = sn.s;
                 if (sn.bearing !== null) heading = sn.bearing;
             } else if (sn.hold && me.viewSet) {
-                return;   // GPS drifted but we have not left the route: stay on the line (the glide keeps it moving)
+                return;
             }
         }
         me.lastFixAt = Date.now();
         const v = fix.speedMph / MPS_TO_MPH;
-        me.lastSpeedMps = me.hasSpeed ? me.lastSpeedMps * 0.5 + v * 0.5 : v;   // smoothed, so one odd reading can't wreck the glide
+        me.lastSpeedMps = me.hasSpeed ? me.lastSpeedMps * 0.5 + v * 0.5 : v;
         me.hasSpeed = true;
 
         if (!me.viewSet) {
@@ -847,7 +799,6 @@ window.initDriverActiveMap = function () {
         if (sp) sp.textContent = fix.speedMph + ' mph';
     });
 
-    // Dead zone? We know exactly when good fixes stop, so keep the truck rolling along the route.
     me.coastTimer = setInterval(() => {
         if (D !== me || !me.mover) return;
         if (Date.now() - me.lastFixAt > COAST_AFTER_MS && me.mover.coast(me.lastSpeedMps)) setStatus('GPS: no signal \u2014 gliding on route', false);
@@ -935,7 +886,7 @@ window.initCustomerMapLive = function () {
 
     const q = new URLSearchParams(window.location.search);
     const sid = q.get('session') || q.get('s');
-    const head = $('cust-driver-header'), sub = $('cust-eta-sub'), pill =$('cust-status-pill'), distEl = $('cust-distance'), speedEl =$('cust-speed');
+    const head = $('cust-driver-header'), sub = $('cust-eta-sub'), pill = $('cust-status-pill'), distEl = $('cust-distance'), speedEl = $('cust-speed');
     if (!sid) { if (head) head.textContent = 'Invalid tracking link'; return; }
 
     const database = getDb();
@@ -966,7 +917,6 @@ window.initCustomerMapLive = function () {
             return;
         }
 
-        // gap between this driver update and the previous one = how long the truck should take to glide there
         const fresh = data.timestamp !== me.lastTs;
         const tsGap = (fresh && me.lastTs) ? (data.timestamp - me.lastTs) : 0;
         if (fresh) { me.lastTs = data.timestamp; me.lastChange = Date.now(); }
@@ -1034,12 +984,11 @@ window.initCustomerMapLive = function () {
             if (sn.snapped) {
                 lat = sn.lat; lng = sn.lng; trk = sn.track; sPos = sn.s;
                 if (sn.bearing !== null) heading = sn.bearing;
-                // live ETA / distance that counts down smoothly between route refreshes
                 me.roadMi = sn.remaining / 1609.34;
                 if (sub) sub.textContent = formatEta(sn.etaSec);
                 if (distEl) distEl.textContent = me.roadMi.toFixed(1) + ' mi';
             } else if (sn.hold && me.truck) {
-                hold = true;   // not sure the driver left the route: keep the truck on the line
+                hold = true;
             }
         }
 
@@ -1068,7 +1017,6 @@ window.initCustomerMapLive = function () {
         if (Date.now() - me.lastChange > 20000) setPill('\u25CF Signal lost \u2014 reconnecting', false);
     }, 3000);
 
-    // Driver went quiet (dead zone)? Glide the truck along the route instead of freezing it.
     me.coastTimer = setInterval(() => {
         if (C !== me || me.ended || me.waiting || !me.mover) return;
         if (Date.now() - (me.lastMove || me.lastChange) > COAST_AFTER_MS + 2000 && me.speed > 3) me.mover.coast(me.speed / MPS_TO_MPH);
