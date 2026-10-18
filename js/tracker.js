@@ -719,7 +719,7 @@ function routeManager(map, color) {
             if (now - lastTrim < 800 || Math.abs(s - lastTrimS) < 10) return;
             lastTrim = now; lastTrimS = s;
             const p = trackPoint(tr, s);
-            try { line.setLatLngs([[p.lat, p.lng]].concat(tr.pts.slice(p.i + 1))); } catch (e) {}
+            try { line.setLatLngs([[p.lat, p.lng']].concat(tr.pts.slice(p.i + 1))); } catch (e) {}
         },
         getTrack: () => track
     };
@@ -757,10 +757,6 @@ window.initDriverActiveMap = function () {
     if (dest) {
         L.marker([dest.lat, dest.lng], { icon: pinIcon() }).addTo(map);
         map.setView([dest.lat, dest.lng], 13, { animate: false });
-        
-        if (gps.last && isFinite(gps.last.lat)) {
-            me.route.update(gps.last.lat, gps.last.lng, dest.lat, dest.lng, { force: true });
-        }
     }
 
     // FIXED: Immediately request an active high-accuracy hardware position lock on mobile boot
@@ -804,9 +800,6 @@ window.initDriverActiveMap = function () {
                 if (me.follow) map.panTo([p.lat, p.lng], { animate: false });
                 if (tr) me.route.trim(tr, sNow);
             });
-            if (dest) {
-                me.route.update(lat, lng, dest.lat, dest.lng, { force: true });
-            }
         }
         me.mover.moveTo(lat, lng, heading, trk, sPos, v);
         const sp = $('driver-map-speed');
@@ -1041,7 +1034,7 @@ window.recenterCustomerMap = function () {
     if (!C || !C.mover || !C.mover.pos()) return;
     C.follow = true; C.fitted = true;
     const p = C.mover.pos();
-    C.map.setView([p.lat, p.lng], Math.max(C.map.getZoom(), 16), { animate: false });
+    C.map.setView([p.lat, p.lng], Math.max(D.map.getZoom(), 16), { animate: false });
 };
 window.fitCustomerMap = function () {
     if (!C || !C.mover || !C.mover.pos() || !C.destMarker) return window.recenterCustomerMap();
