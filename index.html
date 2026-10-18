@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SeeMyDriver - Real-Time GPS Telemetry</title>
     
+    <!-- PWA Standalone Direct Boot Interceptor -->
+    <script>
+        (function() {
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+            const isLoggedIn = localStorage.getItem('seemydriver_logged_in') === 'true';
+            if (isStandalone || isLoggedIn) {
+                document.documentElement.style.background = '#000';
+                window.addEventListener('DOMContentLoaded', () => {
+                    if (typeof window.switchView === 'function') {
+                        window.switchView(isLoggedIn ? 'job-setup-view' : 'signin-view');
+                    }
+                });
+            }
+        })();
+    </script>
+
     <!-- PWA Manifest Link (Cache-busted) -->
     <link rel="manifest" href="/manifest.json?v=2.1">
 
