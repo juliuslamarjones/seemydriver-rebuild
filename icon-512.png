@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Solid Background Fill to Prevent Any White Bleed -->
+  <rect width="512" height="512" fill="#fbbf24"/>
+  
+  <!-- Rounded App Icon Card Shape -->
+  <rect width="512" height="512" rx="112" fill="#fbbf24"/>
+  
+  <!-- Left Eye (Bigger & Taller) -->
+  <ellipse cx="178" cy="256" rx="76" ry="120" fill="#ffffff"/>
+  <!-- Left Pupil (Scaled Up) -->
+  <ellipse cx="188" cy="260" rx="46" ry="60" fill="#1a120b"/>
+  <!-- Left Eye Highlight -->
+  <circle cx="170" cy="225" r="14" fill="#ffffff"/>
+
+  <!-- Right Eye (Bigger & Taller) -->
+  <ellipse cx="334" cy="256" rx="76" ry="120" fill="#ffffff"/>
+  <!-- Right Pupil (Scaled Up) -->
+  <ellipse cx="344" cy="260" rx="46" ry="60" fill="#1a120b"/>
+  <!-- Right Eye Highlight -->
+  <circle cx="326" cy="225" r="14" fill="#ffffff"/>
+</svg>
