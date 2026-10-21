@@ -907,7 +907,7 @@ window.initCustomerMapLive = function () {
     teardownCustomer();
 
     const q = new URLSearchParams(window.location.search);
-    const sid = q.get('session') || q.get('s');
+    const sid = q.get('session') || q.get('sid') || q.get('s');
     const head = $('cust-driver-header'), sub = $('cust-eta-sub'), pill = $('cust-status-pill'), distEl = $('cust-distance'), speedEl = $('cust-speed');
     if (!sid) { if (head) head.textContent = 'Invalid tracking link'; return; }
 
@@ -1065,7 +1065,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const q = new URLSearchParams(window.location.search);
     
     // Customer tracking links never resume a driver broadcast
-    if (q.has('session') || q.has('s') || q.get('view') === 'customer') return;
+    if (q.has('session') || q.has('sid') || q.has('s') || q.get('view') === 'customer') return;
     if (!broadcasting()) return;
     
     const storedSessionId = sessionId();
