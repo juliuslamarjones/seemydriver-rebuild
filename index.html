@@ -5,24 +5,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SeeMyDriver - Real-Time GPS Telemetry</title>
     
-    <!-- PWA Standalone Direct Boot Interceptor -->
+    <!-- PWA Standalone Direct Boot Interceptor (Forced White Splash Screen & Clean Default Landing) -->
     <script>
         (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const viewParam = urlParams.get('view');
+            
+            if (viewParam === 'customer' || viewParam === 'landing' || viewParam === 'signin' || viewParam === 'register') {
+                document.documentElement.style.background = viewParam === 'landing' ? '#FFFFFF' : '#12141c';
+                window.addEventListener('DOMContentLoaded', () => {
+                    if (typeof window.switchView === 'function') { window.switchView(viewParam); }
+                });
+                return;
+            }
+
             const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
             const isLoggedIn = localStorage.getItem('seemydriver_logged_in') === 'true';
-            if (isStandalone || isLoggedIn) {
+            const hasActiveBroadcast = localStorage.getItem('smd_active_broadcast') === 'true';
+
+            if (hasActiveBroadcast) {
                 document.documentElement.style.background = '#000';
-                window.addEventListener('DOMContentLoaded', () => {
-                    if (typeof window.switchView === 'function') {
-                        window.switchView(isLoggedIn ? 'job-setup-view' : 'signin-view');
-                    }
+                window.addEventListener('DOMContentLoaded', () => { if (typeof window.switchView === 'function') window.switchView('active-broadcast'); });
+            } else if (isStandalone) {
+                // Home screen app icon ALWAYS boots to Welcome Back / Sign In with white splash transition
+                document.documentElement.style.background = '#FFFFFF';
+                window.addEventListener('DOMContentLoaded', () => { 
+                    if (typeof window.switchView === 'function') window.switchView('signin-view'); 
+                });
+            } else {
+                // Regular browser tabs go to the Landing page
+                document.documentElement.style.background = '#FFFFFF';
+                window.addEventListener('DOMContentLoaded', () => { 
+                    if (typeof window.switchView === 'function') window.switchView('landing'); 
                 });
             }
         })();
     </script>
 
     <!-- PWA Manifest Link -->
-    <link rel="manifest" href="/manifest.json?v=3.1">
+    <link rel="manifest" href="/manifest.json?v=3.3">
 
     <!-- Explicit Mobile & Apple Touch Icon Overrides to Force Eyeballs Logo -->
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
@@ -106,7 +127,7 @@
     </script>
 
     <!-- Custom Styling (Fixed Path) -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="css/style.css">
     <style>
         .mapboxgl-popup-content { background: #12141c !important; color: #fff !important; border-radius: 12px; border: 1px solid #262626; }
         .pro-vehicle-marker { background: transparent !important; border: none !important; }
@@ -145,7 +166,7 @@
     <!-- MAIN CONTAINER -->
     <main class="flex-1 flex flex-col items-center justify-start w-full relative">
 
-        <!-- LANDING VIEW (The ONLY view featuring Install & Get Started actions) -->
+        <!-- LANDING VIEW -->
         <div id="landing-view" class="app-view w-full max-w-5xl flex flex-col items-center text-center gap-10 py-4 sm:py-8 px-3 sm:px-4 hidden" style="display: none;">
             <div class="relative w-full flex flex-col items-center gap-4 sm:gap-6 pt-1">
                 <div class="absolute -top-12 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -161,11 +182,9 @@
                     Stream your exact live GPS coordinates straight from your device browser to your clients in real time. Zero friction, sub-second latency, and total professional peace of mind.
                 </p>
                 <div class="flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-lg mt-2">
-                    <!-- PWA Install App Button -->
                     <button id="pwa-install-btn" onclick="window.installPWA()" class="w-full sm:w-auto bg-neutral-800 hover:bg-neutral-700 text-amber-400 border border-amber-400/30 font-bold text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.15)] text-center cursor-pointer flex items-center justify-center gap-2">
                         <span>Install App</span> 📱
                     </button>
-                    <!-- Get Started Button -->
                     <button onclick="window.switchView('register')" class="w-full sm:w-auto bg-amber-400 hover:bg-amber-300 text-black font-black text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition shadow-[0_0_30px_rgba(251,191,36,0.25)] text-center cursor-pointer flex items-center justify-center gap-2">
                         <span>Get Started Free</span> →
                     </button>
@@ -430,9 +449,9 @@
         <div class="font-bold text-neutral-400">Developed & Architected by Julius Jones</div>
     </footer>
 
-    <!-- Core App Logic & Tracker Scripts (Version-Stamped to v=13) -->
-    <script src="js/app.js?v=13"></script>
-    <script src="js/tracker.js?v=13"></script>
+    <!-- Core App Logic & Tracker Scripts -->
+    <script src="js/app.js?v=14"></script>
+    <script src="js/tracker.js?v=14"></script>
     
     <!-- Automatic Map Dimension Fixer for Leaflet Containers -->
     <script>

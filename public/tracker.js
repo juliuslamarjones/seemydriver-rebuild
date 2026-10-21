@@ -27,6 +27,7 @@ function formatEta(seconds) {
 }
 
 // The truck artwork has its FRONT (cab + headlights) at the TOP, which matches heading 0 = north.
+// If you ever swap the artwork and it faces another way, set this: 90 = art faces right, 180 = down, 270 = left.
 const TRUCK_ICON_OFFSET_DEG = 0;
 
 // ---------- Broadcast Launch Handler ----------
@@ -110,6 +111,7 @@ window.handleAddressInput = async function(value) {
 
     geocodeTimer = setTimeout(async () => {
         try {
+            // Mapbox forward geocoding: exact house numbers; results biased toward where the driver is
             const prox = (gps.last && isFinite(gps.last.lat)) ? '&proximity=' + gps.last.lng + ',' + gps.last.lat : '';
             const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&autocomplete=true&types=address,poi&limit=5${prox}`);
             const data = await res.json();
@@ -123,7 +125,7 @@ window.handleAddressInput = async function(value) {
 
             data.features.forEach(f => {
                 const name = f.place_name || f.text || '';
-                const coords = f.center || (f.geometry && f.geometry.coordinates) || [0, 0];
+                const coords = f.center || (f.geometry && f.geometry.coordinates) || [0, 0];   // [lng, lat]
 
                 const div = document.createElement('div');
                 div.className = "px-4 py-3 text-xs text-neutral-200 hover:bg-neutral-800 hover:text-amber-400 cursor-pointer border-b border-neutral-800/80 transition font-medium";
@@ -206,20 +208,25 @@ const STALE_PREV_MS = 30000;
 const FRESH_MS = 10000;          
 const isFresh = (fix, ms) => !!fix && (Date.now() - fix.t) < (ms || FRESH_MS);
 
-const COAST_AFTER_MS = 3000;   
-const COAST_MAX_S    = 60;     
-const COAST_FACTOR   = 0.85;   
-const COAST_MIN_MPS  = 1.5;    
+// Dead-zone glide: when good GPS stops coming in, the truck keeps rolling along the route
+const COAST_AFTER_MS = 3000;   // no good fix for this long => start gliding
+const COAST_MAX_S    = 60;     // glide eases down to a stop over this many seconds
+const COAST_FACTOR   = 0.85;   // glide starts at 85% of the recent speed
+const COAST_MIN_MPS  = 1.5;    // if we were basically stopped, don't glide
 
-const FOLLOW_TAU  = 1.4;       
-const CATCHUP_MAX = 30;        
-const LATERAL_TAU = 1.0;       
+// Truck motion model: the truck ALWAYS keeps moving at its current speed and is only
+// nudged toward each real GPS fix, so it never freezes and never teleports.
+const FOLLOW_TAU  = 1.4;       // seconds to close the gap to the real position
+const CATCHUP_MAX = 30;        // m/s: fastest the truck may slide to catch up after a dead zone
+const LATERAL_TAU = 1.0;       // seconds for a sideways gap to fade onto the polyline
 
 function ingest(r) {
     gps.lastAlive = Date.now();
     if (!isFinite(r.lat) || !isFinite(r.lng)) return;
     const acc = isFinite(r.acc) ? r.acc : 999;
 
+    // Junk-fix filter: a fix with +/-100 m or worse is the phone guessing from cell/Wi-Fi.
+    // Ignore it while we have a recent usable fix. With no fix at all, wait for +/-300 m or better.
     if (acc > 100) {
         const haveRecent = gps.last && (Date.now() - gps.last.t) < 120000;
         if (haveRecent) {
@@ -243,7 +250,7 @@ function ingest(r) {
     }
 
     let v = (isFinite(r.speed) && r.speed >= 0) ? r.speed : (prev ? d / dt : 0);
-    gps.speedMps = prev ? gps.speedMps * 0.3 + v * 0.7 : v;
+    gps.speedMps = prev ? gps.speedMps * 0.3 + v * 0.7 : v; // Faster response on speed changes
     if (gps.speedMps < 0.5) gps.speedMps = 0;
 
     let lat = r.lat, lng = r.lng;
@@ -419,6 +426,9 @@ window.teardownDriverMap = function() {
     resetGpsState();
 };
 
+// ----------------------------------------------------------
+// TRUCK ICON
+// ----------------------------------------------------------
 function getTruckIcon(bearing = 0) {
     return L.divIcon({
         className: 'custom-truck-svg-marker',
@@ -456,6 +466,9 @@ function getDriverLabelIcon(name = 'Driver') {
     });
 }
 
+// ----------------------------------------------------------
+// ROUTE TRACK MATH
+// ----------------------------------------------------------
 function buildTrack(pts, dur, dist) {
     const cum = [0];
     for (let i = 1; i < pts.length; i++) {
@@ -508,6 +521,9 @@ function trackProject(tr, lat, lng, fromS, ahead) {
     return best;
 }
 
+// ----------------------------------------------------------
+// MOVER
+// ----------------------------------------------------------
 function coastDist(v, since) {
     const t0 = COAST_AFTER_MS / 1000;
     if (since <= t0) return v * since;
@@ -621,6 +637,7 @@ function pinIcon() {
 
 function makeMap(box, zoomControl) {
     const map = L.map(box, { zoomControl: zoomControl, zoomAnimation: true });
+    // FIXED: Added crossOrigin: true so map tiles load inside PWA standalone WebAPK containers
     L.tileLayer(TILE_URL, { 
         maxZoom: 19, 
         keepBuffer: 4, 
@@ -632,6 +649,9 @@ function makeMap(box, zoomControl) {
     return map;
 }
 
+// ----------------------------------------------------------
+// ROUTE MANAGER
+// ----------------------------------------------------------
 function routeManager(map, color) {
     let line = null, track = null, lastFetch = 0, busy = false;
     let offCount = 0, offAny = 0, offSince = 0, offConfirmed = false;
@@ -719,7 +739,7 @@ function routeManager(map, color) {
             if (now - lastTrim < 800 || Math.abs(s - lastTrimS) < 10) return;
             lastTrim = now; lastTrimS = s;
             const p = trackPoint(tr, s);
-            try { line.setLatLngs([[p.lat, p.lng]].concat(tr.pts.slice(p.i + 1))); } catch (e) {}
+            try { line.setLatLngs([[p.lat, p.lng']].concat(tr.pts.slice(p.i + 1))); } catch (e) {}
         },
         getTrack: () => track
     };
@@ -757,19 +777,6 @@ window.initDriverActiveMap = function () {
     if (dest) {
         L.marker([dest.lat, dest.lng], { icon: pinIcon() }).addTo(map);
         map.setView([dest.lat, dest.lng], 13, { animate: false });
-        
-        if (gps.last && isFinite(gps.last.lat)) {
-            me.route.update(gps.last.lat, gps.last.lng, dest.lat, dest.lng, { force: true });
-        }
-    }
-
-    // FIXED: Immediately request an active high-accuracy hardware position lock on mobile boot
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            (p) => ingest(fromWeb(p)),
-            (e) => console.error("Initial mobile GPS lock error:", e),
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
     }
 
     me.off = subscribe((fix) => {
@@ -804,9 +811,6 @@ window.initDriverActiveMap = function () {
                 if (me.follow) map.panTo([p.lat, p.lng], { animate: false });
                 if (tr) me.route.trim(tr, sNow);
             });
-            if (dest) {
-                me.route.update(lat, lng, dest.lat, dest.lng, { force: true });
-            }
         }
         me.mover.moveTo(lat, lng, heading, trk, sPos, v);
         const sp = $('driver-map-speed');
