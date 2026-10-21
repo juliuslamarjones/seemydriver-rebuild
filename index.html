@@ -43,7 +43,13 @@
             const urlParams = new URLSearchParams(window.location.search);
             const viewParam = urlParams.get('view');
             
-            if (viewParam === 'customer' || viewParam === 'landing' || viewParam === 'signin' || viewParam === 'register') {
+            if (viewParam === 'customer') {
+                document.documentElement.style.background = '#12141c';
+                window.addEventListener('DOMContentLoaded', () => {
+                    if (typeof window.switchView === 'function') { window.switchView('customer-view-view'); }
+                });
+                return;
+            } else if (viewParam === 'landing' || viewParam === 'signin' || viewParam === 'register') {
                 document.documentElement.style.background = viewParam === 'landing' ? '#FFFFFF' : '#12141c';
                 window.addEventListener('DOMContentLoaded', () => {
                     if (typeof window.switchView === 'function') { window.switchView(viewParam); }
