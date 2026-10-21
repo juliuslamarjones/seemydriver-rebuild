@@ -5,6 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SeeMyDriver - Real-Time GPS Telemetry</title>
     
+    <!-- Firebase SDKs (Loaded early so database instance is ready for boot interceptors) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+    <!-- Embedded SafeStorage & Firebase Init -->
+    <script>
+        window.SafeStorage = {
+            getItem(key) {
+                try { return localStorage.getItem(key); } catch (e) { return null; }
+            },
+            setItem(key, val) {
+                try { localStorage.setItem(key, val); } catch (e) {}
+            },
+            removeItem(key) {
+                try { localStorage.removeItem(key); } catch (e) {}
+            },
+            clear() {
+                try { localStorage.clear(); } catch (e) {}
+            }
+        };
+
+        const firebaseConfig = {
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com"
+        };
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+        window.db = db;
+    </script>
+
     <!-- PWA Standalone Direct Boot Interceptor (Forced White Splash Screen & Clean Default Landing) -->
     <script>
         (function() {
@@ -93,38 +125,6 @@
     <!-- Leaflet CSS & JS for Active/Customer Tracking Maps -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-
-    <!-- Embedded SafeStorage & Firebase Init -->
-    <script>
-        window.SafeStorage = {
-            getItem(key) {
-                try { return localStorage.getItem(key); } catch (e) { return null; }
-            },
-            setItem(key, val) {
-                try { localStorage.setItem(key, val); } catch (e) {}
-            },
-            removeItem(key) {
-                try { localStorage.removeItem(key); } catch (e) {}
-            },
-            clear() {
-                try { localStorage.clear(); } catch (e) {}
-            }
-        };
-
-        const firebaseConfig = {
-            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com"
-        };
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.database();
-        window.db = db;
-    </script>
 
     <!-- Custom Styling (Fixed Path) -->
     <link rel="stylesheet" href="css/style.css">
