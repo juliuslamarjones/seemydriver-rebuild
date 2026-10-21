@@ -127,11 +127,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const q = new URLSearchParams(window.location.search);
     const view = q.get('view');
     
+    // Ensure customer tracking link captures session parameter whether it's named 'sid' or 'session'
+    const trackingSession = q.get('sid') || q.get('session');
+    if (trackingSession && !q.has('sid')) {
+        // Normalize it so tracker.js can read q.get('sid') uniformly
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set('sid', trackingSession);
+        window.history.replaceState({}, '', newUrl);
+    }
+    
     const isStandalone = window.smdInApp();
     const isLoggedIn = localStorage.getItem('seemydriver_logged_in') === 'true';
     
     // PRIORITIZE EXPLICIT QUERY VIEWS & CUSTOMER LINKS
-    if (view === 'customer') {
+    if (view === 'customer' || trackingSession) {
         window.switchView('customer-view-view');
     } else if (view === 'landing') {
         window.switchView('landing-view');
