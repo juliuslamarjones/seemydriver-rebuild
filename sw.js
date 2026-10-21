@@ -30,9 +30,18 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
+    // Only handle GET requests to avoid choking on API calls, Firebase websockets, or extensions
+    if (e.request.method !== 'GET') return;
+
     e.respondWith(
-        fetch(e.request).catch(() => {
-            return caches.match(e.request);
-        })
+        fetch(e.request)
+            .then((response) => {
+                return response;
+            })
+            .catch(() => {
+                return caches.match(e.request).then((cachedResponse) => {
+                    return cachedResponse || caches.match('/');
+                });
+            })
     );
 });
