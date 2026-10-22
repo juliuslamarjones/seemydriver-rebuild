@@ -97,15 +97,6 @@ window.handleSignIn = function () {
     if (auth) {
         auth.signInWithEmailAndPassword(email, password)
             .then((userCredential) => {
-                const user = userCredential.user;
-                
-                // Enforce email verification check
-                if (!user.emailVerified) {
-                    alert('Please verify your email address before accessing SeeMyDriver. Check your inbox for the verification link.');
-                    auth.signOut();
-                    return;
-                }
-
                 localStorage.setItem('seemydriver_logged_in', 'true');
                 window.switchView('job-setup-view');
             })
@@ -132,25 +123,8 @@ window.handleRegister = function () {
     if (auth) {
         auth.createUserWithEmailAndPassword(email, password)
             .then((userCredential) => {
-                const user = userCredential.user;
-                console.log('User registered successfully:', user.email);
-
-                // Send Firebase verification email
-                user.sendEmailVerification()
-                    .then(() => {
-                        alert('Account created successfully!\n\nA verification link has been sent to ' + user.email + '. Please check your inbox and verify your email before signing in.');
-                        
-                        // Sign out immediately so unverified users cannot bypass app access
-                        auth.signOut();
-                        localStorage.removeItem('seemydriver_logged_in');
-                        window.switchView('signin-view');
-                    })
-                    .catch((err) => {
-                        console.error('Error sending verification email:', err);
-                        alert('Account created, but failed to send verification email: ' + err.message);
-                        auth.signOut();
-                        window.switchView('signin-view');
-                    });
+                localStorage.setItem('seemydriver_logged_in', 'true');
+                window.switchView('job-setup-view');
             })
             .catch((error) => {
                 console.error('Registration error:', error.message);
