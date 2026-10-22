@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+\<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
@@ -116,6 +116,34 @@
                 min-width: 4.5rem !important;
                 min-height: 4.5rem !important;
             }
+        }
+
+        /* Leaflet Dark Theme Zoom Control Overrides */
+        .leaflet-control-zoom {
+            border: 1px solid #262626 !important;
+            border-radius: 12px !important;
+            overflow: hidden;
+            background: #000 !important;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
+            margin-top: 12px !important;
+            margin-left: 12px !important;
+        }
+        .leaflet-control-zoom a {
+            background-color: #000 !important;
+            color: #fbbf24 !important;
+            border-bottom: 1px solid #262626 !important;
+            width: 36px !important;
+            height: 36px !important;
+            line-height: 36px !important;
+            font-size: 18px !important;
+            font-weight: bold !important;
+        }
+        .leaflet-control-zoom a:hover {
+            background-color: #161923 !important;
+            color: #f59e0b !important;
+        }
+        .leaflet-control-zoom a.leaflet-control-zoom-out {
+            border-bottom: none !important;
         }
     </style>
 </head>
@@ -357,7 +385,7 @@
     </footer>
 
     <!-- App Scripts -->
-    <script src="js/app.js?v=18"></script>
-    <script src="js/tracker.js?v=18"></script>
+    <script src="js/app.js?v=19"></script>
+    <script src="js/tracker.js?v=19"></script>
 </body>
 </html>
