@@ -31,7 +31,6 @@ window.switchView = function (viewId) {
     const targetId = viewId === 'landing' ? 'landing-view' : (viewId.includes('-view') ? viewId : viewId + '-view');
     const target = document.getElementById(targetId);
     
-    // Hide header action buttons on active broadcast or customer views to eliminate clutter
     const headerNav = document.getElementById('header-nav-actions');
     if (headerNav) {
         if (targetId === 'active-broadcast-view' || targetId === 'customer-view-view') {
@@ -60,7 +59,6 @@ window.smdInApp = function() {
 };
 
 window.handleSignOut = function () {
-    // Block sign-out if a broadcast is actively running in this context
     if (localStorage.getItem('smd_active_broadcast') === 'true') {
         alert('Please end your active broadcast before signing out.');
         return;
@@ -147,10 +145,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const q = new URLSearchParams(window.location.search);
     const view = q.get('view');
     
-    // Ensure customer tracking link captures session parameter whether it's named 'sid' or 'session'
     const trackingSession = q.get('sid') || q.get('session');
     if (trackingSession && !q.has('sid')) {
-        // Normalize it so tracker.js can read q.get('sid') uniformly
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.set('sid', trackingSession);
         window.history.replaceState({}, '', newUrl);
@@ -159,7 +155,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const isStandalone = window.smdInApp();
     const isLoggedIn = localStorage.getItem('seemydriver_logged_in') === 'true';
     
-    // PRIORITIZE EXPLICIT QUERY VIEWS & CUSTOMER LINKS
     if (view === 'customer' || trackingSession) {
         window.switchView('customer-view-view');
     } else if (view === 'landing') {
@@ -171,13 +166,10 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (view === 'job-setup' && isLoggedIn) {
         window.switchView('job-setup-view');
     } else if (localStorage.getItem('smd_active_broadcast') === 'true' && localStorage.getItem('smd_session_id') && isStandalone) {
-        // Only auto-resume active broadcast if inside standalone PWA or native mobile app
         window.switchView('active-broadcast-view');
     } else if (isStandalone) {
-        // Installed app always lands on Welcome Back / Sign-in if not actively routed elsewhere
         window.switchView('signin-view');
     } else {
-        // DEFAULT: Always show the marketing landing page on normal browser visits to seemydriver.com
         window.switchView('landing-view');
     }
 });
