@@ -37,7 +37,7 @@
         window.db = db;
     </script>
 
-    <!-- PWA Background Color Painter (Screen routing handled securely in js/app.js) -->
+    <!-- PWA Background Color Painter -->
     <script>
         (function () {
             var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
@@ -331,6 +331,15 @@
                     </div>
                 </div>
             </div>
+            <!-- RESTORED: Call & Message Buttons for Customer -->
+            <div class="w-full max-w-4xl grid grid-cols-2 gap-3">
+                <a id="cust-call-btn" href="#" class="bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white font-bold text-sm py-4 rounded-2xl transition text-center flex items-center justify-center gap-2">
+                    📞 Call Driver
+                </a>
+                <a id="cust-msg-btn" href="#" class="bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition text-center flex items-center justify-center gap-2 shadow-lg">
+                    💬 Message
+                </a>
+            </div>
         </div>
 
     </main>
@@ -342,7 +351,7 @@
     </footer>
 
     <!-- App Scripts -->
-    <script src="js/app.js?v=15"></script>
-    <script src="js/tracker.js?v=15"></script>
+    <script src="js/app.js?v=16"></script>
+    <script src="js/tracker.js?v=16"></script>
 </body>
 </html>
