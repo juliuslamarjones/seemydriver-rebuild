@@ -1,4 +1,4 @@
-\<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
@@ -28,7 +28,13 @@
         };
 
         const firebaseConfig = {
-            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com"
+            apiKey: "AIzaSyYourActualFirebaseApiKeyHere",
+            authDomain: "seemydriver-prod.firebaseapp.com",
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",
+            projectId: "seemydriver-prod",
+            storageBucket: "seemydriver-prod.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
         };
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
@@ -382,7 +388,7 @@
     </footer>
 
     <!-- App Scripts -->
-    <script src="js/app.js?v=20"></script>
-    <script src="js/tracker.js?v=20"></script>
+    <script src="js/app.js?v=21"></script>
+    <script src="js/tracker.js?v=21"></script>
 </body>
 </html>
