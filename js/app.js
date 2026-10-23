@@ -45,7 +45,9 @@ window.switchView = function (viewId) {
         target.classList.remove('hidden');
         target.style.display = 'block';
         
-        if (targetId === 'active-broadcast-view' && typeof window.initDriverActiveMap === 'function') {
+        if (targetId === 'landing-view' && typeof window.initLandingPreviewMap === 'function') {
+            setTimeout(window.initLandingPreviewMap, 150);
+        } else if (targetId === 'active-broadcast-view' && typeof window.initDriverActiveMap === 'function') {
             setTimeout(window.initDriverActiveMap, 150);
         } else if (targetId === 'customer-view-view' && typeof window.initCustomerMapLive === 'function') {
             setTimeout(window.initCustomerMapLive, 150);
@@ -81,12 +83,28 @@ window.handleSignOut = function () {
 
 window.handleSignIn = function () {
     const email = document.getElementById('signin-email') ? document.getElementById('signin-email').value.trim() : '';
-    if (!email) {
-        alert('Please enter your email address.');
+    const password = document.getElementById('signin-password') ? document.getElementById('signin-password').value.trim() : '';
+    
+    if (!email || !password) {
+        alert('Please enter both an email address and a password.');
         return;
     }
-    localStorage.setItem('seemydriver_logged_in', 'true');
-    window.switchView('job-setup-view');
+
+    const auth = window.firebase && window.firebase.auth ? window.firebase.auth() : null;
+    if (auth) {
+        auth.signInWithEmailAndPassword(email, password)
+            .then((userCredential) => {
+                console.log('Signed in successfully:', userCredential.user.email);
+                localStorage.setItem('seemydriver_logged_in', 'true');
+                window.switchView('job-setup-view');
+            })
+            .catch((error) => {
+                console.error('Sign-in error:', error.message);
+                alert('Sign-in failed: ' + error.message);
+            });
+    } else {
+        alert('Firebase Auth is not initialized.');
+    }
 };
 
 window.handleRegister = function () {
