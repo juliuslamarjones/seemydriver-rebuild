@@ -1,6 +1,6 @@
 // ==========================================================
 // SEEMYDRIVER - GPS ENGINE + MAPS & TELEMETRY (PRODUCTION MASTER)
-// v9: continuous-motion truck (no snaps), Mapbox search, live ETA countdown, hold-on-route, confirmed rerouting
+// v14: persistent broadcast hold, non-navigating SMS trigger, clean boot
 // ==========================================================
 (function () {
 'use strict';
@@ -56,6 +56,7 @@ window.launchLiveBroadcast = function() {
     LS.setItem('smd_cust_phone', custPhone);
     LS.setItem('smd_cust_address', address);
     LS.setItem('smd_active_broadcast', 'true');
+    LS.setItem('smd_started_at', String(Date.now()));
 
     const buffer = new Uint8Array(8);
     window.crypto.getRandomValues(buffer);
@@ -858,7 +859,12 @@ window.textTrackingLink = function () {
     const u = window.activeTrackingUrl || (base + '/?view=customer&session=' + sessionId());
     const phone = (LS.getItem('smd_cust_phone') || '').replace(/[^\d+]/g, '');
     const name = LS.getItem('smd_driver_name') || 'Your driver';
-    window.location.href = 'sms:' + phone + '?body=' + encodeURIComponent(name + ' is on the way. Track live: ' + u);
+    
+    const a = document.createElement('a');
+    a.href = 'sms:' + phone + '?body=' + encodeURIComponent(name + ' is on the way. Track live: ' + u);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
 };
 window.endBroadcastAndHome = async function () {
     if (!confirm('End this broadcast? Your customer will stop seeing your location.')) return;
@@ -877,6 +883,7 @@ window.endBroadcastAndHome = async function () {
     LS.removeItem('smd_dest_lat'); 
     LS.removeItem('smd_dest_lng');
     LS.removeItem('smd_session_id');
+    LS.removeItem('smd_started_at');
     window.activeSessionId = undefined;
     window.cachedDestLat = undefined; 
     window.cachedDestLng = undefined;
@@ -900,7 +907,7 @@ window.initCustomerMapLive = function () {
     teardownCustomer();
 
     const q = new URLSearchParams(window.location.search);
-    const sid = q.get('session') || q.get('s');
+    const sid = q.get('session') || q.get('sid') || q.get('s');
     const head = $('cust-driver-header'), sub = $('cust-eta-sub'), pill = $('cust-status-pill'), distEl = $('cust-distance'), speedEl = $('cust-speed');
     if (!sid) { if (head) head.textContent = 'Invalid tracking link'; return; }
 
@@ -1051,16 +1058,37 @@ window.fitCustomerMap = function () {
     C.map.fitBounds(L.latLngBounds([[p.lat, p.lng], [d.lat, d.lng]]), { padding: [60, 60], animate: false });
 };
 
+// ==========================================================
+// SESSION PERSISTENCE & AUTO-RESUME ON APP BOOT
+// ==========================================================
 document.addEventListener('DOMContentLoaded', () => {
     const q = new URLSearchParams(window.location.search);
-    if (!q.has('session') && !q.has('s') && q.get('view') !== 'customer' && broadcasting()) {
-        const last = parseInt(LS.getItem('smd_last_tx') || '0', 10);
-        if (sessionId() && Date.now() - last < 6 * 3600 * 1000) {
-            window.switchView('active-broadcast');
-            window.startRealTimeTracking();
-        } else {
-            LS.removeItem('smd_active_broadcast');
-        }
+    
+    // Customer tracking links never resume a driver broadcast
+    if (q.has('session') || q.has('sid') || q.has('s') || q.get('view') === 'customer') return;
+    if (!broadcasting()) return;
+    
+    const storedSessionId = sessionId();
+    if (!storedSessionId) { 
+        LS.removeItem('smd_active_broadcast'); 
+        return; 
+    }
+    
+    // A broadcast only ends when the driver taps End Broadcast (or after 24 hours of total silence)
+    const last = Math.max(parseInt(LS.getItem('smd_last_tx') || '0', 10), parseInt(LS.getItem('smd_started_at') || '0', 10));
+    if (last && Date.now() - last > 24 * 3600 * 1000) {
+        LS.removeItem('smd_active_broadcast');
+        LS.removeItem('smd_session_id');
+        LS.removeItem('smd_started_at');
+        return;
+    }
+    
+    window.activeSessionId = storedSessionId;
+    if (typeof window.switchView === 'function') {
+        window.switchView('active-broadcast');
+    }
+    if (typeof window.startRealTimeTracking === 'function') {
+        window.startRealTimeTracking();
     }
 });
 

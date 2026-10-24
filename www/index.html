@@ -5,26 +5,56 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SeeMyDriver - Real-Time GPS Telemetry</title>
     
-    <!-- PWA Standalone Direct Boot Interceptor -->
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+    <!-- Embedded SafeStorage & Firebase Init -->
     <script>
-        (function() {
-            const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-            const isLoggedIn = localStorage.getItem('seemydriver_logged_in') === 'true';
-            if (isStandalone || isLoggedIn) {
-                document.documentElement.style.background = '#000';
-                window.addEventListener('DOMContentLoaded', () => {
-                    if (typeof window.switchView === 'function') {
-                        window.switchView(isLoggedIn ? 'job-setup-view' : 'signin-view');
-                    }
-                });
+        window.SafeStorage = {
+            getItem(key) {
+                try { return localStorage.getItem(key); } catch (e) { return null; }
+            },
+            setItem(key, val) {
+                try { localStorage.setItem(key, val); } catch (e) {}
+            },
+            removeItem(key) {
+                try { localStorage.removeItem(key); } catch (e) {}
+            },
+            clear() {
+                try { localStorage.clear(); } catch (e) {}
             }
+        };
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI",
+            authDomain: "seemydriver-prod.firebaseapp.com",
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",
+            projectId: "seemydriver-prod",
+            storageBucket: "seemydriver-prod.firebasestorage.app",
+            messagingSenderId: "16366013329",
+            appId: "1:16366013329:web:7e993e6ee37f940a04a064"
+        };
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+        window.db = db;
+    </script>
+
+    <!-- PWA Background Color Painter -->
+    <script>
+        (function () {
+            var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+            if (standalone) document.documentElement.style.background = '#FFFFFF';
         })();
     </script>
 
     <!-- PWA Manifest Link -->
-    <link rel="manifest" href="/manifest.json?v=3.1">
+    <link rel="manifest" href="/manifest.json?v=3.3">
 
-    <!-- Explicit Mobile & Apple Touch Icon Overrides to Force Eyeballs Logo -->
+    <!-- Explicit Mobile & Apple Touch Icon Overrides -->
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
     <link rel="apple-touch-icon" href="/icon-192.png">
@@ -69,44 +99,12 @@
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
 
-    <!-- Leaflet CSS & JS for Active/Customer Tracking Maps -->
+    <!-- Leaflet CSS & JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-
-    <!-- Embedded SafeStorage & Firebase Init -->
-    <script>
-        window.SafeStorage = {
-            getItem(key) {
-                try { return localStorage.getItem(key); } catch (e) { return null; }
-            },
-            setItem(key, val) {
-                try { localStorage.setItem(key, val); } catch (e) {}
-            },
-            removeItem(key) {
-                try { localStorage.removeItem(key); } catch (e) {}
-            },
-            clear() {
-                try { localStorage.clear(); } catch (e) {}
-            }
-        };
-
-        const firebaseConfig = {
-            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com"
-        };
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.database();
-        window.db = db;
-    </script>
-
-    <!-- Custom Styling (Fixed Path) -->
-    <link rel="stylesheet" href="style.css">
+    <!-- Custom Styling -->
+    <link rel="stylesheet" href="css/style.css">
     <style>
         .mapboxgl-popup-content { background: #12141c !important; color: #fff !important; border-radius: 12px; border: 1px solid #262626; }
         .pro-vehicle-marker { background: transparent !important; border: none !important; }
@@ -125,11 +123,39 @@
                 min-height: 4.5rem !important;
             }
         }
+
+        /* Leaflet Dark Theme Zoom Control Overrides */
+        .leaflet-control-zoom {
+            border: 1px solid #262626 !important;
+            border-radius: 12px !important;
+            overflow: hidden;
+            background: #000 !important;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
+            margin-top: 12px !important;
+            margin-left: 12px !important;
+        }
+        .leaflet-control-zoom a {
+            background-color: #000 !important;
+            color: #fbbf24 !important;
+            border-bottom: 1px solid #262626 !important;
+            width: 36px !important;
+            height: 36px !important;
+            line-height: 36px !important;
+            font-size: 18px !important;
+            font-weight: bold !important;
+        }
+        .leaflet-control-zoom a:hover {
+            background-color: #161923 !important;
+            color: #f59e0b !important;
+        }
+        .leaflet-control-zoom a.leaflet-control-zoom-out {
+            border-bottom: none !important;
+        }
     </style>
 </head>
 <body class="bg-black text-white min-h-screen flex flex-col font-sans selection:bg-amber-400 selection:text-black antialiased">
 
-    <!-- HEADER / NAVBAR (Clean, No Clutter) -->
+    <!-- HEADER / NAVBAR -->
     <header class="w-full border-b border-neutral-900 bg-black/80 backdrop-blur-md sticky top-0 z-50 px-3 sm:px-8 py-4 flex items-center justify-between">
         <div class="flex items-center gap-3 cursor-pointer" onclick="window.switchView('landing', true)">
             <div id="brand-logo" class="w-16 h-16 sm:w-20 sm:h-20 bg-amber-400 rounded-2xl flex items-center justify-center shadow-[0_0_25px_rgba(251,191,36,0.5)] shrink-0 overflow-hidden">
@@ -137,16 +163,14 @@
             </div>
             <span id="brand-name" class="font-black tracking-tight text-3xl sm:text-4xl text-white">See<span class="text-amber-400">MyDriver</span></span>
         </div>
-        <div id="header-nav-actions" class="flex items-center gap-2 shrink-0">
-            <!-- Left intentionally clean for sub-views -->
-        </div>
+        <div id="header-nav-actions" class="flex items-center gap-2 shrink-0"></div>
     </header>
 
     <!-- MAIN CONTAINER -->
     <main class="flex-1 flex flex-col items-center justify-start w-full relative">
 
-        <!-- LANDING VIEW (The ONLY view featuring Install & Get Started actions) -->
-        <div id="landing-view" class="app-view w-full max-w-5xl flex flex-col items-center text-center gap-10 py-4 sm:py-8 px-3 sm:px-4 hidden" style="display: none;">
+        <!-- LANDING VIEW -->
+        <div id="landing-view" class="app-view w-full max-w-5xl flex flex-col items-center text-center gap-10 py-4 sm:py-8 px-3 sm:px-4 hidden" style="display: none; height: auto !important; min-height: 100vh; overflow-y: auto !important;">
             <div class="relative w-full flex flex-col items-center gap-4 sm:gap-6 pt-1">
                 <div class="absolute -top-12 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
                 <div class="inline-flex items-center gap-2 bg-gradient-to-r from-neutral-900 via-[#12141c] to-neutral-900 border border-amber-400/30 text-amber-300 font-bold text-[11px] sm:text-sm py-1.5 px-4 sm:px-6 rounded-full shadow-[0_0_25px_rgba(251,191,36,0.1)] backdrop-blur-md">
@@ -161,11 +185,9 @@
                     Stream your exact live GPS coordinates straight from your device browser to your clients in real time. Zero friction, sub-second latency, and total professional peace of mind.
                 </p>
                 <div class="flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-lg mt-2">
-                    <!-- PWA Install App Button -->
                     <button id="pwa-install-btn" onclick="window.installPWA()" class="w-full sm:w-auto bg-neutral-800 hover:bg-neutral-700 text-amber-400 border border-amber-400/30 font-bold text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.15)] text-center cursor-pointer flex items-center justify-center gap-2">
                         <span>Install App</span> 📱
                     </button>
-                    <!-- Get Started Button -->
                     <button onclick="window.switchView('register')" class="w-full sm:w-auto bg-amber-400 hover:bg-amber-300 text-black font-black text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition shadow-[0_0_30px_rgba(251,191,36,0.25)] text-center cursor-pointer flex items-center justify-center gap-2">
                         <span>Get Started Free</span> →
                     </button>
@@ -176,7 +198,7 @@
                 <span class="text-[10px] sm:text-[11px] text-neutral-500">Works seamlessly on mobile browsers. Customers track instantly via any web link.</span>
             </div>
 
-            <!-- LIVE TELEMETRY MOCKUP PREVIEW CARD -->
+            <!-- PREVIEW CARD -->
             <div class="w-full bg-gradient-to-b from-[#12141c] to-neutral-900 border border-neutral-800/80 rounded-3xl p-5 sm:p-8 shadow-2xl relative overflow-hidden text-left">
                 <div class="absolute top-0 right-0 bg-amber-400/10 text-amber-400 text-[10px] font-black uppercase tracking-widest px-3 sm:px-4 py-1.5 rounded-bl-2xl border-l border-b border-amber-400/20 z-30">Live Simulation Preview</div>
                 <div class="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -184,10 +206,6 @@
                         <div class="inline-block bg-emerald-500/10 text-emerald-400 text-xs font-bold px-3 py-1 rounded-full w-fit border border-emerald-500/20">● Live GPS Broadcast Active</div>
                         <h3 class="text-xl sm:text-2xl font-bold text-white">Real-Time Client Telemetry</h3>
                         <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Your customers get a secure, clean web link showing your exact moving position, route distance, and live ETA without downloading a single app.</p>
-                        <div class="flex flex-wrap items-center gap-3 pt-1 text-xs text-neutral-300 font-semibold">
-                            <span>✓ No App Required for Clients</span>
-                            <span>✓ Instant SMS Dispatch</span>
-                        </div>
                     </div>
                     <div class="w-full md:w-80 bg-black/80 border border-neutral-800 rounded-2xl p-3 flex flex-col gap-2.5 shadow-inner">
                         <div class="flex items-center justify-between text-[11px] text-neutral-400 px-1 font-mono">
@@ -195,27 +213,7 @@
                             <span id="preview-speed" class="text-amber-400 font-bold">45 mph</span>
                         </div>
                         <div id="landing-preview-map" class="w-full h-48 bg-[#0b0f19] rounded-xl border border-neutral-800 relative overflow-hidden z-10 shadow-inner"></div>
-                        <div class="text-[10px] text-neutral-500 text-center font-mono">Mapbox Production Demo</div>
                     </div>
-                </div>
-            </div>
-
-            <!-- BENTO GRID FEATURES -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 w-full text-left">
-                <div class="bg-[#12141c] border border-neutral-800 p-5 sm:p-6 rounded-3xl flex flex-col gap-3 hover:border-neutral-700 transition group">
-                    <div class="w-10 h-10 rounded-2xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 text-lg group-hover:scale-110 transition">⚡</div>
-                    <h4 class="text-white font-bold text-base">Instant Job Setup</h4>
-                    <p class="text-xs text-neutral-400 leading-relaxed">No bloat or complex menus. Enter customer details, drop the destination, and start broadcasting in under 10 seconds.</p>
-                </div>
-                <div class="bg-[#12141c] border border-neutral-800 p-5 sm:p-6 rounded-3xl flex flex-col gap-3 hover:border-neutral-700 transition group">
-                    <div class="w-10 h-10 rounded-2xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 text-lg group-hover:scale-110 transition">📍</div>
-                    <h4 class="text-white font-bold text-base">Precision GPS Tracking</h4>
-                    <p class="text-xs text-neutral-400 leading-relaxed">Leverages high-accuracy device geolocation to stream smooth, real-time updates straight to your client's browser map.</p>
-                </div>
-                <div class="bg-[#12141c] border border-neutral-800 p-5 sm:p-6 rounded-3xl flex flex-col gap-3 hover:border-neutral-700 transition group">
-                    <div class="w-10 h-10 rounded-2xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 text-lg group-hover:scale-110 transition">🔒</div>
-                    <h4 class="text-white font-bold text-base">Session-Locked Privacy</h4>
-                    <p class="text-xs text-neutral-400 leading-relaxed">Tracking links are dynamically encrypted and automatically expire the moment you conclude your delivery or service call.</p>
                 </div>
             </div>
         </div>
@@ -234,16 +232,16 @@
                 <div class="flex flex-col gap-5">
                     <div class="flex flex-col gap-2">
                         <label class="text-[11px] font-black uppercase tracking-wider text-neutral-300">Email Address</label>
-                        <input type="email" id="signin-email" placeholder="driver@business.com" class="w-full bg-neutral-900 border border-neutral-800 rounded-2xl px-4.5 py-3.5 text-sm text-white focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition shadow-inner">
+                        <input type="email" id="signin-email" placeholder="driver@business.com" class="w-full bg-neutral-900 border border-neutral-800 rounded-2xl px-4.5 py-3.5 text-sm text-white focus:outline-none focus:border-amber-400 transition shadow-inner">
                     </div>
                     <div class="flex flex-col gap-2">
                         <label class="text-[11px] font-black uppercase tracking-wider text-neutral-300">Password</label>
                         <div class="relative w-full">
-                            <input type="password" id="signin-password" placeholder="••••••••" class="w-full bg-neutral-900 border border-neutral-800 rounded-2xl px-4.5 py-3.5 pr-12 text-sm text-white focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition shadow-inner">
+                            <input type="password" id="signin-password" placeholder="••••••••" class="w-full bg-neutral-900 border border-neutral-800 rounded-2xl px-4.5 py-3.5 pr-12 text-sm text-white focus:outline-none focus:border-amber-400 transition shadow-inner">
                             <button type="button" onclick="const p = document.getElementById('signin-password'); p.type = p.type === 'password' ? 'text' : 'password'; this.textContent = p.type === 'password' ? '👁️' : '🙈';" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white text-base cursor-pointer select-none">👁️</button>
                         </div>
                     </div>
-                    <button onclick="window.handleSignIn()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.3)] cursor-pointer mt-2 transform hover:-translate-y-0.5">
+                    <button onclick="window.handleSignIn()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.3)] cursor-pointer mt-2">
                         Sign In to Broadcast →
                     </button>
                 </div>
@@ -287,18 +285,6 @@
                         Sign Out 🚪
                     </button>
                 </div>
-                <div class="flex flex-col gap-1">
-                    <h2 class="text-2xl sm:text-3xl font-black text-white">Customer & Destination</h2>
-                </div>
-                
-                <div class="bg-gradient-to-br from-amber-500/10 via-[#161923] to-neutral-900 border border-amber-400/30 rounded-2xl p-4 flex items-start gap-3.5 shadow-[0_0_20px_rgba(251,191,36,0.05)]">
-                    <div class="w-9 h-9 rounded-xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-400 text-lg shrink-0 mt-0.5 shadow-sm">💡</div>
-                    <div class="flex flex-col gap-1">
-                        <span class="text-xs font-black tracking-wide text-amber-300 uppercase">Quick Dispatch Guide</span>
-                        <p class="text-[11px] sm:text-xs text-neutral-300 leading-relaxed">Fill out client details below to generate an <strong>instant live tracking link</strong>. Type any address or pick from suggestions to start broadcasting.</p>
-                    </div>
-                </div>
-
                 <div class="flex flex-col gap-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div class="flex flex-col gap-1.5">
@@ -334,15 +320,6 @@
 
         <!-- ACTIVE BROADCAST VIEW -->
         <div id="active-broadcast-view" class="app-view w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4 hidden" style="display: none;">
-            <div class="w-full max-w-4xl bg-[#12141c] border border-neutral-800 rounded-2xl p-4 flex flex-col items-center gap-2 text-center shadow-lg">
-                <div class="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/20 text-amber-300 font-black text-xs py-1 px-3.5 rounded-full">
-                    🚀 DISPATCH ACTIVE
-                </div>
-                <p class="text-xs text-neutral-300 leading-relaxed max-w-xl">
-                    <strong class="text-amber-400">Heads Up:</strong> Keep this screen open or phone plugged in to maintain live GPS streaming!
-                </p>
-            </div>
-
             <div class="w-full max-w-4xl h-[450px] bg-neutral-900 border border-neutral-800 rounded-3xl relative shadow-2xl flex flex-col overflow-hidden">
                 <div id="driver-map-container" class="w-full h-full rounded-3xl overflow-hidden z-10"></div>
                 <div class="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
@@ -350,23 +327,16 @@
                         Speed: <span id="driver-map-speed" class="text-amber-400 font-bold">0 mph</span>
                     </div>
                     <div class="flex items-center gap-2 pointer-events-auto">
-                        <button onclick="window.fitDriverMap()" class="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow transition">Fit Both</button>
-                        <button onclick="window.recenterDriverMap()" class="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-amber-400 text-xs font-bold px-3.5 py-2 rounded-xl shadow transition">Recenter</button>
-                        <button onclick="window.openDriverDirections()" class="bg-amber-400 hover:bg-amber-300 text-black text-xs font-black px-4 py-2 rounded-xl shadow transition whitespace-nowrap">Directions</button>
+                        <button onclick="window.fitDriverMap()" class="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow">Fit Both</button>
+                        <button onclick="window.recenterDriverMap()" class="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-amber-400 text-xs font-bold px-3.5 py-2 rounded-xl shadow">Recenter</button>
+                        <button onclick="window.openDriverDirections()" class="bg-amber-400 hover:bg-amber-300 text-black text-xs font-black px-4 py-2 rounded-xl shadow">Directions</button>
                     </div>
                 </div>
             </div>
-
             <div class="w-full max-w-4xl flex flex-col gap-3">
-                <button onclick="window.textTrackingLink()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm py-4 rounded-2xl transition shadow-lg cursor-pointer flex items-center justify-center gap-2">
-                    💬 Text Tracking Link to Client
-                </button>
-                <button onclick="window.copyTrackingLink()" class="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white font-bold text-sm py-3.5 rounded-2xl transition cursor-pointer">
-                    📋 Or Copy Link to Clipboard
-                </button>
-                <button onclick="window.endBroadcastAndHome()" class="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 font-bold text-sm py-3.5 rounded-2xl transition cursor-pointer">
-                    ← End Broadcast & New Job
-                </button>
+                <button onclick="window.textTrackingLink()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm py-4 rounded-2xl transition shadow-lg cursor-pointer">💬 Text Tracking Link to Client</button>
+                <button onclick="window.copyTrackingLink()" class="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white font-bold text-sm py-3.5 rounded-2xl transition cursor-pointer">📋 Copy Link to Clipboard</button>
+                <button onclick="window.endBroadcastAndHome()" class="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 font-bold text-sm py-3.5 rounded-2xl transition cursor-pointer">← End Broadcast & New Job</button>
             </div>
         </div>
 
@@ -375,11 +345,8 @@
             <div class="w-full max-w-4xl bg-[#12141c] border border-neutral-800 rounded-2xl p-6 sm:p-8 flex flex-col items-center text-center gap-2 shadow-lg">
                 <h2 class="text-xl sm:text-2xl font-black text-amber-400 tracking-tight">Thank you for being a valued customer!</h2>
                 <span id="cust-driver-header" class="text-3xl sm:text-4xl font-black text-white mt-1">Driver</span>
-                <span id="cust-status-pill" class="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold px-3 py-1 rounded-full mt-2">
-                    ● Connected
-                </span>
+                <span id="cust-status-pill" class="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold px-3 py-1 rounded-full mt-2">● Connected</span>
             </div>
-
             <div class="w-full max-w-4xl grid grid-cols-2 gap-4">
                 <div class="bg-[#12141c] border border-neutral-800 rounded-2xl p-4 flex flex-col gap-1 text-left">
                     <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Estimated ETA</span>
@@ -390,9 +357,9 @@
                     <span id="cust-distance" class="text-xl sm:text-2xl font-black text-white">-- mi</span>
                 </div>
             </div>
-
-            <div class="w-full max-w-4xl h-[450px] bg-neutral-900 border border-neutral-800 rounded-3xl relative shadow-2xl flex flex-col">
+            <div class="w-full max-w-4xl h-[450px] bg-neutral-900 border border-neutral-800 rounded-3xl relative shadow-2xl flex flex-col overflow-hidden">
                 <div id="customer-map-container" class="w-full h-full rounded-3xl overflow-hidden z-10"></div>
+                <!-- CUSTOMER MAP CONTROLS: Dark with Amber Accents -->
                 <div class="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
                     <div class="bg-black/80 backdrop-blur-md border border-neutral-800 px-4 py-2 rounded-xl text-xs font-mono pointer-events-auto shadow-lg text-neutral-300">
                         Speed: <span id="cust-speed" class="text-amber-400 font-bold">0 mph</span>
@@ -404,14 +371,7 @@
                 </div>
             </div>
 
-            <div class="w-full max-w-4xl bg-[#12141c] border border-neutral-800 rounded-2xl p-4 flex items-center gap-3 text-left">
-                <div class="w-10 h-10 rounded-xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 text-lg shrink-0">📍</div>
-                <div class="flex flex-col">
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Destination Address</span>
-                    <span id="cust-dest-address" class="text-sm font-bold text-white">--</span>
-                </div>
-            </div>
-
+            <!-- Call & Message Buttons for Customer -->
             <div class="w-full max-w-4xl grid grid-cols-2 gap-3">
                 <a id="cust-call-btn" href="#" class="bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white font-bold text-sm py-4 rounded-2xl transition text-center flex items-center justify-center gap-2">
                     📞 Call Driver
@@ -425,102 +385,13 @@
     </main>
 
     <!-- FOOTER -->
-    <footer id="app-footer" class="w-full border-t border-neutral-900 py-6 text-center text-xs text-neutral-500 flex flex-col gap-1">
+    <footer class="w-full border-t border-neutral-900 py-6 text-center text-xs text-neutral-500 flex flex-col gap-1">
         <div>© 2026 SeeMyDriver. All rights reserved. Secure Cloud GPS Telemetry.</div>
         <div class="font-bold text-neutral-400">Developed & Architected by Julius Jones</div>
     </footer>
 
-    <!-- Core App Logic & Tracker Scripts (Version-Stamped to v=13) -->
-    <script src="js/app.js?v=13"></script>
-    <script src="js/tracker.js?v=13"></script>
-    
-    <!-- Automatic Map Dimension Fixer for Leaflet Containers -->
-    <script>
-        const originalSwitchView = window.switchView;
-        if (typeof originalSwitchView === 'function') {
-            window.switchView = function(viewId, force) {
-                originalSwitchView(viewId, force);
-                setTimeout(() => {
-                    window.dispatchEvent(new Event('resize'));
-                    if (window.D && window.D.map) { window.D.map.invalidateSize(); }
-                    if (window.C && window.C.map) { window.C.map.invalidateSize(); }
-                }, 200);
-            };
-        }
-    </script>
-
-    <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            setTimeout(() => {
-                const previewEl = document.getElementById('landing-preview-map');
-                if (previewEl && !previewEl._mapbox_init && typeof mapboxgl !== 'undefined') {
-                    previewEl._mapbox_init = true;
-                    mapboxgl.accessToken = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
-                    
-                    const simMap = new mapboxgl.Map({
-                        container: 'landing-preview-map',
-                        style: 'mapbox://styles/mapbox/dark-v11',
-                        center: [-95.2636, 29.9902],
-                        zoom: 14,
-                        interactive: false
-                    });
-
-                    simMap.on('load', () => {
-                        const routePath = [
-                            [-95.2850, 29.9700],
-                            [-95.2800, 29.9750],
-                            [-95.2750, 29.9800],
-                            [-95.2700, 29.9850],
-                            [-95.2650, 29.9900],
-                            [-95.2600, 29.9950],
-                            [-95.2550, 30.0000]
-                        ];
-
-                        simMap.addSource('sim-route', {
-                            type: 'geojson',
-                            data: {
-                                type: 'Feature',
-                                properties: {},
-                                geometry: { type: 'LineString', coordinates: routePath }
-                            }
-                        });
-
-                        simMap.addLayer({
-                            id: 'sim-route-layer',
-                            type: 'line',
-                            source: 'sim-route',
-                            layout: { 'line-join': 'round', 'line-cap': 'round' },
-                            paint: { 'line-color': '#3b82f6', 'line-width': 5, 'line-opacity': 0.9 }
-                        });
-
-                        const el = document.createElement('div');
-                        el.innerHTML = '<svg width="32" height="32" viewBox="0 0 24 24" fill="#fbbf24"><path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"/></svg>';
-                        const marker = new mapboxgl.Marker(el).setLngLat(routePath[0]).addTo(simMap);
-
-                        let progress = 0;
-                        function animateMarker() {
-                            progress += 0.0012;
-                            if (progress > 1) progress = 0;
-
-                            const totalSegments = routePath.length - 1;
-                            const segmentIndex = Math.floor(progress * totalSegments);
-                            const segmentProgress = (progress * totalSegments) - segmentIndex;
-
-                            if (segmentIndex < totalSegments) {
-                                const p1 = routePath[segmentIndex];
-                                const p2 = routePath[segmentIndex + 1];
-                                const currentLng = p1[0] + (p2[0] - p1[0]) * segmentProgress;
-                                const currentLat = p1[1] + (p2[1] - p1[1]) * segmentProgress;
-
-                                marker.setLngLat([currentLng, currentLat]);
-                            }
-                            requestAnimationFrame(animateMarker);
-                        }
-                        requestAnimationFrame(animateMarker);
-                    });
-                }
-            }, 300);
-        });
-    </script>
+    <!-- App Scripts -->
+    <script src="js/app.js?v=21"></script>
+    <script src="js/tracker.js?v=21"></script>
 </body>
 </html>
