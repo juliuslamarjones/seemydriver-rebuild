@@ -198,7 +198,7 @@
                 <span class="text-[10px] sm:text-[11px] text-neutral-500">Works seamlessly on mobile browsers. Customers track instantly via any web link.</span>
             </div>
 
-            <!-- PREVIEW CARD WITH LIGHT MAP -->
+            <!-- PREVIEW CARD WITH OSM LIGHT MAP -->
             <div class="w-full bg-gradient-to-b from-[#12141c] to-neutral-900 border border-neutral-800/80 rounded-3xl p-5 sm:p-8 shadow-2xl relative overflow-hidden text-left">
                 <div class="absolute top-0 right-0 bg-amber-400/10 text-amber-400 text-[10px] font-black uppercase tracking-widest px-3 sm:px-4 py-1.5 rounded-bl-2xl border-l border-b border-amber-400/20 z-30">Live Simulation Preview</div>
                 <div class="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -403,7 +403,7 @@
 
     </main>
 
-    <!-- LIGHT MODE PREVIEW MAP INITIALIZER -->
+    <!-- OPENSTREETMAP LIGHT MODE PREVIEW MAP INITIALIZER -->
     <script>
         window.initLandingPreviewMap = function() {
             const container = document.getElementById('landing-preview-map');
@@ -416,8 +416,8 @@
                     scrollWheelZoom: false
                 }).setView([29.7604, -95.3698], 13);
 
-                // Clean standard light mode cartodb tiles
-                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                // Standard OpenStreetMap tiles (Clean, free, zero watermarks)
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     maxZoom: 19
                 }).addTo(map);
 
@@ -441,7 +441,7 @@
     </footer>
 
     <!-- App Scripts -->
-    <script src="js/app.js?v=23"></script>
-    <script src="js/tracker.js?v=23"></script>
+    <script src="js/app.js?v=24"></script>
+    <script src="js/tracker.js?v=24"></script>
 </body>
 </html>
