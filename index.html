@@ -124,20 +124,20 @@
             }
         }
 
-        /* Leaflet Dark Theme Zoom Control Overrides */
+        /* Leaflet Zoom Control Overrides */
         .leaflet-control-zoom {
-            border: 1px solid #262626 !important;
+            border: 1px solid #d1d5db !important;
             border-radius: 12px !important;
             overflow: hidden;
-            background: #000 !important;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
+            background: #fff !important;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15) !important;
             margin-top: 12px !important;
             margin-left: 12px !important;
         }
         .leaflet-control-zoom a {
-            background-color: #000 !important;
-            color: #fbbf24 !important;
-            border-bottom: 1px solid #262626 !important;
+            background-color: #fff !important;
+            color: #1f2937 !important;
+            border-bottom: 1px solid #e5e7eb !important;
             width: 36px !important;
             height: 36px !important;
             line-height: 36px !important;
@@ -145,7 +145,7 @@
             font-weight: bold !important;
         }
         .leaflet-control-zoom a:hover {
-            background-color: #161923 !important;
+            background-color: #f3f4f6 !important;
             color: #f59e0b !important;
         }
         .leaflet-control-zoom a.leaflet-control-zoom-out {
@@ -198,7 +198,7 @@
                 <span class="text-[10px] sm:text-[11px] text-neutral-500">Works seamlessly on mobile browsers. Customers track instantly via any web link.</span>
             </div>
 
-            <!-- PREVIEW CARD -->
+            <!-- PREVIEW CARD WITH LIGHT MAP -->
             <div class="w-full bg-gradient-to-b from-[#12141c] to-neutral-900 border border-neutral-800/80 rounded-3xl p-5 sm:p-8 shadow-2xl relative overflow-hidden text-left">
                 <div class="absolute top-0 right-0 bg-amber-400/10 text-amber-400 text-[10px] font-black uppercase tracking-widest px-3 sm:px-4 py-1.5 rounded-bl-2xl border-l border-b border-amber-400/20 z-30">Live Simulation Preview</div>
                 <div class="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -207,13 +207,32 @@
                         <h3 class="text-xl sm:text-2xl font-bold text-white">Real-Time Client Telemetry</h3>
                         <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Your customers get a secure, clean web link showing your exact moving position, route distance, and live ETA without downloading a single app.</p>
                     </div>
-                    <div class="w-full md:w-80 bg-black/80 border border-neutral-800 rounded-2xl p-3 flex flex-col gap-2.5 shadow-inner">
-                        <div class="flex items-center justify-between text-[11px] text-neutral-400 px-1 font-mono">
-                            <span class="text-emerald-400 animate-pulse">● LIVE ROUTE TELEMETRY</span>
-                            <span id="preview-speed" class="text-amber-400 font-bold">45 mph</span>
+                    <div class="w-full md:w-80 bg-white border border-neutral-300 rounded-2xl p-3 flex flex-col gap-2.5 shadow-inner">
+                        <div class="flex items-center justify-between text-[11px] text-neutral-600 px-1 font-mono">
+                            <span class="text-emerald-600 font-bold animate-pulse">● LIVE ROUTE TELEMETRY</span>
+                            <span id="preview-speed" class="text-amber-600 font-bold">45 mph</span>
                         </div>
-                        <div id="landing-preview-map" class="w-full h-48 bg-[#0b0f19] rounded-xl border border-neutral-800 relative overflow-hidden z-10 shadow-inner"></div>
+                        <div id="landing-preview-map" class="w-full h-48 bg-neutral-100 rounded-xl border border-neutral-200 relative overflow-hidden z-10 shadow-inner"></div>
                     </div>
+                </div>
+            </div>
+
+            <!-- FEATURE DESCRIPTIONS -->
+            <div class="w-full grid grid-cols-1 md:grid-cols-3 gap-6 text-left my-4">
+                <div class="bg-gradient-to-b from-[#12141c] to-neutral-900 border border-neutral-800/80 rounded-3xl p-6 flex flex-col gap-3 shadow-xl">
+                    <div class="w-12 h-12 bg-amber-400/10 border border-amber-400/20 rounded-2xl flex items-center justify-center text-amber-400 font-bold text-xl">⚡</div>
+                    <h4 class="text-lg font-bold text-white">Instant SMS Links</h4>
+                    <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Text your customer a secure live tracking link in one tap. No app downloads or login friction required on their end.</p>
+                </div>
+                <div class="bg-gradient-to-b from-[#12141c] to-neutral-900 border border-neutral-800/80 rounded-3xl p-6 flex flex-col gap-3 shadow-xl">
+                    <div class="w-12 h-12 bg-amber-400/10 border border-amber-400/20 rounded-2xl flex items-center justify-center text-amber-400 font-bold text-xl">🛰️</div>
+                    <h4 class="text-lg font-bold text-white">Real-Time Telemetry</h4>
+                    <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Powered by Firebase real-time sync. Watch live speed, distance countdown, and accurate ETA stream directly to the client screen.</p>
+                </div>
+                <div class="bg-gradient-to-b from-[#12141c] to-neutral-900 border border-neutral-800/80 rounded-3xl p-6 flex flex-col gap-3 shadow-xl">
+                    <div class="w-12 h-12 bg-amber-400/10 border border-amber-400/20 rounded-2xl flex items-center justify-center text-amber-400 font-bold text-xl">🔒</div>
+                    <h4 class="text-lg font-bold text-white">Professional Security</h4>
+                    <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Built for mobile contractors, delivery drivers, and service fleets with secure cloud authentication and automated billing.</p>
                 </div>
             </div>
         </div>
@@ -359,7 +378,7 @@
             </div>
             <div class="w-full max-w-4xl h-[450px] bg-neutral-900 border border-neutral-800 rounded-3xl relative shadow-2xl flex flex-col overflow-hidden">
                 <div id="customer-map-container" class="w-full h-full rounded-3xl overflow-hidden z-10"></div>
-                <!-- CUSTOMER MAP CONTROLS: Dark with Amber Accents -->
+                <!-- CUSTOMER MAP CONTROLS -->
                 <div class="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
                     <div class="bg-black/80 backdrop-blur-md border border-neutral-800 px-4 py-2 rounded-xl text-xs font-mono pointer-events-auto shadow-lg text-neutral-300">
                         Speed: <span id="cust-speed" class="text-amber-400 font-bold">0 mph</span>
@@ -384,6 +403,37 @@
 
     </main>
 
+    <!-- LIGHT MODE PREVIEW MAP INITIALIZER -->
+    <script>
+        window.initLandingPreviewMap = function() {
+            const container = document.getElementById('landing-preview-map');
+            if (!container || container._leaflet_id) return;
+            try {
+                const map = L.map('landing-preview-map', {
+                    zoomControl: false,
+                    attributionControl: false,
+                    dragging: false,
+                    scrollWheelZoom: false
+                }).setView([29.7604, -95.3698], 13);
+
+                // Clean standard light mode cartodb tiles
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                    maxZoom: 19
+                }).addTo(map);
+
+                L.circleMarker([29.7604, -95.3698], {
+                    radius: 9,
+                    color: '#f59e0b',
+                    fillColor: '#fbbf24',
+                    fillOpacity: 1,
+                    weight: 2
+                }).addTo(map);
+            } catch(e) {
+                console.error("Preview map load error:", e);
+            }
+        };
+    </script>
+
     <!-- FOOTER -->
     <footer class="w-full border-t border-neutral-900 py-6 text-center text-xs text-neutral-500 flex flex-col gap-1">
         <div>© 2026 SeeMyDriver. All rights reserved. Secure Cloud GPS Telemetry.</div>
@@ -391,7 +441,7 @@
     </footer>
 
     <!-- App Scripts -->
-    <script src="js/app.js?v=21"></script>
-    <script src="js/tracker.js?v=21"></script>
+    <script src="js/app.js?v=23"></script>
+    <script src="js/tracker.js?v=23"></script>
 </body>
 </html>
