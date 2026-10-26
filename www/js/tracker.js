@@ -1121,4 +1121,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// ==========================================================
+// LANDING PAGE LIGHT PREVIEW MAP
+// ==========================================================
+window.initLandingPreviewMap = function () {
+    const box = document.getElementById('landing-preview-map');
+    if (!box || typeof L === 'undefined') return;
+    if (box._leaflet_id) { box._leaflet_id = null; box.innerHTML = ''; }
+
+    const map = L.map(box, { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, touchZoom: false });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+        subdomains: 'abcd'
+    }).addTo(map);
+
+    const lat = 29.7604, lng = -95.3698;
+    map.setView([lat, lng], 13);
+    L.marker([lat, lng], { icon: getTruckIcon(45) }).addTo(map);
+};
+
 })();
