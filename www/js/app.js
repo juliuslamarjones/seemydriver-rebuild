@@ -73,6 +73,7 @@ window.handleSignOut = function () {
     localStorage.removeItem('seemydriver_logged_in');
     
     try { sessionStorage.clear(); } catch(e) {}
+    try { window.firebase.auth().signOut(); } catch(e) {}
 
     if (window.smdInApp()) {
         window.switchView('signin-view');
@@ -82,53 +83,46 @@ window.handleSignOut = function () {
 };
 
 // ==========================================================
-// 30-DAY TRIAL & SUBSCRIPTION PAYWALL ENFORCEMENT
+// 30-DAY TRIAL & SUBSCRIPTION PAYWALL
 // ==========================================================
-async function checkAndEnforceSubscription(user, successCallback) {
-    const db = window.firebase && window.firebase.firestore ? window.firebase.firestore() : null;
-    if (!db) {
-        successCallback();
-        return;
-    }
+const API_BASE = 'https://www.seemydriver.com';
+const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/4gM4gz5wvd2Y01r7aNcbC03';
 
-    const userRef = db.collection('users').doc(user.uid);
-    const docSnap = await userRef.get();
-
-    if (!docSnap.exists) {
-        // Fallback safety: If document was missed, initialize trial now
-        await userRef.set({
-            email: user.email,
-            createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
-            subscriptionStatus: 'trial'
+async function getEntitlement(user) {
+    try {
+        const token = await user.getIdToken();
+        const res = await fetch(API_BASE + '/api/entitlement', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + token }
         });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return typeof data.validUntil === 'number' ? data.validUntil : null;
+    } catch (err) {
+        console.error('Entitlement check failed:', err);
+        return null;
+    }
+}
+
+async function checkAndEnforceSubscription(user, successCallback) {
+    const validUntil = await getEntitlement(user);
+
+    if (validUntil === null) {
+        alert('We could not verify your account. Please check your connection and try again.');
+        return;
+    }
+
+    if (validUntil > Date.now()) {
         successCallback();
         return;
     }
 
-    const userData = docSnap.data();
-    
-    // If they already paid, let them straight in
-    if (userData.subscriptionStatus === 'active') {
-        successCallback();
-        return;
-    }
-
-    // Calculate 30-day trial window
-    const createdAt = userData.createdAt ? userData.createdAt.toDate() : new Date();
-    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-    const expirationDate = new Date(createdAt.getTime() + thirtyDaysMs);
-    const now = new Date();
-
-    if (now > expirationDate) {
-        // Trial expired! Lock status and redirect to Stripe
-        await userRef.update({ subscriptionStatus: 'expired' });
-        alert('Your 30-day free trial has expired. Redirecting to subscription checkout...');
-        
-        // REPLACE THIS URL WITH YOUR ACTUAL STRIPE PAYMENT LINK
-        window.location.href = 'https://buy.stripe.com/your_actual_stripe_link_here';
-    } else {
-        successCallback();
-    }
+    alert('Your 30-day free trial has ended. Redirecting to subscription checkout...');
+    localStorage.removeItem('seemydriver_logged_in');
+    try { await window.firebase.auth().signOut(); } catch (e) {}
+    window.location.href = STRIPE_PAYMENT_LINK
+        + '?client_reference_id=' + encodeURIComponent(user.uid)
+        + '&prefilled_email=' + encodeURIComponent(user.email || '');
 }
 
 window.handleSignIn = function () {
@@ -147,9 +141,12 @@ window.handleSignIn = function () {
                 console.log('Signed in successfully:', userCredential.user.email);
                 localStorage.setItem('seemydriver_logged_in', 'true');
                 
-                // Enforce subscription check before granting app access
                 checkAndEnforceSubscription(userCredential.user, () => {
-                    window.switchView('job-setup-view');
+                    if (!window.smdInApp()) {
+                        window.switchView('install-view');
+                    } else {
+                        window.switchView('job-setup-view');
+                    }
                 });
             })
             .catch((error) => {
@@ -177,7 +174,6 @@ window.handleRegister = function () {
                 const user = userCredential.user;
                 console.log('User registered successfully:', user.email);
                 
-                // Initialize user document in Firestore with trial timestamp
                 const db = window.firebase && window.firebase.firestore ? window.firebase.firestore() : null;
                 if (db) {
                     try {
@@ -191,7 +187,6 @@ window.handleRegister = function () {
                     }
                 }
 
-                // Trigger automated welcome email via Resend API endpoint
                 try {
                     await fetch('/api/send-email', {
                         method: 'POST',
@@ -203,7 +198,13 @@ window.handleRegister = function () {
                 }
 
                 localStorage.setItem('seemydriver_logged_in', 'true');
-                window.switchView('job-setup-view');
+
+                // MANDATORY PWA GATE: Route straight to PWA installation instructions instead of browser form
+                if (!window.smdInApp()) {
+                    window.switchView('install-view');
+                } else {
+                    window.switchView('job-setup-view');
+                }
             })
             .catch((error) => {
                 console.error('Registration error:', error.message);
@@ -211,7 +212,11 @@ window.handleRegister = function () {
             });
     } else {
         localStorage.setItem('seemydriver_logged_in', 'true');
-        window.switchView('job-setup-view');
+        if (!window.smdInApp()) {
+            window.switchView('install-view');
+        } else {
+            window.switchView('job-setup-view');
+        }
     }
 };
 
@@ -225,9 +230,8 @@ window.endBroadcastAndHome = function () {
 document.addEventListener('DOMContentLoaded', () => {
     const q = new URLSearchParams(window.location.search);
     const view = q.get('view');
-    
-    // Ensure customer tracking link captures session parameter whether it's named 'sid' or 'session'
     const trackingSession = q.get('sid') || q.get('session');
+    
     if (trackingSession && !q.has('sid')) {
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.set('sid', trackingSession);
@@ -237,7 +241,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const isStandalone = window.smdInApp();
     const isLoggedIn = localStorage.getItem('seemydriver_logged_in') === 'true';
     
-    // PRIORITIZE EXPLICIT QUERY VIEWS & CUSTOMER LINKS
     if (view === 'customer' || trackingSession) {
         window.switchView('customer-view-view');
     } else if (view === 'landing') {
@@ -246,8 +249,12 @@ document.addEventListener('DOMContentLoaded', () => {
         window.switchView('signin-view');
     } else if (view === 'register') {
         window.switchView('register-view');
-    } else if (view === 'job-setup' && isLoggedIn) {
+    } else if (view === 'install') {
+        window.switchView('install-view');
+    } else if (view === 'job-setup' && isLoggedIn && isStandalone) {
         window.switchView('job-setup-view');
+    } else if (isLoggedIn && !isStandalone) {
+        window.switchView('install-view');
     } else if (localStorage.getItem('smd_active_broadcast') === 'true' && localStorage.getItem('smd_session_id') && isStandalone) {
         window.switchView('active-broadcast-view');
     } else if (isStandalone) {

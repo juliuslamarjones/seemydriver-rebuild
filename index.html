@@ -3,74 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SeeMyDriver - Real-Time GPS Telemetry</title>
+    <title>SeeMyDriver - Stop asking "Where are you?"</title>
     
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-
-    <!-- Embedded SafeStorage & Firebase Init -->
-    <script>
-        window.SafeStorage = {
-            getItem(key) {
-                try { return localStorage.getItem(key); } catch (e) { return null; }
-            },
-            setItem(key, val) {
-                try { localStorage.setItem(key, val); } catch (e) {}
-            },
-            removeItem(key) {
-                try { localStorage.removeItem(key); } catch (e) {}
-            },
-            clear() {
-                try { localStorage.clear(); } catch (e) {}
-            }
-        };
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI",
-            authDomain: "seemydriver-prod.firebaseapp.com",
-            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",
-            projectId: "seemydriver-prod",
-            storageBucket: "seemydriver-prod.firebasestorage.app",
-            messagingSenderId: "16366013329",
-            appId: "1:16366013329:web:7e993e6ee37f940a04a064"
-        };
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.database();
-        window.db = db;
-    </script>
-
-    <!-- PWA Background Color Painter -->
-    <script>
-        (function () {
-            var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-            if (standalone) document.documentElement.style.background = '#FFFFFF';
-        })();
-    </script>
-
-    <!-- PWA Manifest Link -->
-    <link rel="manifest" href="/manifest.json?v=3.3">
-
-    <!-- Explicit Mobile & Apple Touch Icon Overrides -->
-    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
-    <link rel="apple-touch-icon" href="/icon-192.png">
-
-    <!-- Service Worker Registration Script -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then(reg => console.log('ServiceWorker registration successful with scope: ', reg.scope))
-                    .catch(err => console.log('ServiceWorker registration failed: ', err));
-            });
-        }
-    </script>
-
-    <!-- Tailwind CSS CDN -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -78,370 +13,261 @@
             theme: {
                 extend: {
                     colors: {
-                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
-                    },
-                    keyframes: {
-                        wave: {
-                            '0%, 100%': { transform: 'rotate(0deg)' },
-                            '20%, 60%': { transform: 'rotate(18deg)' },
-                            '40%, 80%': { transform: 'rotate(-12deg)' },
+                        neutral: {
+                            950: '#0a0a0a',
                         }
-                    },
-                    animation: {
-                        'wave-slow': 'wave 2.2s infinite ease-in-out',
                     }
                 }
             }
         }
     </script>
 
-    <!-- Mapbox GL JS CSS & JS -->
-    <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
-    <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
-
     <!-- Leaflet CSS & JS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
-    <!-- Custom Styling -->
-    <link rel="stylesheet" href="css/style.css">
+    <!-- Firebase App, Auth, Firestore & Realtime Database SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
     <style>
-        .mapboxgl-popup-content { background: #12141c !important; color: #fff !important; border-radius: 12px; border: 1px solid #262626; }
-        .pro-vehicle-marker { background: transparent !important; border: none !important; }
-        
-        #brand-logo, .brand-logo {
-            width: 4rem !important;
-            height: 4rem !important;
-            min-width: 4rem !important;
-            min-height: 4rem !important;
-        }
-        @media (min-width: 640px) {
-            #brand-logo, .brand-logo {
-                width: 4.5rem !important;
-                height: 4.5rem !important;
-                min-width: 4.5rem !important;
-                min-height: 4.5rem !important;
-            }
-        }
-
-        /* Leaflet Zoom Control Overrides */
-        .leaflet-control-zoom {
-            border: 1px solid #d1d5db !important;
-            border-radius: 12px !important;
-            overflow: hidden;
-            background: #fff !important;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15) !important;
-            margin-top: 12px !important;
-            margin-left: 12px !important;
-        }
-        .leaflet-control-zoom a {
-            background-color: #fff !important;
-            color: #1f2937 !important;
-            border-bottom: 1px solid #e5e7eb !important;
-            width: 36px !important;
-            height: 36px !important;
-            line-height: 36px !important;
-            font-size: 18px !important;
-            font-weight: bold !important;
-        }
-        .leaflet-control-zoom a:hover {
-            background-color: #f3f4f6 !important;
-            color: #f59e0b !important;
-        }
-        .leaflet-control-zoom a.leaflet-control-zoom-out {
-            border-bottom: none !important;
-        }
+        body { background-color: #0a0a0a; color: #f5f5f5; font-family: system-ui, -apple-system, sans-serif; }
+        .custom-truck-svg-marker { background: transparent; border: none; }
+        .custom-pin-marker { background: transparent; border: none; text-align: center; }
+        .custom-driver-label-marker { background: transparent; border: none; }
     </style>
 </head>
-<body class="bg-black text-white min-h-screen flex flex-col font-sans selection:bg-amber-400 selection:text-black antialiased">
+<body class="min-h-screen flex flex-col antialiased selection:bg-amber-500 selection:text-black">
 
-    <!-- HEADER / NAVBAR -->
-    <header class="w-full border-b border-neutral-900 bg-black/80 backdrop-blur-md sticky top-0 z-50 px-3 sm:px-8 py-4 flex items-center justify-between">
-        <div class="flex items-center gap-3 cursor-pointer" onclick="window.switchView('landing', true)">
-            <div id="brand-logo" class="w-16 h-16 sm:w-20 sm:h-20 bg-amber-400 rounded-2xl flex items-center justify-center shadow-[0_0_25px_rgba(251,191,36,0.5)] shrink-0 overflow-hidden">
-                <span class="text-black font-black text-2xl sm:text-3xl">👀</span>
-            </div>
-            <span id="brand-name" class="font-black tracking-tight text-3xl sm:text-4xl text-white">See<span class="text-amber-400">MyDriver</span></span>
+    <!-- GLOBAL HEADER -->
+    <header class="w-full border-b border-neutral-800 bg-neutral-950/80 backdrop-blur sticky top-0 z-50 px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center space-x-2 cursor-pointer" onclick="switchView('landing')">
+            <div class="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center font-black text-neutral-950 text-sm">SMD</div>
+            <span class="font-extrabold tracking-tight text-lg">SeeMyDriver</span>
         </div>
-        <div id="header-nav-actions" class="flex items-center gap-2 shrink-0"></div>
+        <div id="header-nav-actions" class="flex items-center space-x-3">
+            <button onclick="switchView('signin')" class="text-xs font-bold text-neutral-300 hover:text-white px-3 py-1.5 transition">Sign In</button>
+            <button onclick="switchView('register')" class="text-xs font-bold bg-amber-500 hover:bg-amber-400 text-neutral-950 px-4 py-1.5 rounded-lg transition shadow-md">Create Account</button>
+        </div>
     </header>
 
-    <!-- MAIN CONTAINER -->
-    <main class="flex-1 flex flex-col items-center justify-start w-full relative">
+    <!-- MAIN APP VIEWS CONTAINER -->
+    <main class="flex-1 flex flex-col">
 
-        <!-- LANDING VIEW -->
-        <div id="landing-view" class="app-view w-full max-w-5xl flex flex-col items-center text-center gap-10 py-4 sm:py-8 px-3 sm:px-4 hidden" style="display: none; height: auto !important; min-height: 100vh; overflow-y: auto !important;">
-            <div class="relative w-full flex flex-col items-center gap-4 sm:gap-6 pt-1">
-                <div class="absolute -top-12 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
-                <div class="inline-flex items-center gap-2 bg-gradient-to-r from-neutral-900 via-[#12141c] to-neutral-900 border border-amber-400/30 text-amber-300 font-bold text-[11px] sm:text-sm py-1.5 px-4 sm:px-6 rounded-full shadow-[0_0_25px_rgba(251,191,36,0.1)] backdrop-blur-md">
-                    <span class="animate-pulse">🔥</span>
-                    <span>30-Day Free Trial — Then $29/month Solo Plan</span>
-                    <span>🔥</span>
+        <!-- 1. LANDING VIEW (Public - Gated, No Public Install Buttons) -->
+        <div id="landing-view" class="app-view flex-1 flex flex-col justify-center items-center px-4 py-16 text-center">
+            <div class="max-w-2xl mx-auto space-y-6">
+                <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold uppercase tracking-wider">
+                    <span>⚡ Professional Fleet & Driver Tracking</span>
                 </div>
-                <h1 class="text-4xl sm:text-7xl font-black tracking-tight text-white leading-[1.08] max-w-3xl">
-                    Stop asking <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 drop-shadow-[0_0_35px_rgba(251,191,36,0.3)]">"Where are you?"</span>
+                <h1 class="text-4xl sm:text-6xl font-black tracking-tight">
+                    Stop asking <span class="text-amber-500">"Where are you?"</span>
                 </h1>
-                <p class="text-sm sm:text-lg text-neutral-400 leading-relaxed max-w-2xl px-1">
-                    Stream your exact live GPS coordinates straight from your device browser to your clients in real time. Zero friction, sub-second latency, and total professional peace of mind.
+                <p class="text-neutral-400 text-base sm:text-lg max-w-xl mx-auto">
+                    Real-time GPS tracking designed specifically for drivers and service providers. Share secure live links with clients instantly.
                 </p>
-                <div class="flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-lg mt-2">
-                    <button id="pwa-install-btn" onclick="window.installPWA()" class="w-full sm:w-auto bg-neutral-800 hover:bg-neutral-700 text-amber-400 border border-amber-400/30 font-bold text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.15)] text-center cursor-pointer flex items-center justify-center gap-2">
-                        <span>Install App</span> 📱
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
+                    <button onclick="switchView('register')" class="w-full sm:w-auto px-8 py-3.5 bg-amber-500 hover:bg-amber-400 text-neutral-950 font-extrabold rounded-xl transition shadow-lg text-sm">
+                        Create Account & Get Started
                     </button>
-                    <button onclick="window.switchView('register')" class="w-full sm:w-auto bg-amber-400 hover:bg-amber-300 text-black font-black text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition shadow-[0_0_30px_rgba(251,191,36,0.25)] text-center cursor-pointer flex items-center justify-center gap-2">
-                        <span>Get Started Free</span> →
+                    <button onclick="switchView('signin')" class="w-full sm:w-auto px-8 py-3.5 bg-neutral-900 hover:bg-neutral-800 text-white font-bold rounded-xl border border-neutral-800 transition text-sm">
+                        Sign In to Dashboard
                     </button>
-                    <button onclick="window.switchView('signin')" class="w-full sm:w-auto bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition border border-neutral-800 cursor-pointer whitespace-nowrap">
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. SIGN IN VIEW -->
+        <div id="signin-view" class="app-view hidden flex-1 flex flex-col justify-center items-center px-4 py-12">
+            <div class="max-w-md w-full bg-neutral-900 border border-neutral-800 rounded-2xl p-8 shadow-2xl">
+                <h2 class="text-2xl font-extrabold tracking-tight mb-2">Welcome Back</h2>
+                <p class="text-neutral-400 text-xs mb-6">Sign in to access your driver tracking dashboard.</p>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-neutral-300 mb-1">Email Address</label>
+                        <input type="email" id="signin-email" class="w-full px-4 py-3 bg-neutral-950 border border-neutral-800 rounded-xl text-sm focus:outline-none focus:border-amber-500 text-white" placeholder="driver@example.com">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-neutral-300 mb-1">Password</label>
+                        <input type="password" id="signin-password" class="w-full px-4 py-3 bg-neutral-950 border border-neutral-800 rounded-xl text-sm focus:outline-none focus:border-amber-500 text-white" placeholder="••••••••">
+                    </div>
+                    <button onclick="handleSignIn()" class="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-neutral-950 font-extrabold rounded-xl transition shadow-lg mt-2">
                         Sign In
                     </button>
                 </div>
-                <span class="text-[10px] sm:text-[11px] text-neutral-500">Works seamlessly on mobile browsers. Customers track instantly via any web link.</span>
-            </div>
-
-            <!-- PREVIEW CARD WITH OSM LIGHT MAP -->
-            <div class="w-full bg-gradient-to-b from-[#12141c] to-neutral-900 border border-neutral-800/80 rounded-3xl p-5 sm:p-8 shadow-2xl relative overflow-hidden text-left">
-                <div class="absolute top-0 right-0 bg-amber-400/10 text-amber-400 text-[10px] font-black uppercase tracking-widest px-3 sm:px-4 py-1.5 rounded-bl-2xl border-l border-b border-amber-400/20 z-30">Live Simulation Preview</div>
-                <div class="flex flex-col md:flex-row items-center justify-between gap-6">
-                    <div class="flex flex-col gap-3 max-w-md">
-                        <div class="inline-block bg-emerald-500/10 text-emerald-400 text-xs font-bold px-3 py-1 rounded-full w-fit border border-emerald-500/20">● Live GPS Broadcast Active</div>
-                        <h3 class="text-xl sm:text-2xl font-bold text-white">Real-Time Client Telemetry</h3>
-                        <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Your customers get a secure, clean web link showing your exact moving position, route distance, and live ETA without downloading a single app.</p>
-                    </div>
-                    <div class="w-full md:w-80 bg-white border border-neutral-300 rounded-2xl p-3 flex flex-col gap-2.5 shadow-inner">
-                        <div class="flex items-center justify-between text-[11px] text-neutral-600 px-1 font-mono">
-                            <span class="text-emerald-600 font-bold animate-pulse">● LIVE ROUTE TELEMETRY</span>
-                            <span id="preview-speed" class="text-amber-600 font-bold">45 mph</span>
-                        </div>
-                        <div id="landing-preview-map" class="w-full h-48 bg-neutral-100 rounded-xl border border-neutral-200 relative overflow-hidden z-10 shadow-inner"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- FEATURE DESCRIPTIONS -->
-            <div class="w-full grid grid-cols-1 md:grid-cols-3 gap-6 text-left my-4">
-                <div class="bg-gradient-to-b from-[#12141c] to-neutral-900 border border-neutral-800/80 rounded-3xl p-6 flex flex-col gap-3 shadow-xl">
-                    <div class="w-12 h-12 bg-amber-400/10 border border-amber-400/20 rounded-2xl flex items-center justify-center text-amber-400 font-bold text-xl">⚡</div>
-                    <h4 class="text-lg font-bold text-white">Instant SMS Links</h4>
-                    <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Text your customer a secure live tracking link in one tap. No app downloads or login friction required on their end.</p>
-                </div>
-                <div class="bg-gradient-to-b from-[#12141c] to-neutral-900 border border-neutral-800/80 rounded-3xl p-6 flex flex-col gap-3 shadow-xl">
-                    <div class="w-12 h-12 bg-amber-400/10 border border-amber-400/20 rounded-2xl flex items-center justify-center text-amber-400 font-bold text-xl">🛰️</div>
-                    <h4 class="text-lg font-bold text-white">Real-Time Telemetry</h4>
-                    <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Powered by Firebase real-time sync. Watch live speed, distance countdown, and accurate ETA stream directly to the client screen.</p>
-                </div>
-                <div class="bg-gradient-to-b from-[#12141c] to-neutral-900 border border-neutral-800/80 rounded-3xl p-6 flex flex-col gap-3 shadow-xl">
-                    <div class="w-12 h-12 bg-amber-400/10 border border-amber-400/20 rounded-2xl flex items-center justify-center text-amber-400 font-bold text-xl">🔒</div>
-                    <h4 class="text-lg font-bold text-white">Professional Security</h4>
-                    <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Built for mobile contractors, delivery drivers, and service fleets with secure cloud authentication and automated billing.</p>
-                </div>
+                
+                <p class="text-center text-xs text-neutral-400 mt-6">
+                    Don't have an account? <span onclick="switchView('register')" class="text-amber-400 font-bold cursor-pointer hover:underline">Create Account</span>
+                </p>
             </div>
         </div>
 
-        <!-- SIGN IN VIEW -->
-        <div id="signin-view" class="app-view w-full max-w-md flex flex-col items-center justify-center p-6 my-auto hidden" style="display: none;">
-            <div class="w-full bg-gradient-to-b from-[#161923] to-[#0f1117] border border-neutral-800 rounded-3xl p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex flex-col gap-8 text-left relative overflow-hidden">
-                <div class="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
-                <div class="flex flex-col gap-3">
-                    <div class="flex items-center gap-3">
-                        <h2 class="text-3xl sm:text-4xl font-black tracking-tight text-white">Welcome Back</h2>
-                        <span class="inline-block text-4xl sm:text-5xl animate-wave-slow origin-[70%_70%] drop-shadow-[0_0_15px_rgba(251,191,36,0.4)]">👋</span>
+        <!-- 3. REGISTER VIEW -->
+        <div id="register-view" class="app-view hidden flex-1 flex flex-col justify-center items-center px-4 py-12">
+            <div class="max-w-md w-full bg-neutral-900 border border-neutral-800 rounded-2xl p-8 shadow-2xl">
+                <h2 class="text-2xl font-extrabold tracking-tight mb-2">Create Account</h2>
+                <p class="text-neutral-400 text-xs mb-6">Start your 30-day free trial. Setup takes 30 seconds.</p>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-neutral-300 mb-1">Email Address</label>
+                        <input type="email" id="reg-email" class="w-full px-4 py-3 bg-neutral-950 border border-neutral-800 rounded-xl text-sm focus:outline-none focus:border-amber-500 text-white" placeholder="driver@example.com">
                     </div>
-                    <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Sign in with your email and password to access your live broadcast and dispatch control panel.</p>
-                </div>
-                <div class="flex flex-col gap-5">
-                    <div class="flex flex-col gap-2">
-                        <label class="text-[11px] font-black uppercase tracking-wider text-neutral-300">Email Address</label>
-                        <input type="email" id="signin-email" placeholder="driver@business.com" class="w-full bg-neutral-900 border border-neutral-800 rounded-2xl px-4.5 py-3.5 text-sm text-white focus:outline-none focus:border-amber-400 transition shadow-inner">
+                    <div>
+                        <label class="block text-xs font-bold text-neutral-300 mb-1">Password</label>
+                        <input type="password" id="reg-password" class="w-full px-4 py-3 bg-neutral-950 border border-neutral-800 rounded-xl text-sm focus:outline-none focus:border-amber-500 text-white" placeholder="••••••••">
                     </div>
-                    <div class="flex flex-col gap-2">
-                        <label class="text-[11px] font-black uppercase tracking-wider text-neutral-300">Password</label>
-                        <div class="relative w-full">
-                            <input type="password" id="signin-password" placeholder="••••••••" class="w-full bg-neutral-900 border border-neutral-800 rounded-2xl px-4.5 py-3.5 pr-12 text-sm text-white focus:outline-none focus:border-amber-400 transition shadow-inner">
-                            <button type="button" onclick="const p = document.getElementById('signin-password'); p.type = p.type === 'password' ? 'text' : 'password'; this.textContent = p.type === 'password' ? '👁️' : '🙈';" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white text-base cursor-pointer select-none">👁️</button>
-                        </div>
-                    </div>
-                    <button onclick="window.handleSignIn()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.3)] cursor-pointer mt-2">
-                        Sign In to Broadcast →
+                    <button onclick="handleRegister()" class="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-neutral-950 font-extrabold rounded-xl transition shadow-lg mt-2">
+                        Start Free Trial & Register
                     </button>
                 </div>
+
+                <p class="text-center text-xs text-neutral-400 mt-6">
+                    Already have an account? <span onclick="switchView('signin')" class="text-amber-400 font-bold cursor-pointer hover:underline">Sign In</span>
+                </p>
             </div>
         </div>
 
-        <!-- REGISTER VIEW -->
-        <div id="register-view" class="app-view w-full max-w-md flex flex-col items-center justify-center p-6 my-auto hidden" style="display: none;">
-            <div class="w-full bg-[#12141c] border border-neutral-800 rounded-3xl p-8 shadow-2xl flex flex-col gap-6 text-left">
-                <div class="flex flex-col gap-2">
-                    <h2 class="text-2xl font-black text-white">Get Started Free</h2>
-                    <p class="text-xs text-neutral-400">30-Day Free Trial — Then $29/month Solo Plan.</p>
+        <!-- 4. PWA MANDATORY INSTALL VIEW -->
+        <div id="install-view" class="app-view hidden flex-1 flex flex-col justify-center items-center px-4 py-12">
+            <div class="max-w-md w-full bg-neutral-900 border border-neutral-800 rounded-2xl p-8 shadow-2xl text-center">
+                <div class="w-16 h-16 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-6 text-2xl font-black">
+                    📱
                 </div>
-                <div class="flex flex-col gap-4">
-                    <div class="flex flex-col gap-1.5">
-                        <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Email Address</label>
-                        <input type="email" id="reg-email" placeholder="driver@business.com" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition">
-                    </div>
-                    <div class="flex flex-col gap-1.5">
-                        <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Password</label>
-                        <div class="relative w-full">
-                            <input type="password" id="reg-password" placeholder="••••••••" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 pr-12 text-sm text-white focus:outline-none focus:border-amber-400 transition">
-                            <button type="button" onclick="const p = document.getElementById('reg-password'); p.type = p.type === 'password' ? 'text' : 'password'; this.textContent = p.type === 'password' ? '👁️' : '🙈';" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white text-base cursor-pointer select-none">👁️</button>
-                        </div>
-                    </div>
-                    <button onclick="window.handleRegister()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-3.5 rounded-xl transition shadow-lg cursor-pointer">
-                        Create Free Account →
-                    </button>
+                <h2 class="text-2xl font-extrabold tracking-tight mb-2">Install SeeMyDriver</h2>
+                <p class="text-neutral-400 text-xs sm:text-sm mb-6">
+                    Account created! SeeMyDriver runs as an installed Progressive Web App (PWA) to ensure reliable background GPS tracking when your phone screen dims or locks.
+                </p>
+
+                <div class="space-y-2 mb-8 text-left bg-neutral-950 p-4 rounded-xl border border-neutral-800/80 text-xs text-neutral-300">
+                    <p class="font-bold text-amber-400 mb-1">How to install on your device:</p>
+                    <p>1. Tap your browser menu icon (three dots <span class="font-bold text-white">⋮</span> in Chrome/Safari).</p>
+                    <p>2. Select <span class="font-bold text-white">"Install app"</span> or <span class="font-bold text-white">"Add to Home Screen"</span>.</p>
+                    <p>3. Open the app from your home screen to start broadcasting.</p>
                 </div>
+
+                <button onclick="installPWA()" class="w-full py-3 px-4 bg-amber-500 hover:bg-amber-400 text-neutral-950 font-extrabold rounded-xl transition shadow-lg mb-3 text-xs sm:text-sm">
+                    Install App Now
+                </button>
+
+                <button onclick="window.location.reload()" class="w-full py-2.5 px-4 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold rounded-xl transition text-xs">
+                    I've Installed It — Open Dashboard
+                </button>
             </div>
         </div>
 
-        <!-- JOB SETUP VIEW -->
-        <div id="job-setup-view" class="app-view w-full max-w-xl flex flex-col items-center p-4 sm:p-6 my-auto hidden" style="display: none;">
-            <div class="w-full bg-[#12141c] border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col gap-6 text-left">
-                <div class="flex items-center justify-between">
-                    <div class="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/20 text-amber-300 font-bold text-xs py-1.5 px-4 rounded-full w-fit">
-                        📍 STEP 1 OF 2: JOB SETUP
+        <!-- 5. JOB SETUP VIEW (Driver Broadcast Config) -->
+        <div id="job-setup-view" class="app-view hidden flex-1 flex flex-col justify-center items-center px-4 py-8">
+            <div class="max-w-lg w-full bg-neutral-900 border border-neutral-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
+                <div class="flex items-center justify-between mb-6">
+                    <div>
+                        <h2 class="text-xl sm:text-2xl font-extrabold tracking-tight">Start Broadcast</h2>
+                        <p class="text-neutral-400 text-xs">Enter trip details and destination address.</p>
                     </div>
-                    <button onclick="window.handleSignOut()" class="text-xs text-neutral-400 hover:text-amber-400 font-bold transition cursor-pointer">
-                        Sign Out 🚪
-                    </button>
+                    <button onclick="handleSignOut()" class="text-xs text-neutral-400 hover:text-red-400 font-bold px-3 py-1.5 rounded-lg border border-neutral-800 transition">Sign Out</button>
                 </div>
-                <div class="flex flex-col gap-4">
+
+                <div class="space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Driver Name</label>
-                            <input type="text" id="job-driver-name" placeholder="Driver Name" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition">
+                        <div>
+                            <label class="block text-xs font-bold text-neutral-300 mb-1">Driver Name</label>
+                            <input type="text" id="job-driver-name" class="w-full px-4 py-3 bg-neutral-950 border border-neutral-800 rounded-xl text-sm focus:outline-none focus:border-amber-500 text-white" placeholder="Your Name">
                         </div>
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Driver Phone</label>
-                            <input type="tel" id="job-driver-phone" placeholder="(555) 000-0000" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition">
+                        <div>
+                            <label class="block text-xs font-bold text-neutral-300 mb-1">Driver Phone (Optional)</label>
+                            <input type="tel" id="job-driver-phone" class="w-full px-4 py-3 bg-neutral-950 border border-neutral-800 rounded-xl text-sm focus:outline-none focus:border-amber-500 text-white" placeholder="Phone Number">
                         </div>
                     </div>
+
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Client Name</label>
-                            <input type="text" id="job-cust-name" placeholder="John Smith" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition">
+                        <div>
+                            <label class="block text-xs font-bold text-neutral-300 mb-1">Customer Name</label>
+                            <input type="text" id="job-cust-name" class="w-full px-4 py-3 bg-neutral-950 border border-neutral-800 rounded-xl text-sm focus:outline-none focus:border-amber-500 text-white" placeholder="Client Name">
                         </div>
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Client Mobile Number</label>
-                            <input type="tel" id="job-cust-phone" placeholder="(555) 000-0000" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition">
+                        <div>
+                            <label class="block text-xs font-bold text-neutral-300 mb-1">Customer Phone (Optional)</label>
+                            <input type="tel" id="job-cust-phone" class="w-full px-4 py-3 bg-neutral-950 border border-neutral-800 rounded-xl text-sm focus:outline-none focus:border-amber-500 text-white" placeholder="Client Phone">
                         </div>
                     </div>
-                    <div class="flex flex-col gap-1.5 relative">
-                        <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Destination Address *</label>
-                        <input type="text" id="job-cust-address" placeholder="Enter street address..." oninput="window.handleAddressInput(this.value)" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition" autocomplete="off">
-                        <div id="address-suggestions" class="hidden absolute top-full left-0 right-0 mt-1.5 bg-[#161923] border border-neutral-800 rounded-xl shadow-2xl max-h-56 overflow-y-auto z-50"></div>
+
+                    <div class="relative">
+                        <label class="block text-xs font-bold text-neutral-300 mb-1">Destination Address</label>
+                        <input type="text" id="job-cust-address" oninput="handleAddressInput(this.value)" autocomplete="off" class="w-full px-4 py-3 bg-neutral-950 border border-neutral-800 rounded-xl text-sm focus:outline-none focus:border-amber-500 text-white" placeholder="Enter street address or location...">
+                        <div id="address-suggestions" class="hidden absolute left-0 right-0 top-full mt-1 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl z-50 overflow-hidden max-h-48 overflow-y-auto"></div>
                     </div>
-                    <button onclick="window.launchLiveBroadcast()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition shadow-[0_0_30px_rgba(251,191,36,0.25)] cursor-pointer flex items-center justify-center gap-2 mt-2">
-                        <span>Start Cloud Broadcast</span> 🚀
+
+                    <button onclick="launchLiveBroadcast()" class="w-full py-4 bg-amber-500 hover:bg-amber-400 text-neutral-950 font-extrabold rounded-xl transition shadow-xl text-sm sm:text-base mt-2">
+                        🚀 Launch Live Broadcast
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- ACTIVE BROADCAST VIEW -->
-        <div id="active-broadcast-view" class="app-view w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4 hidden" style="display: none;">
-            <div class="w-full max-w-4xl h-[450px] bg-neutral-900 border border-neutral-800 rounded-3xl relative shadow-2xl flex flex-col overflow-hidden">
-                <div id="driver-map-container" class="w-full h-full rounded-3xl overflow-hidden z-10"></div>
-                <div class="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
-                    <div class="bg-black/80 backdrop-blur-md border border-neutral-800 px-4 py-2 rounded-xl text-xs font-mono pointer-events-auto shadow-lg text-neutral-300">
-                        Speed: <span id="driver-map-speed" class="text-amber-400 font-bold">0 mph</span>
-                    </div>
-                    <div class="flex items-center gap-2 pointer-events-auto">
-                        <button onclick="window.fitDriverMap()" class="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow">Fit Both</button>
-                        <button onclick="window.recenterDriverMap()" class="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-amber-400 text-xs font-bold px-3.5 py-2 rounded-xl shadow">Recenter</button>
-                        <button onclick="window.openDriverDirections()" class="bg-amber-400 hover:bg-amber-300 text-black text-xs font-black px-4 py-2 rounded-xl shadow">Directions</button>
-                    </div>
+        <!-- 6. ACTIVE BROADCAST VIEW (Driver GPS Map & Telemetry) -->
+        <div id="active-broadcast-view" class="app-view hidden flex-1 flex flex-col relative">
+            <div id="driver-map-container" class="flex-1 w-full h-full min-h-[70vh]"></div>
+            
+            <!-- Bottom Telemetry & Controls Toolbar -->
+            <div class="bg-neutral-900/90 border-t border-neutral-800 p-4 flex flex-wrap items-center justify-between gap-3 z-30 backdrop-blur">
+                <div class="flex items-center space-x-3">
+                    <div class="px-3 py-1.5 rounded-lg bg-neutral-950 border border-neutral-800 text-xs font-mono font-bold text-amber-400" id="driver-map-speed">0 mph</div>
+                    <span class="text-xs text-neutral-400 font-medium">Broadcasting Live</span>
                 </div>
-            </div>
-            <div class="w-full max-w-4xl flex flex-col gap-3">
-                <button onclick="window.textTrackingLink()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm py-4 rounded-2xl transition shadow-lg cursor-pointer">💬 Text Tracking Link to Client</button>
-                <button onclick="window.copyTrackingLink()" class="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white font-bold text-sm py-3.5 rounded-2xl transition cursor-pointer">📋 Copy Link to Clipboard</button>
-                <button onclick="window.endBroadcastAndHome()" class="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 font-bold text-sm py-3.5 rounded-2xl transition cursor-pointer">← End Broadcast & New Job</button>
+                <div class="flex items-center space-x-2">
+                    <button onclick="copyTrackingLink()" class="px-3 py-2 bg-neutral-800 hover:bg-neutral-700 text-xs font-bold rounded-xl transition text-white">Copy Link</button>
+                    <button onclick="textTrackingLink()" class="px-3 py-2 bg-amber-500 hover:bg-amber-400 text-xs font-bold rounded-xl transition text-neutral-950">Text Link</button>
+                    <button onclick="endBroadcastAndHome()" class="px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/30 text-xs font-bold rounded-xl transition">End</button>
+                </div>
             </div>
         </div>
 
-        <!-- CUSTOMER TRACKING VIEW -->
-        <div id="customer-view-view" class="app-view w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4 hidden" style="display: none;">
-            <div class="w-full max-w-4xl bg-[#12141c] border border-neutral-800 rounded-2xl p-6 sm:p-8 flex flex-col items-center text-center gap-2 shadow-lg">
-                <h2 class="text-xl sm:text-2xl font-black text-amber-400 tracking-tight">Thank you for being a valued customer!</h2>
-                <span id="cust-driver-header" class="text-3xl sm:text-4xl font-black text-white mt-1">Driver</span>
-                <span id="cust-status-pill" class="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold px-3 py-1 rounded-full mt-2">● Connected</span>
-            </div>
-            <div class="w-full max-w-4xl grid grid-cols-2 gap-4">
-                <div class="bg-[#12141c] border border-neutral-800 rounded-2xl p-4 flex flex-col gap-1 text-left">
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Estimated ETA</span>
-                    <span id="cust-eta-sub" class="text-xl sm:text-2xl font-black text-white">-- mins</span>
+        <!-- 7. CUSTOMER VIEW (Live Client Tracking Map) -->
+        <div id="customer-view-view" class="app-view hidden flex-1 flex flex-col relative">
+            <!-- Customer Top Header Bar -->
+            <div class="absolute top-4 left-4 right-4 z-30 bg-neutral-900/95 border border-neutral-800 rounded-2xl p-4 shadow-2xl backdrop-blur flex items-center justify-between">
+                <div>
+                    <h3 id="cust-driver-header" class="text-sm font-extrabold text-white">Connecting to driver...</h3>
+                    <p id="cust-eta-sub" class="text-xs text-amber-400 font-bold mt-0.5">-- mins</p>
                 </div>
-                <div class="bg-[#12141c] border border-neutral-800 rounded-2xl p-4 flex flex-col gap-1 text-left">
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Distance Away</span>
-                    <span id="cust-distance" class="text-xl sm:text-2xl font-black text-white">-- mi</span>
-                </div>
-            </div>
-            <div class="w-full max-w-4xl h-[450px] bg-neutral-900 border border-neutral-800 rounded-3xl relative shadow-2xl flex flex-col overflow-hidden">
-                <div id="customer-map-container" class="w-full h-full rounded-3xl overflow-hidden z-10"></div>
-                <!-- CUSTOMER MAP CONTROLS -->
-                <div class="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
-                    <div class="bg-black/80 backdrop-blur-md border border-neutral-800 px-4 py-2 rounded-xl text-xs font-mono pointer-events-auto shadow-lg text-neutral-300">
-                        Speed: <span id="cust-speed" class="text-amber-400 font-bold">0 mph</span>
-                    </div>
-                    <div class="flex items-center gap-2 pointer-events-auto">
-                        <button onclick="window.fitCustomerMap()" class="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow">Fit Both</button>
-                        <button onclick="window.recenterCustomerMap()" class="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-amber-400 text-xs font-bold px-3.5 py-2 rounded-xl shadow">Recenter</button>
-                    </div>
+                <div class="flex items-center space-x-2">
+                    <div id="cust-status-pill" class="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold px-3 py-1 rounded-full">● Connecting</div>
                 </div>
             </div>
 
-            <!-- Call & Message Buttons for Customer -->
-            <div class="w-full max-w-4xl grid grid-cols-2 gap-3">
-                <a id="cust-call-btn" href="#" class="bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white font-bold text-sm py-4 rounded-2xl transition text-center flex items-center justify-center gap-2">
-                    📞 Call Driver
-                </a>
-                <a id="cust-msg-btn" href="#" class="bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition text-center flex items-center justify-center gap-2 shadow-lg">
-                    💬 Message
-                </a>
+            <div id="customer-map-container" class="flex-1 w-full h-full min-h-[70vh]"></div>
+
+            <!-- Customer Bottom Telemetry Bar -->
+            <div class="bg-neutral-900/90 border-t border-neutral-800 p-4 flex items-center justify-between z-30 backdrop-blur text-xs font-medium">
+                <div>Distance: <span id="cust-distance" class="font-bold text-white">-- mi</span></div>
+                <div>Speed: <span id="cust-speed" class="font-bold text-white">-- mph</span></div>
             </div>
         </div>
 
     </main>
 
-    <!-- OPENSTREETMAP LIGHT MODE PREVIEW MAP INITIALIZER -->
+    <!-- FIREBASE INIT & APPLICATION CONTROLLERS -->
     <script>
-        window.initLandingPreviewMap = function() {
-            const container = document.getElementById('landing-preview-map');
-            if (!container || container._leaflet_id) return;
-            try {
-                const map = L.map('landing-preview-map', {
-                    zoomControl: false,
-                    attributionControl: false,
-                    dragging: false,
-                    scrollWheelZoom: false
-                }).setView([29.7604, -95.3698], 13);
-
-                // Standard OpenStreetMap tiles (Clean, free, zero watermarks)
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19
-                }).addTo(map);
-
-                L.circleMarker([29.7604, -95.3698], {
-                    radius: 9,
-                    color: '#f59e0b',
-                    fillColor: '#fbbf24',
-                    fillOpacity: 1,
-                    weight: 2
-                }).addTo(map);
-            } catch(e) {
-                console.error("Preview map load error:", e);
-            }
+        // Initialize Firebase config matching production setup
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-placeholder-key-for-client",
+            authDomain: "seemydriver-prod.firebaseapp.com",
+            projectId: "seemydriver-prod",
+            storageBucket: "seemydriver-prod.appspot.com",
+            messagingSenderId: "1234567890",
+            appId: "1:1234567890:web:abcdef",
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com"
         };
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        window.db = firebase.database();
     </script>
 
-    <!-- FOOTER -->
-    <footer class="w-full border-t border-neutral-900 py-6 text-center text-xs text-neutral-500 flex flex-col gap-1">
-        <div>© 2026 SeeMyDriver. All rights reserved. Secure Cloud GPS Telemetry.</div>
-        <div class="font-bold text-neutral-400">Developed & Architected by Julius Jones</div>
-    </footer>
-
-    <!-- App Scripts -->
-    <script src="js/app.js?v=24"></script>
-    <script src="js/tracker.js?v=24"></script>
+    <!-- App Controllers -->
+    <script src="app.js"></script>
+    <script src="tracker.js"></script>
 </body>
 </html>

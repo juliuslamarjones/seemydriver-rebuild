@@ -31,6 +31,13 @@ const TRUCK_ICON_OFFSET_DEG = 0;
 
 // ---------- Broadcast Launch Handler ----------
 window.launchLiveBroadcast = function() {
+    // Broadcasts are owned by a signed-in account (the database rules check this too)
+    const authUser = window.firebase && window.firebase.auth ? window.firebase.auth().currentUser : null;
+    if (!authUser) {
+        alert('Please sign in to start a broadcast.');
+        return;
+    }
+
     const driverName = document.getElementById('job-driver-name').value.trim();
     const driverPhone = document.getElementById('job-driver-phone').value.trim();
     const custName = document.getElementById('job-cust-name').value.trim();
@@ -68,6 +75,7 @@ window.launchLiveBroadcast = function() {
 
     if (database) {
         database.ref('broadcasts/' + sid).set({
+            ownerUid: authUser.uid,
             driverName: driverName,
             driverPhone: driverPhone,
             lat: null, 
@@ -80,6 +88,9 @@ window.launchLiveBroadcast = function() {
             timestamp: Date.now()
         }).catch((err) => {
             console.error("Firebase broadcast initialization failed:", err);
+            if (err && err.code === 'PERMISSION_DENIED') {
+                broadcastDenied();
+            }
         });
     }
 
@@ -177,6 +188,19 @@ function toast(msg) {
     t.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#fbbf24;color:#000;font:700 12px sans-serif;padding:10px 16px;border-radius:12px;z-index:99999';
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 2200);
+}
+
+// The database refused the broadcast: free trial over or account not verified yet.
+function broadcastDenied() {
+    LS.removeItem('smd_active_broadcast');
+    LS.removeItem('smd_session_id');
+    LS.removeItem('smd_started_at');
+    window.activeSessionId = undefined;
+    try { window.stopRealTimeTracking(); } catch (e) {}
+    try { teardownDriver(); } catch (e) {}
+    try { resetGpsState(); } catch (e) {}
+    alert('Your broadcast could not start. Your free trial may have ended, or your account has not been verified yet. Please sign out and sign back in. If the trial has ended, you will be taken to checkout.');
+    window.switchView('job-setup-view');
 }
 
 const gps = {
@@ -289,6 +313,11 @@ function send(fix, force) {
         timestamp: now
     }).catch((err) => {
         console.error("Firebase telemetry update error:", err);
+        const signedIn = window.firebase && window.firebase.auth && window.firebase.auth().currentUser;
+        if (err && err.code === 'PERMISSION_DENIED' && signedIn && now - (gps.deniedToastAt || 0) > 30000) {
+            gps.deniedToastAt = now;
+            toast('Broadcast paused: subscription inactive');
+        }
     });
 }
 

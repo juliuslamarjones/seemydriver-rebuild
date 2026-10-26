@@ -73,6 +73,7 @@ window.handleSignOut = function () {
     localStorage.removeItem('seemydriver_logged_in');
     
     try { sessionStorage.clear(); } catch(e) {}
+    try { window.firebase.auth().signOut(); } catch(e) {}
 
     if (window.smdInApp()) {
         window.switchView('signin-view');
@@ -82,53 +83,51 @@ window.handleSignOut = function () {
 };
 
 // ==========================================================
-// 30-DAY TRIAL & SUBSCRIPTION PAYWALL ENFORCEMENT
+// 30-DAY TRIAL & SUBSCRIPTION PAYWALL
+// The real enforcement is in the Realtime Database rules
+// (entitlements/{uid}/validUntil, written only by the server).
+// This code just decides which screen to show.
 // ==========================================================
-async function checkAndEnforceSubscription(user, successCallback) {
-    const db = window.firebase && window.firebase.firestore ? window.firebase.firestore() : null;
-    if (!db) {
-        successCallback();
-        return;
-    }
+const API_BASE = 'https://www.seemydriver.com';
+const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/4gM4gz5wvd2Y01r7aNcbC03'; // <-- Live Stripe Payment Link inserted
 
-    const userRef = db.collection('users').doc(user.uid);
-    const docSnap = await userRef.get();
-
-    if (!docSnap.exists) {
-        // Fallback safety: If document was missed, initialize trial now
-        await userRef.set({
-            email: user.email,
-            createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
-            subscriptionStatus: 'trial'
+// Asks the server for this user's access-until time (ms). Returns null if it could not be reached.
+async function getEntitlement(user) {
+    try {
+        const token = await user.getIdToken();
+        const res = await fetch(API_BASE + '/api/entitlement', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + token }
         });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return typeof data.validUntil === 'number' ? data.validUntil : null;
+    } catch (err) {
+        console.error('Entitlement check failed:', err);
+        return null;
+    }
+}
+
+async function checkAndEnforceSubscription(user, successCallback) {
+    const validUntil = await getEntitlement(user);
+
+    if (validUntil === null) {
+        alert('We could not verify your account. Please check your connection and try again.');
+        return;
+    }
+
+    if (validUntil > Date.now()) {
         successCallback();
         return;
     }
 
-    const userData = docSnap.data();
-    
-    // If they already paid, let them straight in
-    if (userData.subscriptionStatus === 'active') {
-        successCallback();
-        return;
-    }
-
-    // Calculate 30-day trial window
-    const createdAt = userData.createdAt ? userData.createdAt.toDate() : new Date();
-    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-    const expirationDate = new Date(createdAt.getTime() + thirtyDaysMs);
-    const now = new Date();
-
-    if (now > expirationDate) {
-        // Trial expired! Lock status and redirect to Stripe
-        await userRef.update({ subscriptionStatus: 'expired' });
-        alert('Your 30-day free trial has expired. Redirecting to subscription checkout...');
-        
-        // REPLACE THIS URL WITH YOUR ACTUAL STRIPE PAYMENT LINK
-        window.location.href = 'https://buy.stripe.com/your_actual_stripe_link_here';
-    } else {
-        successCallback();
-    }
+    // Trial over and no active subscription: send to Stripe
+    alert('Your 30-day free trial has ended. Redirecting to subscription checkout...');
+    localStorage.removeItem('seemydriver_logged_in');
+    try { await window.firebase.auth().signOut(); } catch (e) {}
+    window.location.href = STRIPE_PAYMENT_LINK
+        + '?client_reference_id=' + encodeURIComponent(user.uid)
+        + '&prefilled_email=' + encodeURIComponent(user.email || '');
 }
 
 window.handleSignIn = function () {
@@ -200,6 +199,12 @@ window.handleRegister = function () {
                     });
                 } catch (emailErr) {
                     console.error('Welcome email trigger failed:', emailErr);
+                }
+
+                // Start the server-side trial clock (the database rules need this to allow broadcasting)
+                const trialUntil = await getEntitlement(user);
+                if (trialUntil === null) {
+                    alert('Your account was created, but we could not finish setting up your trial. Please sign out and sign back in before starting a broadcast.');
                 }
 
                 localStorage.setItem('seemydriver_logged_in', 'true');
