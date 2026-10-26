@@ -29,12 +29,17 @@ window.installPWA = async function() {
     }
 };
 
-// localhost is exempt from the "app only" rule so you can keep testing on your laptop
+// Detect if the user is on a desktop/laptop browser vs mobile phone
+function isDesktop() {
+    return !(/Mobi|Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+}
+
+// localhost is exempt from restrictions
 function isDevHost() {
     return ['localhost', '127.0.0.1'].includes(window.location.hostname);
 }
 
-// Screen shown in a normal browser tab after sign-in: drivers install the app instead of using the browser
+// Screen shown in a normal browser tab after sign-in: mobile drivers install the app instead of using the browser
 function ensureInstallView() {
     if (document.getElementById('install-view')) return;
     const main = document.querySelector('main');
@@ -87,8 +92,8 @@ window.switchView = function (viewId) {
     
     let targetId = viewId === 'landing' ? 'landing-view' : (viewId.includes('-view') ? viewId : viewId + '-view');
 
-    // SeeMyDriver only runs as an installed app: in a normal browser tab, drivers get the install screen instead
-    if (!window.smdInApp() && !isDevHost() && (targetId === 'job-setup-view' || targetId === 'active-broadcast-view')) {
+    // Only force mobile phones to install view; laptops/desktops skip this entirely
+    if (!window.smdInApp() && !isDevHost() && !isDesktop() && (targetId === 'job-setup-view' || targetId === 'active-broadcast-view')) {
         targetId = 'install-view';
     }
     ensureInstallView();
@@ -153,14 +158,10 @@ window.handleSignOut = function () {
 
 // ==========================================================
 // 30-DAY TRIAL & SUBSCRIPTION PAYWALL
-// The real enforcement is in the Realtime Database rules
-// (entitlements/{uid}/validUntil, written only by the server).
-// This code just decides which screen to show.
 // ==========================================================
-const API_BASE = ''; // Fixed: use relative path to prevent CORS errors across Vercel preview/production domains
-const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/YOUR_LINK_HERE'; // <-- put your real Stripe Payment Link here
+const API_BASE = ''; 
+const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/YOUR_LINK_HERE';
 
-// Asks the server for this user's access-until time (ms). Returns null if it could not be reached.
 async function getEntitlement(user) {
     try {
         const token = await user.getIdToken();
@@ -190,7 +191,6 @@ async function checkAndEnforceSubscription(user, successCallback) {
         return;
     }
 
-    // Trial over and no active subscription: send to Stripe
     alert('Your 30-day free trial has ended. Redirecting to subscription checkout...');
     localStorage.removeItem('seemydriver_logged_in');
     try { await window.firebase.auth().signOut(); } catch (e) {}
@@ -215,7 +215,6 @@ window.handleSignIn = function () {
                 console.log('Signed in successfully:', userCredential.user.email);
                 localStorage.setItem('seemydriver_logged_in', 'true');
                 
-                // Enforce subscription check before granting app access
                 checkAndEnforceSubscription(userCredential.user, () => {
                     window.switchView('job-setup-view');
                 });
@@ -245,7 +244,6 @@ window.handleRegister = function () {
                 const user = userCredential.user;
                 console.log('User registered successfully:', user.email);
                 
-                // Initialize user document in Firestore with trial timestamp
                 const db = window.firebase && window.firebase.firestore ? window.firebase.firestore() : null;
                 if (db) {
                     try {
@@ -259,7 +257,6 @@ window.handleRegister = function () {
                     }
                 }
 
-                // Trigger automated welcome email via Resend API endpoint
                 try {
                     await fetch('/api/send-email', {
                         method: 'POST',
@@ -270,7 +267,6 @@ window.handleRegister = function () {
                     console.error('Welcome email trigger failed:', emailErr);
                 }
 
-                // Start the server-side trial clock (the database rules need this to allow broadcasting)
                 const trialUntil = await getEntitlement(user);
                 if (trialUntil === null) {
                     alert('Your account was created, but we could not finish setting up your trial. Please sign out and sign back in before starting a broadcast.');
@@ -303,7 +299,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const q = new URLSearchParams(window.location.search);
     const view = q.get('view');
     
-    // Ensure customer tracking link captures session parameter whether it's named 'sid' or 'session'
     const trackingSession = q.get('sid') || q.get('session');
     if (trackingSession && !q.has('sid')) {
         const newUrl = new URL(window.location.href);
@@ -314,7 +309,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const isStandalone = window.smdInApp();
     const isLoggedIn = localStorage.getItem('seemydriver_logged_in') === 'true';
     
-    // PRIORITIZE EXPLICIT QUERY VIEWS & CUSTOMER LINKS
     if (view === 'customer' || trackingSession) {
         window.switchView('customer-view-view');
     } else if (view === 'landing') {
@@ -329,7 +323,8 @@ document.addEventListener('DOMContentLoaded', () => {
         window.switchView('active-broadcast-view');
     } else if (isStandalone) {
         window.switchView('signin-view');
-    } else if (isLoggedIn && !isStandalone && !isDevHost()) {
+    } else if (isLoggedIn && !isStandalone && !isDevHost() && !isDesktop()) {
+        // Only force mobile devices to the install view; laptops/desktops load the landing page
         window.switchView('install-view');
     } else {
         window.switchView('landing-view');
