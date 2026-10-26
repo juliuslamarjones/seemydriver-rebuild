@@ -12,13 +12,6 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 
 window.installPWA = async function() {
-    // Must have an account before installing: send people to sign-in first
-    if (localStorage.getItem('seemydriver_logged_in') !== 'true') {
-        alert('Please sign in (or create an account) before installing SeeMyDriver.');
-        window.switchView('signin-view');
-        return;
-    }
-
     if (deferredPrompt) {
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
@@ -29,17 +22,7 @@ window.installPWA = async function() {
     }
 };
 
-// Detect if the user is on a desktop/laptop browser vs mobile phone
-function isDesktop() {
-    return !(/Mobi|Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
-}
-
-// localhost is exempt from restrictions
-function isDevHost() {
-    return ['localhost', '127.0.0.1'].includes(window.location.hostname);
-}
-
-// Screen shown in a normal browser tab after sign-in: mobile drivers install the app instead of using the browser
+// Screen shown in a normal browser tab after sign-in: forces users to install the PWA
 function ensureInstallView() {
     if (document.getElementById('install-view')) return;
     const main = document.querySelector('main');
@@ -53,7 +36,7 @@ function ensureInstallView() {
             <div class="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
             <div class="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs py-1.5 px-4 rounded-full w-fit mx-auto">✅ ACCOUNT READY</div>
             <h2 class="text-3xl font-black tracking-tight text-white">Install SeeMyDriver</h2>
-            <p class="text-sm text-neutral-400 leading-relaxed">SeeMyDriver runs as an app on your phone. Install it, open it from your home screen, and sign in to start broadcasting.</p>
+            <p class="text-sm text-neutral-400 leading-relaxed">SeeMyDriver runs as an app on your phone for background telemetry. Install it, open it from your home screen, and sign in to start broadcasting.</p>
             <button onclick="window.installPWA()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.3)] cursor-pointer">Install App 📱</button>
             <p class="text-[11px] text-neutral-500 leading-relaxed">If nothing happens, tap the ⋮ menu in Chrome, then "Install app" or "Add to Home screen".</p>
             <button onclick="window.handleSignOut()" class="text-xs text-neutral-400 hover:text-amber-400 font-bold transition cursor-pointer">Sign Out 🚪</button>
@@ -92,18 +75,8 @@ window.switchView = function (viewId) {
     
     let targetId = viewId === 'landing' ? 'landing-view' : (viewId.includes('-view') ? viewId : viewId + '-view');
 
-    // Only force mobile phones to install view; laptops/desktops skip this entirely
-    if (!window.smdInApp() && !isDevHost() && !isDesktop() && (targetId === 'job-setup-view' || targetId === 'active-broadcast-view')) {
-        targetId = 'install-view';
-    }
     ensureInstallView();
     const target = document.getElementById(targetId);
-
-    // The landing page Install button only shows once someone is signed in
-    const installBtn = document.getElementById('pwa-install-btn');
-    if (installBtn) {
-        installBtn.style.display = localStorage.getItem('seemydriver_logged_in') === 'true' ? '' : 'none';
-    }
     
     // Hide header action buttons on active broadcast or customer views to eliminate clutter
     const headerNav = document.getElementById('header-nav-actions');
@@ -136,7 +109,6 @@ window.smdInApp = function() {
 };
 
 window.handleSignOut = function () {
-    // Block sign-out if a broadcast is actively running in this context
     if (localStorage.getItem('smd_active_broadcast') === 'true') {
         alert('Please end your active broadcast before signing out.');
         return;
@@ -149,11 +121,7 @@ window.handleSignOut = function () {
     try { sessionStorage.clear(); } catch(e) {}
     try { window.firebase.auth().signOut(); } catch(e) {}
 
-    if (window.smdInApp()) {
-        window.switchView('signin-view');
-    } else {
-        window.switchView('landing-view');
-    }
+    window.switchView('landing-view');
 };
 
 // ==========================================================
@@ -216,7 +184,12 @@ window.handleSignIn = function () {
                 localStorage.setItem('seemydriver_logged_in', 'true');
                 
                 checkAndEnforceSubscription(userCredential.user, () => {
-                    window.switchView('job-setup-view');
+                    // If running in standalone PWA mode, go to job setup. Otherwise show the install screen.
+                    if (window.smdInApp()) {
+                        window.switchView('job-setup-view');
+                    } else {
+                        window.switchView('install-view');
+                    }
                 });
             })
             .catch((error) => {
@@ -267,13 +240,13 @@ window.handleRegister = function () {
                     console.error('Welcome email trigger failed:', emailErr);
                 }
 
-                const trialUntil = await getEntitlement(user);
-                if (trialUntil === null) {
-                    alert('Your account was created, but we could not finish setting up your trial. Please sign out and sign back in before starting a broadcast.');
-                }
-
                 localStorage.setItem('seemydriver_logged_in', 'true');
-                window.switchView('job-setup-view');
+                
+                if (window.smdInApp()) {
+                    window.switchView('job-setup-view');
+                } else {
+                    window.switchView('install-view');
+                }
             })
             .catch((error) => {
                 console.error('Registration error:', error.message);
@@ -281,7 +254,7 @@ window.handleRegister = function () {
             });
     } else {
         localStorage.setItem('seemydriver_logged_in', 'true');
-        window.switchView('job-setup-view');
+        window.switchView('install-view');
     }
 };
 
@@ -311,22 +284,18 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (view === 'customer' || trackingSession) {
         window.switchView('customer-view-view');
-    } else if (view === 'landing') {
-        window.switchView('landing-view');
     } else if (view === 'signin') {
         window.switchView('signin-view');
     } else if (view === 'register') {
         window.switchView('register-view');
-    } else if (view === 'job-setup' && isLoggedIn) {
+    } else if (isLoggedIn && isStandalone) {
+        // Logged in AND running as installed PWA app -> allow job setup / broadcast
         window.switchView('job-setup-view');
-    } else if (localStorage.getItem('smd_active_broadcast') === 'true' && localStorage.getItem('smd_session_id') && isStandalone) {
-        window.switchView('active-broadcast-view');
-    } else if (isStandalone) {
-        window.switchView('signin-view');
-    } else if (isLoggedIn && !isStandalone && !isDevHost() && !isDesktop()) {
-        // Only force mobile devices to the install view; laptops/desktops load the landing page
+    } else if (isLoggedIn && !isStandalone) {
+        // Logged in but viewing in a normal browser tab (laptop or mobile browser) -> force install view
         window.switchView('install-view');
     } else {
+        // Not logged in -> show clean public landing page with NO install button
         window.switchView('landing-view');
     }
 });

@@ -162,7 +162,7 @@
     <!-- MAIN CONTAINER -->
     <main class="flex-1 flex flex-col items-center justify-start w-full relative">
 
-        <!-- LANDING VIEW -->
+        <!-- LANDING VIEW (CLEAN MARKETING PITCH WITH NO PUBLIC INSTALL BUTTON) -->
         <div id="landing-view" class="app-view w-full max-w-5xl flex flex-col items-center text-center gap-10 py-4 sm:py-8 px-3 sm:px-4 hidden" style="display: none;">
             <div class="relative w-full flex flex-col items-center gap-4 sm:gap-6 pt-1">
                 <div class="absolute -top-12 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -178,13 +178,10 @@
                     Stream your exact live GPS coordinates straight from your device browser to your clients in real time. Zero friction, sub-second latency, and total professional peace of mind.
                 </p>
                 <div class="flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-lg mt-2">
-                    <button id="pwa-install-btn" onclick="window.installPWA()" class="w-full sm:w-auto bg-neutral-800 hover:bg-neutral-700 text-amber-400 border border-amber-400/30 font-bold text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.15)] text-center cursor-pointer flex items-center justify-center gap-2">
-                        <span>Install App</span> 📱
-                    </button>
-                    <button onclick="window.switchView('register')" class="w-full sm:w-auto bg-amber-400 hover:bg-amber-300 text-black font-black text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition shadow-[0_0_30px_rgba(251,191,36,0.25)] text-center cursor-pointer flex items-center justify-center gap-2">
+                    <button onclick="window.switchView('register-view')" class="w-full sm:w-auto bg-amber-400 hover:bg-amber-300 text-black font-black text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition shadow-[0_0_30px_rgba(251,191,36,0.25)] text-center cursor-pointer flex items-center justify-center gap-2">
                         <span>Get Started Free</span> →
                     </button>
-                    <button onclick="window.switchView('signin')" class="w-full sm:w-auto bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition border border-neutral-800 cursor-pointer whitespace-nowrap">
+                    <button onclick="window.switchView('signin-view')" class="w-full sm:w-auto bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition border border-neutral-800 cursor-pointer whitespace-nowrap">
                         Sign In
                     </button>
                 </div>
