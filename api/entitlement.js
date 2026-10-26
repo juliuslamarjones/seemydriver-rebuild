@@ -1,13 +1,22 @@
-// /api/entitlement.js  (Vercel serverless function, CommonJS)
+// /api/entitlement.js  (Vercel serverless function, ES module style - same as send-email.js)
 // Verifies the signed-in user, then sets entitlements/{uid}/validUntil in the Realtime Database.
 // Free trial = 30 days from the Firebase Auth account creation time (cannot be faked by the client).
-const admin = require('firebase-admin');
+
+// TEMPORARY: while true, failures include the reason in the response so we can see what is wrong.
+// Set to false once sign-in works.
+const DEBUG = true;
 
 const DATABASE_URL = 'https://seemydriver-prod-default-rtdb.firebaseio.com';
 
+let admin = null;
+
 // Uses FIREBASE_SERVICE_ACCOUNT (whole JSON) if set, otherwise FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY.
 // The key must belong to the seemydriver-prod Firebase project.
-function getAdmin() {
+async function getAdmin() {
+  if (!admin) {
+    const mod = await import('firebase-admin');
+    admin = mod.default || mod;
+  }
   if (!admin.apps.length) {
     const credential = process.env.FIREBASE_SERVICE_ACCOUNT
       ? admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
@@ -21,7 +30,7 @@ function getAdmin() {
   return admin;
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   // CORS so the installed Android app (different origin) can call this too
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
@@ -31,10 +40,10 @@ module.exports = async (req, res) => {
 
   let fb;
   try {
-    fb = getAdmin();
+    fb = await getAdmin();
   } catch (err) {
-    console.error('Firebase admin setup failed (check Vercel environment variables):', err.message);
-    return res.status(500).json({ error: 'server_not_configured' });
+    console.error('Firebase admin setup failed:', err.message);
+    return res.status(500).json({ error: 'server_not_configured', detail: DEBUG ? err.message : undefined });
   }
 
   let uid;
@@ -43,7 +52,7 @@ module.exports = async (req, res) => {
     ({ uid } = await fb.auth().verifyIdToken(token));
   } catch (err) {
     console.error('Token check failed:', err.message);
-    return res.status(401).json({ error: 'unauthorized' });
+    return res.status(401).json({ error: 'unauthorized', detail: DEBUG ? err.message : undefined });
   }
 
   try {
@@ -56,6 +65,6 @@ module.exports = async (req, res) => {
     return res.status(200).json({ validUntil });
   } catch (err) {
     console.error('Entitlement write failed:', err.message);
-    return res.status(500).json({ error: 'server_error' });
+    return res.status(500).json({ error: 'server_error', detail: DEBUG ? err.message : undefined });
   }
-};
+}
