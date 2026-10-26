@@ -121,7 +121,12 @@ window.handleSignOut = function () {
     try { sessionStorage.clear(); } catch(e) {}
     try { window.firebase.auth().signOut(); } catch(e) {}
 
-    window.switchView('landing-view');
+    // If running as an installed app, dropping out of signout goes to sign-in view instead of landing
+    if (window.smdInApp()) {
+        window.switchView('signin-view');
+    } else {
+        window.switchView('landing-view');
+    }
 };
 
 // ==========================================================
@@ -288,15 +293,20 @@ document.addEventListener('DOMContentLoaded', () => {
         window.switchView('signin-view');
     } else if (view === 'register') {
         window.switchView('register-view');
-    } else if (isLoggedIn && isStandalone) {
-        // Logged in AND running as installed PWA app -> allow job setup / broadcast
-        window.switchView('job-setup-view');
-    } else if (isLoggedIn && !isStandalone) {
-        // Logged in but viewing in a normal browser tab (laptop or mobile browser) -> force install view
-        window.switchView('install-view');
+    } else if (isStandalone) {
+        // RUNNING AS AN INSTALLED PWA APP: NEVER SHOW THE WEB LANDING PAGE
+        if (isLoggedIn) {
+            window.switchView('job-setup-view');
+        } else {
+            window.switchView('signin-view'); // Drop straight to Sign In instead of landing page
+        }
     } else {
-        // Not logged in -> show clean public landing page with NO install button
-        window.switchView('landing-view');
+        // RUNNING IN A NORMAL BROWSER TAB
+        if (isLoggedIn) {
+            window.switchView('install-view');
+        } else {
+            window.switchView('landing-view'); // Public marketing page only for browsers
+        }
     }
 });
 
