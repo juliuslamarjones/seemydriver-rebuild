@@ -12,6 +12,13 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 
 window.installPWA = async function() {
+    // Must have an account before installing: send people to sign-in first
+    if (localStorage.getItem('seemydriver_logged_in') !== 'true') {
+        alert('Please sign in (or create an account) before installing SeeMyDriver.');
+        window.switchView('signin-view');
+        return;
+    }
+
     if (deferredPrompt) {
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
@@ -22,14 +29,76 @@ window.installPWA = async function() {
     }
 };
 
+// localhost is exempt from the "app only" rule so you can keep testing on your laptop
+function isDevHost() {
+    return ['localhost', '127.0.0.1'].includes(window.location.hostname);
+}
+
+// Screen shown in a normal browser tab after sign-in: drivers install the app instead of using the browser
+function ensureInstallView() {
+    if (document.getElementById('install-view')) return;
+    const main = document.querySelector('main');
+    if (!main) return;
+    const v = document.createElement('div');
+    v.id = 'install-view';
+    v.className = 'app-view w-full max-w-md flex flex-col items-center justify-center p-6 my-auto hidden';
+    v.style.display = 'none';
+    v.innerHTML = `
+        <div class="w-full bg-gradient-to-b from-[#161923] to-[#0f1117] border border-neutral-800 rounded-3xl p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex flex-col gap-6 text-center relative overflow-hidden">
+            <div class="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
+            <div class="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs py-1.5 px-4 rounded-full w-fit mx-auto">✅ ACCOUNT READY</div>
+            <h2 class="text-3xl font-black tracking-tight text-white">Install SeeMyDriver</h2>
+            <p class="text-sm text-neutral-400 leading-relaxed">SeeMyDriver runs as an app on your phone. Install it, open it from your home screen, and sign in to start broadcasting.</p>
+            <button onclick="window.installPWA()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.3)] cursor-pointer">Install App 📱</button>
+            <p class="text-[11px] text-neutral-500 leading-relaxed">If nothing happens, tap the ⋮ menu in Chrome, then "Install app" or "Add to Home screen".</p>
+            <button onclick="window.handleSignOut()" class="text-xs text-neutral-400 hover:text-amber-400 font-bold transition cursor-pointer">Sign Out 🚪</button>
+        </div>`;
+    main.appendChild(v);
+}
+
+// Adds "Create an account" under Sign In and "Sign in" under Create Account
+function addAuthCrossLinks() {
+    const pairs = [
+        ['#signin-view button[onclick="window.handleSignIn()"]', 'smd-link-to-register', 'New here?', 'Create an account', 'register-view'],
+        ['#register-view button[onclick="window.handleRegister()"]', 'smd-link-to-signin', 'Already have an account?', 'Sign in', 'signin-view']
+    ];
+    pairs.forEach(([selector, id, text, label, view]) => {
+        const btn = document.querySelector(selector);
+        if (!btn || document.getElementById(id)) return;
+        const p = document.createElement('p');
+        p.id = id;
+        p.className = 'text-center text-xs text-neutral-400 mt-1';
+        p.append(text + ' ');
+        const a = document.createElement('button');
+        a.type = 'button';
+        a.textContent = label;
+        a.className = 'text-amber-400 font-bold hover:text-amber-300 cursor-pointer';
+        a.onclick = () => window.switchView(view);
+        p.appendChild(a);
+        btn.insertAdjacentElement('afterend', p);
+    });
+}
+
 window.switchView = function (viewId) {
     document.querySelectorAll('.app-view').forEach((el) => {
         el.classList.add('hidden');
         el.style.display = 'none';
     });
     
-    const targetId = viewId === 'landing' ? 'landing-view' : (viewId.includes('-view') ? viewId : viewId + '-view');
+    let targetId = viewId === 'landing' ? 'landing-view' : (viewId.includes('-view') ? viewId : viewId + '-view');
+
+    // SeeMyDriver only runs as an installed app: in a normal browser tab, drivers get the install screen instead
+    if (!window.smdInApp() && !isDevHost() && (targetId === 'job-setup-view' || targetId === 'active-broadcast-view')) {
+        targetId = 'install-view';
+    }
+    ensureInstallView();
     const target = document.getElementById(targetId);
+
+    // The landing page Install button only shows once someone is signed in
+    const installBtn = document.getElementById('pwa-install-btn');
+    if (installBtn) {
+        installBtn.style.display = localStorage.getItem('seemydriver_logged_in') === 'true' ? '' : 'none';
+    }
     
     // Hide header action buttons on active broadcast or customer views to eliminate clutter
     const headerNav = document.getElementById('header-nav-actions');
@@ -88,8 +157,8 @@ window.handleSignOut = function () {
 // (entitlements/{uid}/validUntil, written only by the server).
 // This code just decides which screen to show.
 // ==========================================================
-const API_BASE = 'https://www.seemydriver.com';
-const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/4gM4gz5wvd2Y01r7aNcbC03'; // <-- Live Stripe Payment Link inserted
+const API_BASE = ''; // Fixed: use relative path to prevent CORS errors across Vercel preview/production domains
+const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/YOUR_LINK_HERE'; // <-- put your real Stripe Payment Link here
 
 // Asks the server for this user's access-until time (ms). Returns null if it could not be reached.
 async function getEntitlement(user) {
@@ -228,6 +297,9 @@ window.endBroadcastAndHome = function () {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+    ensureInstallView();
+    addAuthCrossLinks();
+
     const q = new URLSearchParams(window.location.search);
     const view = q.get('view');
     
@@ -257,6 +329,8 @@ document.addEventListener('DOMContentLoaded', () => {
         window.switchView('active-broadcast-view');
     } else if (isStandalone) {
         window.switchView('signin-view');
+    } else if (isLoggedIn && !isStandalone && !isDevHost()) {
+        window.switchView('install-view');
     } else {
         window.switchView('landing-view');
     }
