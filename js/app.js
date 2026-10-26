@@ -128,7 +128,7 @@ window.handleSignOut = function () {
 // 30-DAY TRIAL & SUBSCRIPTION PAYWALL
 // ==========================================================
 const API_BASE = ''; 
-const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/YOUR_LINK_HERE';
+const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/4gM4gz5wvd2Y01r7aNcbC03';
 
 async function getEntitlement(user) {
     try {
