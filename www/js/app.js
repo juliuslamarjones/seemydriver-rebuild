@@ -189,7 +189,7 @@ window.handleSignIn = function () {
                 localStorage.setItem('seemydriver_logged_in', 'true');
                 
                 checkAndEnforceSubscription(userCredential.user, () => {
-                    // If running in standalone PWA mode, go to job setup. Otherwise show the install screen.
+                    // SURGICAL FIX: If running in standalone PWA app mode, go straight to job setup. Otherwise show install screen for standard browser.
                     if (window.smdInApp()) {
                         window.switchView('job-setup-view');
                     } else {
