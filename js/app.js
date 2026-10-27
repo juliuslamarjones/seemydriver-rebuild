@@ -22,7 +22,6 @@ window.installPWA = async function() {
     }
 };
 
-// Screen shown in a normal browser tab after sign-in: forces users to install the PWA
 function ensureInstallView() {
     if (document.getElementById('install-view')) return;
     const main = document.querySelector('main');
@@ -44,7 +43,6 @@ function ensureInstallView() {
     main.appendChild(v);
 }
 
-// Adds "Create an account" under Sign In and "Sign in" under Create Account
 function addAuthCrossLinks() {
     const pairs = [
         ['#signin-view button[onclick="window.handleSignIn()"]', 'smd-link-to-register', 'New here?', 'Create an account', 'register-view'],
@@ -78,7 +76,6 @@ window.switchView = function (viewId) {
     ensureInstallView();
     const target = document.getElementById(targetId);
     
-    // Hide header action buttons on active broadcast or customer views to eliminate clutter
     const headerNav = document.getElementById('header-nav-actions');
     if (headerNav) {
         if (targetId === 'active-broadcast-view' || targetId === 'customer-view-view') {
@@ -108,6 +105,14 @@ window.smdInApp = function() {
     return isStandalone || isLocalApp;
 };
 
+// Enforces install screen ONLY for browser tabs on the live site to protect GPS background locks.
+// Test links (*.vercel.app and localhost) and installed PWA apps bypass this.
+function browserMustInstall() {
+    const host = window.location.hostname;
+    const isLiveSite = host === 'seemydriver.com' || host === 'www.seemydriver.com';
+    return isLiveSite && !window.smdInApp();
+}
+
 window.handleSignOut = function () {
     if (localStorage.getItem('smd_active_broadcast') === 'true') {
         alert('Please end your active broadcast before signing out.');
@@ -121,7 +126,6 @@ window.handleSignOut = function () {
     try { sessionStorage.clear(); } catch(e) {}
     try { window.firebase.auth().signOut(); } catch(e) {}
 
-    // If running as an installed app, dropping out of signout goes to sign-in view instead of landing
     if (window.smdInApp()) {
         window.switchView('signin-view');
     } else {
@@ -189,11 +193,10 @@ window.handleSignIn = function () {
                 localStorage.setItem('seemydriver_logged_in', 'true');
                 
                 checkAndEnforceSubscription(userCredential.user, () => {
-                    // SURGICAL FIX: If running in standalone PWA app mode, go straight to job setup. Otherwise show install screen for standard browser.
-                    if (window.smdInApp()) {
-                        window.switchView('job-setup-view');
-                    } else {
+                    if (browserMustInstall()) {
                         window.switchView('install-view');
+                    } else {
+                        window.switchView('job-setup-view');
                     }
                 });
             })
@@ -247,10 +250,10 @@ window.handleRegister = function () {
 
                 localStorage.setItem('seemydriver_logged_in', 'true');
                 
-                if (window.smdInApp()) {
-                    window.switchView('job-setup-view');
-                } else {
+                if (browserMustInstall()) {
                     window.switchView('install-view');
+                } else {
+                    window.switchView('job-setup-view');
                 }
             })
             .catch((error) => {
@@ -259,7 +262,7 @@ window.handleRegister = function () {
             });
     } else {
         localStorage.setItem('seemydriver_logged_in', 'true');
-        window.switchView('install-view');
+        window.switchView(browserMustInstall() ? 'install-view' : 'job-setup-view');
     }
 };
 
@@ -294,18 +297,16 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (view === 'register') {
         window.switchView('register-view');
     } else if (isStandalone) {
-        // RUNNING AS AN INSTALLED PWA APP: NEVER SHOW THE WEB LANDING PAGE
         if (isLoggedIn) {
             window.switchView('job-setup-view');
         } else {
-            window.switchView('signin-view'); // Drop straight to Sign In instead of landing page
+            window.switchView('signin-view'); // Logged-out PWA goes straight to sign in
         }
     } else {
-        // RUNNING IN A NORMAL BROWSER TAB
         if (isLoggedIn) {
-            window.switchView('install-view');
+            window.switchView(browserMustInstall() ? 'install-view' : 'job-setup-view');
         } else {
-            window.switchView('landing-view'); // Public marketing page only for browsers
+            window.switchView('landing-view');
         }
     }
 });
