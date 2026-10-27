@@ -203,7 +203,7 @@
                             <span id="preview-speed" class="text-amber-400 font-bold">45 mph</span>
                         </div>
                         <!-- Real Leaflet Map Container Powered by OpenStreetMap -->
-                        <div id="landing-preview-map" class="w-full h-48 bg-[#0b0f19] rounded-xl border border-neutral-800 relative overflow-hidden z-10 shadow-inner"></div>
+                        <div id="landing-preview-map" class="w-full h-48 bg-neutral-200 rounded-xl border border-neutral-800 relative overflow-hidden z-10 shadow-inner"></div>
                     </div>
                 </div>
             </div>
@@ -400,8 +400,37 @@
         <div class="font-bold text-neutral-400">Developed & Architected by Julius Jones</div>
     </footer>
 
-    <!-- App Scripts (Bumped to v33 to break mobile PWA cache) -->
-    <script src="js/app.js?v=33"></script>
-    <script src="js/tracker.js?v=33"></script>
+    <!-- LANDING PAGE PREVIEW MAP (light OpenStreetMap tiles + the app's truck) -->
+    <script>
+        window.initLandingPreviewMap = function () {
+            const box = document.getElementById('landing-preview-map');
+            if (!box || box._leaflet_id || typeof L === 'undefined') return;
+            try {
+                const center = [29.7604, -95.3698]; // Houston
+                const map = L.map(box, {
+                    zoomControl: false, attributionControl: false, dragging: false,
+                    scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false,
+                    boxZoom: false, keyboard: false
+                }).setView(center, 14);
+
+                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+                const icon = typeof window.getTruckIcon === 'function'
+                    ? window.getTruckIcon(45)
+                    : L.divIcon({ className: '', html: '<div style="font-size:28px">🚚</div>', iconSize: [32, 32], iconAnchor: [16, 16] });
+                L.marker(center, { icon: icon, interactive: false }).addTo(map);
+
+                [0, 250, 700].forEach(function (ms) {
+                    setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, ms);
+                });
+            } catch (e) {
+                console.error('Preview map load error:', e);
+            }
+        };
+    </script>
+
+    <!-- App Scripts (Bumped to v34 to break mobile PWA cache) -->
+    <script src="js/app.js?v=34"></script>
+    <script src="js/tracker.js?v=34"></script>
 </body>
 </html>
