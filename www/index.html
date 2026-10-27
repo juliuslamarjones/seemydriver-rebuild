@@ -162,7 +162,7 @@
     <!-- MAIN CONTAINER -->
     <main class="flex-1 flex flex-col items-center justify-start w-full relative">
 
-        <!-- LANDING VIEW (CLEAN MARKETING PITCH WITH NO PUBLIC INSTALL BUTTON) -->
+        <!-- LANDING VIEW -->
         <div id="landing-view" class="app-view w-full max-w-5xl flex flex-col items-center text-center gap-10 py-4 sm:py-8 px-3 sm:px-4 hidden" style="display: none;">
             <div class="relative w-full flex flex-col items-center gap-4 sm:gap-6 pt-1">
                 <div class="absolute -top-12 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -188,7 +188,7 @@
                 <span class="text-[10px] sm:text-[11px] text-neutral-500">Works seamlessly on mobile browsers. Customers track instantly via any web link.</span>
             </div>
 
-            <!-- PREVIEW CARD -->
+            <!-- PREVIEW CARD WITH LIGHT MAP CONTAINER -->
             <div class="w-full bg-gradient-to-b from-[#12141c] to-neutral-900 border border-neutral-800/80 rounded-3xl p-5 sm:p-8 shadow-2xl relative overflow-hidden text-left">
                 <div class="absolute top-0 right-0 bg-amber-400/10 text-amber-400 text-[10px] font-black uppercase tracking-widest px-3 sm:px-4 py-1.5 rounded-bl-2xl border-l border-b border-amber-400/20 z-30">Live Simulation Preview</div>
                 <div class="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -197,13 +197,33 @@
                         <h3 class="text-xl sm:text-2xl font-bold text-white">Real-Time Client Telemetry</h3>
                         <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Your customers get a secure, clean web link showing your exact moving position, route distance, and live ETA without downloading a single app.</p>
                     </div>
-                    <div class="w-full md:w-80 bg-black/80 border border-neutral-800 rounded-2xl p-3 flex flex-col gap-2.5 shadow-inner">
+                    <div class="w-full md:w-80 bg-neutral-900 border border-neutral-800 rounded-2xl p-3 flex flex-col gap-2.5 shadow-inner">
                         <div class="flex items-center justify-between text-[11px] text-neutral-400 px-1 font-mono">
                             <span class="text-emerald-400 animate-pulse">● LIVE ROUTE TELEMETRY</span>
                             <span id="preview-speed" class="text-amber-400 font-bold">45 mph</span>
                         </div>
-                        <div id="landing-preview-map" class="w-full h-48 bg-[#0b0f19] rounded-xl border border-neutral-800 relative overflow-hidden z-10 shadow-inner"></div>
+                        <!-- Clean Light Map Preview Div -->
+                        <div id="landing-preview-map" class="w-full h-48 bg-neutral-100 rounded-xl border border-neutral-800 relative overflow-hidden z-10 shadow-inner"></div>
                     </div>
+                </div>
+            </div>
+
+            <!-- APP DESCRIPTION & FEATURES GRID BELOW THE MAP -->
+            <div class="w-full grid grid-cols-1 md:grid-cols-3 gap-6 text-left mt-4">
+                <div class="bg-[#12141c] border border-neutral-800/80 rounded-3xl p-6 flex flex-col gap-3 shadow-lg">
+                    <div class="w-10 h-10 rounded-xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 font-bold text-lg">⚡</div>
+                    <h4 class="text-lg font-bold text-white">Sub-Second Latency</h4>
+                    <p class="text-xs text-neutral-400 leading-relaxed">Powered by Firebase Realtime Database for instant positioning updates without lag or dropped signals.</p>
+                </div>
+                <div class="bg-[#12141c] border border-neutral-800/80 rounded-3xl p-6 flex flex-col gap-3 shadow-lg">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold text-lg">🔗</div>
+                    <h4 class="text-lg font-bold text-white">Zero App for Clients</h4>
+                    <p class="text-xs text-neutral-400 leading-relaxed">Text your client a secure tracking link. They open it directly in their mobile browser to watch you arrive.</p>
+                </div>
+                <div class="bg-[#12141c] border border-neutral-800/80 rounded-3xl p-6 flex flex-col gap-3 shadow-lg">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-lg">🛡️</div>
+                    <h4 class="text-lg font-bold text-white">Secure Cloud Dispatch</h4>
+                    <p class="text-xs text-neutral-400 leading-relaxed">Built for mobile service operators, pressure washers, and field techs with automated Stripe billing.</p>
                 </div>
             </div>
         </div>
@@ -380,8 +400,8 @@
         <div class="font-bold text-neutral-400">Developed & Architected by Julius Jones</div>
     </footer>
 
-    <!-- App Scripts (Bumped to v28 to break mobile PWA cache) -->
-    <script src="js/app.js?v=28"></script>
-    <script src="js/tracker.js?v=28"></script>
+    <!-- App Scripts (Bumped to v30 to break mobile PWA cache) -->
+    <script src="js/app.js?v=30"></script>
+    <script src="js/tracker.js?v=30"></script>
 </body>
 </html>
