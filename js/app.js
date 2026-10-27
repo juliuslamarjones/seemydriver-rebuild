@@ -22,6 +22,7 @@ window.installPWA = async function() {
     }
 };
 
+// Screen shown in a normal browser tab after sign-in: forces users to install the PWA
 function ensureInstallView() {
     if (document.getElementById('install-view')) return;
     const main = document.querySelector('main');
@@ -33,16 +34,17 @@ function ensureInstallView() {
     v.innerHTML = `
         <div class="w-full bg-gradient-to-b from-[#161923] to-[#0f1117] border border-neutral-800 rounded-3xl p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex flex-col gap-6 text-center relative overflow-hidden">
             <div class="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
-            <div class="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs py-1.5 px-4 rounded-full w-fit mx-auto">✅ ACCOUNT READY</div>
-            <h2 class="text-3xl font-black tracking-tight text-white">Install SeeMyDriver</h2>
-            <p class="text-sm text-neutral-400 leading-relaxed">SeeMyDriver runs as an app on your phone for background telemetry. Install it, open it from your home screen, and sign in to start broadcasting.</p>
+            <div class="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs py-1.5 px-4 rounded-full w-fit mx-auto">📱 APP REQUIRED</div>
+            <h2 class="text-3xl font-black tracking-tight text-white">Use the app to broadcast</h2>
+            <p class="text-sm text-neutral-400 leading-relaxed"><b class="text-white">You can't broadcast from this web page.</b> SeeMyDriver only works as an installed app on your phone. Install it, open it from your home screen, then create your account or sign in there.</p>
             <button onclick="window.installPWA()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.3)] cursor-pointer">Install App 📱</button>
             <p class="text-[11px] text-neutral-500 leading-relaxed">If nothing happens, tap the ⋮ menu in Chrome, then "Install app" or "Add to Home screen".</p>
-            <button onclick="window.handleSignOut()" class="text-xs text-neutral-400 hover:text-amber-400 font-bold transition cursor-pointer">Sign Out 🚪</button>
+            <button id="install-signout-btn" onclick="window.handleSignOut()" class="text-xs text-neutral-400 hover:text-amber-400 font-bold transition cursor-pointer">Sign Out 🚪</button>
         </div>`;
     main.appendChild(v);
 }
 
+// Adds "Create an account" under Sign In and "Sign in" under Create Account
 function addAuthCrossLinks() {
     const pairs = [
         ['#signin-view button[onclick="window.handleSignIn()"]', 'smd-link-to-register', 'New here?', 'Create an account', 'register-view'],
@@ -65,6 +67,22 @@ function addAuthCrossLinks() {
     });
 }
 
+// Warns people on the live site's Sign In / Create Account screens that broadcasting only works in the installed app
+function addBrowserNotice() {
+    if (!browserMustInstall()) return;
+    ['signin-view', 'register-view'].forEach((viewId) => {
+        const card = document.querySelector('#' + viewId + ' > div');
+        const noticeId = 'smd-browser-notice-' + viewId;
+        if (!card || document.getElementById(noticeId)) return;
+        const box = document.createElement('div');
+        box.id = noticeId;
+        box.className = 'flex flex-col gap-3 bg-amber-400/10 border border-amber-400/30 text-amber-200 text-xs sm:text-sm rounded-2xl p-4 leading-relaxed';
+        box.innerHTML = '<div><b>📱 SeeMyDriver runs as an installed app, not in the browser.</b> Install the app first, then sign in from the app on your phone. You can sign in here, but you will not be able to broadcast from this page.</div>' +
+            '<button type="button" onclick="window.installPWA()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-2.5 rounded-xl cursor-pointer">Install the App 📱</button>';
+        card.insertBefore(box, card.lastElementChild);
+    });
+}
+
 window.switchView = function (viewId) {
     document.querySelectorAll('.app-view').forEach((el) => {
         el.classList.add('hidden');
@@ -73,9 +91,21 @@ window.switchView = function (viewId) {
     
     let targetId = viewId === 'landing' ? 'landing-view' : (viewId.includes('-view') ? viewId : viewId + '-view');
 
+    // Live-site browser tabs cannot sign in or register: send them to the install screen instead
+    if (!BROWSER_ACCOUNT_SCREENS_ALLOWED && browserMustInstall() && (targetId === 'signin-view' || targetId === 'register-view')) {
+        targetId = 'install-view';
+    }
+
     ensureInstallView();
     const target = document.getElementById(targetId);
+
+    // Sign Out only makes sense on the install screen if someone is actually signed in
+    const signOutBtn = document.getElementById('install-signout-btn');
+    if (signOutBtn) {
+        signOutBtn.style.display = localStorage.getItem('seemydriver_logged_in') === 'true' ? '' : 'none';
+    }
     
+    // Hide header action buttons on active broadcast or customer views to eliminate clutter
     const headerNav = document.getElementById('header-nav-actions');
     if (headerNav) {
         if (targetId === 'active-broadcast-view' || targetId === 'customer-view-view') {
@@ -105,8 +135,12 @@ window.smdInApp = function() {
     return isStandalone || isLocalApp;
 };
 
-// Enforces install screen ONLY for browser tabs on the live site to protect GPS background locks.
-// Test links (*.vercel.app and localhost) and installed PWA apps bypass this.
+// Only browser tabs on the live site (seemydriver.com) must install the app.
+// localhost and *.vercel.app test links are exempt so you can keep testing on your laptop.
+// true  = Sign In / Create Account still open in a browser tab on the live site (they then see the install screen)
+// false = browser tabs on the live site never see those screens, only the install screen
+const BROWSER_ACCOUNT_SCREENS_ALLOWED = true;
+
 function browserMustInstall() {
     const host = window.location.hostname;
     const isLiveSite = host === 'seemydriver.com' || host === 'www.seemydriver.com';
@@ -126,6 +160,7 @@ window.handleSignOut = function () {
     try { sessionStorage.clear(); } catch(e) {}
     try { window.firebase.auth().signOut(); } catch(e) {}
 
+    // If running as an installed app, dropping out of signout goes to sign-in view instead of landing
     if (window.smdInApp()) {
         window.switchView('signin-view');
     } else {
@@ -193,6 +228,7 @@ window.handleSignIn = function () {
                 localStorage.setItem('seemydriver_logged_in', 'true');
                 
                 checkAndEnforceSubscription(userCredential.user, () => {
+                    // Live-site browser tabs get the install screen; the installed app and test links go to job setup
                     if (browserMustInstall()) {
                         window.switchView('install-view');
                     } else {
@@ -276,6 +312,7 @@ window.endBroadcastAndHome = function () {
 document.addEventListener('DOMContentLoaded', () => {
     ensureInstallView();
     addAuthCrossLinks();
+    addBrowserNotice();
 
     const q = new URLSearchParams(window.location.search);
     const view = q.get('view');
@@ -297,16 +334,18 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (view === 'register') {
         window.switchView('register-view');
     } else if (isStandalone) {
+        // RUNNING AS AN INSTALLED PWA APP: NEVER SHOW THE WEB LANDING PAGE
         if (isLoggedIn) {
             window.switchView('job-setup-view');
         } else {
-            window.switchView('signin-view'); // Logged-out PWA goes straight to sign in
+            window.switchView('signin-view'); // Drop straight to Sign In instead of landing page
         }
     } else {
+        // RUNNING IN A NORMAL BROWSER TAB
         if (isLoggedIn) {
             window.switchView(browserMustInstall() ? 'install-view' : 'job-setup-view');
         } else {
-            window.switchView('landing-view');
+            window.switchView('landing-view'); // Public marketing page only for browsers
         }
     }
 });

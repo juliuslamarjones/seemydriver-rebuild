@@ -1,7 +1,7 @@
 // ==========================================
 // SEEMYDRIVER - PWA SERVICE WORKER
 // ==========================================
-const CACHE_NAME = 'seemydriver-v5';
+const CACHE_NAME = 'seemydriver-v6';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
