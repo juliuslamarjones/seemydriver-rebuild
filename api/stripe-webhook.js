@@ -1,9 +1,12 @@
-// /api/stripe-webhook.js  (Vercel serverless function, CommonJS)
+// /api/stripe-webhook.js  (Vercel serverless function, ES module style - same as send-email.js)
 // Stripe events -> entitlements/{uid}/validUntil in the Realtime Database.
-const admin = require('firebase-admin');
-const Stripe = require('stripe');
+import admin from 'firebase-admin';
+import Stripe from 'stripe';
 
 const DATABASE_URL = 'https://seemydriver-prod-default-rtdb.firebaseio.com';
+
+// Stripe needs the raw request body to verify the signature
+export const config = { api: { bodyParser: false } };
 
 function getAdmin() {
   if (!admin.apps.length) {
@@ -34,7 +37,7 @@ async function grant(fb, uid, untilMs) {
   await ref.set(Math.max(current, untilMs));
 }
 
-async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   let event;
@@ -69,6 +72,3 @@ async function handler(req, res) {
     return res.status(500).end(); // Stripe will retry
   }
 }
-
-module.exports = handler;
-module.exports.config = { api: { bodyParser: false } };

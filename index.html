@@ -162,7 +162,7 @@
     <!-- MAIN CONTAINER -->
     <main class="flex-1 flex flex-col items-center justify-start w-full relative">
 
-        <!-- LANDING VIEW (CLEAN MARKETING PITCH WITH NO PUBLIC INSTALL BUTTON) -->
+        <!-- LANDING VIEW -->
         <div id="landing-view" class="app-view w-full max-w-5xl flex flex-col items-center text-center gap-10 py-4 sm:py-8 px-3 sm:px-4 hidden" style="display: none;">
             <div class="relative w-full flex flex-col items-center gap-4 sm:gap-6 pt-1">
                 <div class="absolute -top-12 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -188,7 +188,7 @@
                 <span class="text-[10px] sm:text-[11px] text-neutral-500">Works seamlessly on mobile browsers. Customers track instantly via any web link.</span>
             </div>
 
-            <!-- PREVIEW CARD -->
+            <!-- PREVIEW CARD WITH REAL LEAFLET MAP CONTAINER -->
             <div class="w-full bg-gradient-to-b from-[#12141c] to-neutral-900 border border-neutral-800/80 rounded-3xl p-5 sm:p-8 shadow-2xl relative overflow-hidden text-left">
                 <div class="absolute top-0 right-0 bg-amber-400/10 text-amber-400 text-[10px] font-black uppercase tracking-widest px-3 sm:px-4 py-1.5 rounded-bl-2xl border-l border-b border-amber-400/20 z-30">Live Simulation Preview</div>
                 <div class="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -202,8 +202,28 @@
                             <span class="text-emerald-400 animate-pulse">● LIVE ROUTE TELEMETRY</span>
                             <span id="preview-speed" class="text-amber-400 font-bold">45 mph</span>
                         </div>
-                        <div id="landing-preview-map" class="w-full h-48 bg-[#0b0f19] rounded-xl border border-neutral-800 relative overflow-hidden z-10 shadow-inner"></div>
+                        <!-- Real Leaflet Map Container Powered by OpenStreetMap -->
+                        <div id="landing-preview-map" class="w-full h-48 bg-neutral-200 rounded-xl border border-neutral-800 relative overflow-hidden z-10 shadow-inner"></div>
                     </div>
+                </div>
+            </div>
+
+            <!-- APP DESCRIPTION & FEATURES GRID BELOW THE MAP -->
+            <div class="w-full grid grid-cols-1 md:grid-cols-3 gap-6 text-left mt-4">
+                <div class="bg-[#12141c] border border-neutral-800/80 rounded-3xl p-6 flex flex-col gap-3 shadow-lg">
+                    <div class="w-10 h-10 rounded-xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 font-bold text-lg">⚡</div>
+                    <h4 class="text-lg font-bold text-white">Sub-Second Latency</h4>
+                    <p class="text-xs text-neutral-400 leading-relaxed">Powered by Firebase Realtime Database for instant positioning updates without lag or dropped signals.</p>
+                </div>
+                <div class="bg-[#12141c] border border-neutral-800/80 rounded-3xl p-6 flex flex-col gap-3 shadow-lg">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold text-lg">🔗</div>
+                    <h4 class="text-lg font-bold text-white">Zero App for Clients</h4>
+                    <p class="text-xs text-neutral-400 leading-relaxed">Text your client a secure tracking link. They open it directly in their mobile browser to watch you arrive.</p>
+                </div>
+                <div class="bg-[#12141c] border border-neutral-800/80 rounded-3xl p-6 flex flex-col gap-3 shadow-lg">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-lg">🛡️</div>
+                    <h4 class="text-lg font-bold text-white">Secure Cloud Dispatch</h4>
+                    <p class="text-xs text-neutral-400 leading-relaxed">Built for mobile service operators, pressure washers, and field techs with automated Stripe billing.</p>
                 </div>
             </div>
         </div>
@@ -312,10 +332,7 @@
         <div id="active-broadcast-view" class="app-view w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4 hidden" style="display: none;">
             <div class="w-full max-w-4xl h-[450px] bg-neutral-900 border border-neutral-800 rounded-3xl relative shadow-2xl flex flex-col overflow-hidden">
                 <div id="driver-map-container" class="w-full h-full rounded-3xl overflow-hidden z-10"></div>
-                <div class="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
-                    <div class="bg-black/80 backdrop-blur-md border border-neutral-800 px-4 py-2 rounded-xl text-xs font-mono pointer-events-auto shadow-lg text-neutral-300">
-                        Speed: <span id="driver-map-speed" class="text-amber-400 font-bold">0 mph</span>
-                    </div>
+                <div class="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-end gap-3 pointer-events-none">
                     <div class="flex items-center gap-2 pointer-events-auto">
                         <button onclick="window.fitDriverMap()" class="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow">Fit Both</button>
                         <button onclick="window.recenterDriverMap()" class="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-amber-400 text-xs font-bold px-3.5 py-2 rounded-xl shadow">Recenter</button>
@@ -380,8 +397,37 @@
         <div class="font-bold text-neutral-400">Developed & Architected by Julius Jones</div>
     </footer>
 
-    <!-- App Scripts (Bumped to v28 to break mobile PWA cache) -->
-    <script src="js/app.js?v=28"></script>
-    <script src="js/tracker.js?v=28"></script>
+    <!-- LANDING PAGE PREVIEW MAP (light OpenStreetMap tiles + the app's truck) -->
+    <script>
+        window.initLandingPreviewMap = function () {
+            const box = document.getElementById('landing-preview-map');
+            if (!box || box._leaflet_id || typeof L === 'undefined') return;
+            try {
+                const center = [29.7604, -95.3698]; // Houston
+                const map = L.map(box, {
+                    zoomControl: false, attributionControl: false, dragging: false,
+                    scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false,
+                    boxZoom: false, keyboard: false
+                }).setView(center, 14);
+
+                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+                const icon = typeof window.getTruckIcon === 'function'
+                    ? window.getTruckIcon(45)
+                    : L.divIcon({ className: '', html: '<div style="font-size:28px">🚚</div>', iconSize: [32, 32], iconAnchor: [16, 16] });
+                L.marker(center, { icon: icon, interactive: false }).addTo(map);
+
+                [0, 250, 700].forEach(function (ms) {
+                    setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, ms);
+                });
+            } catch (e) {
+                console.error('Preview map load error:', e);
+            }
+        };
+    </script>
+
+    <!-- App Scripts (Bumped to v34 to break mobile PWA cache) -->
+    <script src="js/app.js?v=34"></script>
+    <script src="js/tracker.js?v=34"></script>
 </body>
 </html>

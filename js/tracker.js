@@ -28,6 +28,7 @@ function formatEta(seconds) {
 
 // The truck artwork has its FRONT (cab + headlights) at the TOP, which matches heading 0 = north.
 const TRUCK_ICON_OFFSET_DEG = 0;
+window.getTruckIcon = getTruckIcon; // lets the landing-page preview map show the same truck
 
 // ---------- Broadcast Launch Handler ----------
 window.launchLiveBroadcast = function() {
