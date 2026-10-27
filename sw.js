@@ -1,7 +1,7 @@
 // ==========================================
 // SEEMYDRIVER - PWA SERVICE WORKER
 // ==========================================
-const CACHE_NAME = 'seemydriver-v4';
+const CACHE_NAME = 'seemydriver-v5';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -27,6 +27,7 @@ self.addEventListener('activate', (e) => {
         caches.keys().then((keyList) => {
             return Promise.all(keyList.map((key) => {
                 if (key !== CACHE_NAME) {
+                    console.log('Deleting old cache:', key);
                     return caches.delete(key);
                 }
             }));
