@@ -34,7 +34,7 @@ function ensureInstallView() {
     v.innerHTML = `
         <div class="w-full bg-gradient-to-b from-[#161923] to-[#0f1117] border border-neutral-800 rounded-3xl p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex flex-col gap-6 text-center relative overflow-hidden">
             <div class="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
-            <div class="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs py-1.5 px-4 rounded-full w-fit mx-auto">📱 APP REQUIRED</div>
+            <div class="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs py-1.5 px-4 rounded-full w-fit mx-auto">🚀 APP REQUIRED</div>
             <h2 class="text-3xl font-black tracking-tight text-white">Use the app to broadcast</h2>
             <p class="text-sm text-neutral-400 leading-relaxed"><b class="text-white">You can't broadcast from this web page.</b> SeeMyDriver only works as an installed app on your phone. Install it, open it from your home screen, then create your account or sign in there.</p>
             <button onclick="window.installPWA()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.3)] cursor-pointer">Install App 📱</button>
@@ -77,9 +77,86 @@ function addBrowserNotice() {
         const box = document.createElement('div');
         box.id = noticeId;
         box.className = 'flex flex-col gap-3 bg-amber-400/10 border border-amber-400/30 text-amber-200 text-xs sm:text-sm rounded-2xl p-4 leading-relaxed';
-        box.innerHTML = '<div><b>📱 SeeMyDriver runs as an installed app, not in the browser.</b> Install the app first, then sign in from the app on your phone. You can sign in here, but you will not be able to broadcast from this page.</div>' +
+        box.innerHTML = '<div><b>⚠️ SeeMyDriver runs as an installed app, not in the browser.</b> Install the app first, then sign in from the app on your phone. You can sign in here, but you will not be able to broadcast from this page.</div>' +
             '<button type="button" onclick="window.installPWA()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-2.5 rounded-xl cursor-pointer">Install the App 📱</button>';
         card.insertBefore(box, card.lastElementChild);
+    });
+}
+
+// ==========================================================
+// FLEET COMMAND UPGRADE & SWITCH GATEWAY
+// ==========================================================
+window.checkFleetAccessAndSwitch = async function() {
+    const auth = window.firebase && window.firebase.auth ? window.firebase.auth() : null;
+    const user = auth ? auth.currentUser : null;
+    let hasFleetAccess = false;
+
+    if (user) {
+        try {
+            const db = window.firebase.database();
+            const snapshot = await db.ref(`users/${user.uid}/tier`).once('value');
+            const tier = snapshot.val();
+            if (tier === 'fleet' || tier === 'admin') {
+                hasFleetAccess = true;
+            }
+        } catch (e) {
+            console.error("Tier check error:", e);
+        }
+    }
+
+    // Set to true while testing so you can jump straight to Fleet without paying
+    const DEV_BYPASS_MODE = true; 
+    if (DEV_BYPASS_MODE) hasFleetAccess = true;
+
+    if (hasFleetAccess) {
+        window.location.href = "https://seemydriverfleet.vercel.app";
+    } else {
+        showFleetPaywallModal();
+    }
+};
+
+function showFleetPaywallModal() {
+    if (document.getElementById('solo-fleet-paywall')) return;
+    const modal = document.createElement('div');
+    modal.id = 'solo-fleet-paywall';
+    modal.className = 'fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+    modal.innerHTML = `
+        <div class="bg-[#12141c] border border-neutral-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl flex flex-col gap-4 font-mono">
+            <div class="flex items-center justify-between border-b border-neutral-800 pb-3">
+                <span class="font-black text-white text-sm flex items-center gap-2">🔒 Fleet Command Upgrade</span>
+                <button onclick="document.getElementById('solo-fleet-paywall').remove()" class="text-neutral-400 hover:text-white p-1 cursor-pointer">✕</button>
+            </div>
+            <div class="space-y-3 text-xs text-neutral-300">
+                <p>You are on the Solo plan. Unlock multi-vehicle live map tracking, Mapbox geocoding, and automated SMS dispatching.</p>
+                <div class="bg-neutral-900 border border-neutral-800 p-3 rounded-xl flex items-center justify-between">
+                    <div>
+                        <span class="text-white font-bold block">Fleet Tier</span>
+                        <span class="text-[10px] text-neutral-400">Includes Solo + Command Center</span>
+                    </div>
+                    <span class="text-amber-400 font-black text-sm">$49/mo</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 pt-2">
+                <button onclick="document.getElementById('solo-fleet-paywall').remove()" class="flex-1 bg-neutral-900 text-neutral-300 text-xs font-bold py-2.5 rounded-xl border border-neutral-800 cursor-pointer">Cancel</button>
+                <button onclick="window.location.href='https://www.seemydriver.com/upgrade'" class="flex-1 bg-amber-400 hover:bg-amber-500 text-black text-xs font-black py-2.5 rounded-xl transition-all cursor-pointer">Upgrade Now</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+}
+
+function injectFleetToggleButton() {
+    ['job-setup-view', 'active-broadcast-view'].forEach(viewId => {
+        const viewEl = document.getElementById(viewId);
+        if (viewEl && !viewEl.querySelector('#smd-switch-fleet-btn')) {
+            const container = document.createElement('div');
+            container.className = 'px-4 py-3 w-full max-w-md mx-auto';
+            container.innerHTML = `
+                <button id="smd-switch-fleet-btn" onclick="window.checkFleetAccessAndSwitch()" class="w-full bg-gradient-to-r from-amber-500/20 to-amber-400/10 hover:from-amber-500/30 hover:to-amber-400/20 border border-amber-400/40 text-amber-400 text-xs font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-between shadow-lg cursor-pointer">
+                    <span class="flex items-center gap-2">🚀 Switch to Fleet Command</span>
+                    <span class="text-[10px] bg-amber-400 text-black px-2 py-0.5 rounded-full font-black">UPGRADE</span>
+                </button>`;
+            viewEl.insertBefore(container, viewEl.firstChild);
+        }
     });
 }
 
@@ -91,7 +168,6 @@ window.switchView = function (viewId) {
     
     let targetId = viewId === 'landing' ? 'landing-view' : (viewId.includes('-view') ? viewId : viewId + '-view');
 
-    // Live-site browser tabs cannot sign in or register: send them to the install screen instead
     if (!BROWSER_ACCOUNT_SCREENS_ALLOWED && browserMustInstall() && (targetId === 'signin-view' || targetId === 'register-view')) {
         targetId = 'install-view';
     }
@@ -99,13 +175,11 @@ window.switchView = function (viewId) {
     ensureInstallView();
     const target = document.getElementById(targetId);
 
-    // Sign Out only makes sense on the install screen if someone is actually signed in
     const signOutBtn = document.getElementById('install-signout-btn');
     if (signOutBtn) {
         signOutBtn.style.display = localStorage.getItem('seemydriver_logged_in') === 'true' ? '' : 'none';
     }
     
-    // Hide header action buttons on active broadcast or customer views to eliminate clutter
     const headerNav = document.getElementById('header-nav-actions');
     if (headerNav) {
         if (targetId === 'active-broadcast-view' || targetId === 'customer-view-view') {
@@ -118,6 +192,9 @@ window.switchView = function (viewId) {
     if (target) {
         target.classList.remove('hidden');
         target.style.display = 'block';
+        
+        // Inject Fleet toggle button when views render
+        injectFleetToggleButton();
         
         if (targetId === 'landing-view' && typeof window.initLandingPreviewMap === 'function') {
             setTimeout(window.initLandingPreviewMap, 150);
@@ -135,10 +212,6 @@ window.smdInApp = function() {
     return isStandalone || isLocalApp;
 };
 
-// Only browser tabs on the live site (seemydriver.com) must install the app.
-// localhost and *.vercel.app test links are exempt so you can keep testing on your laptop.
-// true  = Sign In / Create Account still open in a browser tab on the live site (they then see the install screen)
-// false = browser tabs on the live site never see those screens, only the install screen
 const BROWSER_ACCOUNT_SCREENS_ALLOWED = true;
 
 function browserMustInstall() {
@@ -160,7 +233,6 @@ window.handleSignOut = function () {
     try { sessionStorage.clear(); } catch(e) {}
     try { window.firebase.auth().signOut(); } catch(e) {}
 
-    // If running as an installed app, dropping out of signout goes to sign-in view instead of landing
     if (window.smdInApp()) {
         window.switchView('signin-view');
     } else {
@@ -168,9 +240,6 @@ window.handleSignOut = function () {
     }
 };
 
-// ==========================================================
-// 30-DAY TRIAL & SUBSCRIPTION PAYWALL
-// ==========================================================
 const API_BASE = ''; 
 const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/4gM4gz5wvd2Y01r7aNcbC03';
 
@@ -228,7 +297,6 @@ window.handleSignIn = function () {
                 localStorage.setItem('seemydriver_logged_in', 'true');
                 
                 checkAndEnforceSubscription(userCredential.user, () => {
-                    // Live-site browser tabs get the install screen; the installed app and test links go to job setup
                     if (browserMustInstall()) {
                         window.switchView('install-view');
                     } else {
@@ -313,6 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ensureInstallView();
     addAuthCrossLinks();
     addBrowserNotice();
+    injectFleetToggleButton();
 
     const q = new URLSearchParams(window.location.search);
     const view = q.get('view');
@@ -334,18 +403,16 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (view === 'register') {
         window.switchView('register-view');
     } else if (isStandalone) {
-        // RUNNING AS AN INSTALLED PWA APP: NEVER SHOW THE WEB LANDING PAGE
         if (isLoggedIn) {
             window.switchView('job-setup-view');
         } else {
-            window.switchView('signin-view'); // Drop straight to Sign In instead of landing page
+            window.switchView('signin-view');
         }
     } else {
-        // RUNNING IN A NORMAL BROWSER TAB
         if (isLoggedIn) {
             window.switchView(browserMustInstall() ? 'install-view' : 'job-setup-view');
         } else {
-            window.switchView('landing-view'); // Public marketing page only for browsers
+            window.switchView('landing-view');
         }
     }
 });
