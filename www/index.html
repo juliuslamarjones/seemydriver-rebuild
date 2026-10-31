@@ -286,6 +286,13 @@
 
         <!-- JOB SETUP VIEW -->
         <div id="job-setup-view" class="app-view w-full max-w-xl flex flex-col items-center p-4 sm:p-6 my-auto hidden" style="display: none;">
+            <!-- FLEET COMMAND GATEWAY BUTTON -->
+            <div class="w-full max-w-md mx-auto mb-4">
+                <button onclick="window.checkFleetAccessAndSwitch()" class="w-full bg-gradient-to-r from-amber-500/20 to-amber-400/10 hover:from-amber-500/30 hover:to-amber-400/20 border border-amber-400/40 text-amber-400 text-xs font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-between shadow-lg cursor-pointer">
+                    <span class="flex items-center gap-2">🚀 Switch to Fleet Command</span>
+                    <span class="text-[10px] bg-amber-400 text-black px-2 py-0.5 rounded-full font-black">UPGRADE</span>
+                </button>
+            </div>
             <div class="w-full bg-[#12141c] border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col gap-6 text-left">
                 <div class="flex items-center justify-between">
                     <div class="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/20 text-amber-300 font-bold text-xs py-1.5 px-4 rounded-full w-fit">
@@ -330,6 +337,13 @@
 
         <!-- ACTIVE BROADCAST VIEW -->
         <div id="active-broadcast-view" class="app-view w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4 hidden" style="display: none;">
+            <!-- FLEET COMMAND GATEWAY BUTTON -->
+            <div class="w-full max-w-4xl mx-auto">
+                <button onclick="window.checkFleetAccessAndSwitch()" class="w-full bg-gradient-to-r from-amber-500/20 to-amber-400/10 hover:from-amber-500/30 hover:to-amber-400/20 border border-amber-400/40 text-amber-400 text-xs font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-between shadow-lg cursor-pointer">
+                    <span class="flex items-center gap-2">🚀 Switch to Fleet Command</span>
+                    <span class="text-[10px] bg-amber-400 text-black px-2 py-0.5 rounded-full font-black">UPGRADE</span>
+                </button>
+            </div>
             <div class="w-full max-w-4xl h-[450px] bg-neutral-900 border border-neutral-800 rounded-3xl relative shadow-2xl flex flex-col overflow-hidden">
                 <div id="driver-map-container" class="w-full h-full rounded-3xl overflow-hidden z-10"></div>
                 <div class="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-end gap-3 pointer-events-none">
@@ -426,8 +440,8 @@
         };
     </script>
 
-    <!-- App Scripts (Bumped to v34 to break mobile PWA cache) -->
-    <script src="js/app.js?v=34"></script>
-    <script src="js/tracker.js?v=34"></script>
+    <!-- App Scripts (Bumped to v36 to match cache buster) -->
+    <script src="js/app.js?v=36"></script>
+    <script src="js/tracker.js?v=36"></script>
 </body>
 </html>
