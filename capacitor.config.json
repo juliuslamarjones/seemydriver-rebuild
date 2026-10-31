@@ -2,6 +2,12 @@
   "appId": "com.seemydriver.app",
   "appName": "SeeMyDriver",
   "webDir": "www",
+  "server": {
+    "allowNavigation": [
+      "seemydriverfleet.vercel.app",
+      "*.vercel.app"
+    ]
+  },
   "android": {
     "allowMixedContent": true
   },
