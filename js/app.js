@@ -111,22 +111,9 @@ window.checkFleetAccessAndSwitch = async function(event) {
     if (DEV_BYPASS_MODE) hasFleetAccess = true;
 
     if (hasFleetAccess) {
-        const token = user ? await user.getIdToken() : '';
-        const fleetUrl = `https://seemydriverfleet.vercel.app/?auth_token=${token}`;
-        
-        // Open inside Capacitor In-App Browser overlay if running native app
-        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-            try {
-                const { Browser } = window.Capacitor.Plugins;
-                await Browser.open({ url: fleetUrl });
-                return;
-            } catch (err) {
-                console.error("Capacitor Browser plugin error:", err);
-            }
-        }
-        
-        // Fallback for PWA/Web
-        window.location.assign(fleetUrl);
+        // Fleet lives on the same site (/fleet/), so it opens inside the installed app instead of jumping to a browser.
+        // Same address means the same saved login, so no token is passed in the URL.
+        window.location.assign('/fleet/index.html');
     } else {
         showFleetPaywallModal();
     }
