@@ -84,9 +84,12 @@ function addBrowserNotice() {
 }
 
 // ==========================================================
-// FLEET COMMAND UPGRADE & SWITCH GATEWAY
+// FLEET COMMAND UPGRADE & SWITCH GATEWAY (FIXED)
 // ==========================================================
-window.checkFleetAccessAndSwitch = async function() {
+window.checkFleetAccessAndSwitch = async function(event) {
+    if (event) event.preventDefault();
+    console.log("🚀 Switch to Fleet clicked!");
+
     const auth = window.firebase && window.firebase.auth ? window.firebase.auth() : null;
     const user = auth ? auth.currentUser : null;
     let hasFleetAccess = false;
@@ -109,7 +112,9 @@ window.checkFleetAccessAndSwitch = async function() {
     if (DEV_BYPASS_MODE) hasFleetAccess = true;
 
     if (hasFleetAccess) {
-        window.location.href = "https://seemydriverfleet.vercel.app";
+        const token = user ? await user.getIdToken() : '';
+        const fleetUrl = `https://seemydriverfleet.vercel.app/?auth_token=${token}`;
+        window.location.assign(fleetUrl);
     } else {
         showFleetPaywallModal();
     }
@@ -147,15 +152,33 @@ function showFleetPaywallModal() {
 function injectFleetToggleButton() {
     ['job-setup-view', 'active-broadcast-view'].forEach(viewId => {
         const viewEl = document.getElementById(viewId);
-        if (viewEl && !viewEl.querySelector('#smd-switch-fleet-btn')) {
+        if (viewEl) {
+            // Sweep and destroy any existing injected containers to completely prevent double stacking
+            const existing = viewEl.querySelectorAll('.smd-fleet-inject-container');
+            existing.forEach(el => el.remove());
+            
+            const oldBtn = viewEl.querySelector('#smd-switch-fleet-btn');
+            if (oldBtn) {
+                const parentContainer = oldBtn.closest('div');
+                if (parentContainer) parentContainer.remove();
+            }
+
             const container = document.createElement('div');
-            container.className = 'px-4 py-3 w-full max-w-md mx-auto';
+            container.className = 'px-4 py-3 w-full max-w-md mx-auto smd-fleet-inject-container';
             container.innerHTML = `
-                <button id="smd-switch-fleet-btn" onclick="window.checkFleetAccessAndSwitch()" class="w-full bg-gradient-to-r from-amber-500/20 to-amber-400/10 hover:from-amber-500/30 hover:to-amber-400/20 border border-amber-400/40 text-amber-400 text-xs font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-between shadow-lg cursor-pointer">
-                    <span class="flex items-center gap-2">🚀 Switch to Fleet Command</span>
+                <button id="smd-switch-fleet-btn" type="button" class="w-full bg-gradient-to-r from-amber-500/20 to-amber-400/10 hover:from-amber-500/30 hover:to-amber-400/20 border border-amber-400/40 text-amber-400 text-xs font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-between shadow-lg cursor-pointer">
+                    <span class="font-black flex items-center gap-2">🚀 Switch to Fleet Command</span>
                     <span class="text-[10px] bg-amber-400 text-black px-2 py-0.5 rounded-full font-black">UPGRADE</span>
                 </button>`;
             viewEl.insertBefore(container, viewEl.firstChild);
+            
+            // Explicitly bind click listener programmatically
+            const btn = container.querySelector('#smd-switch-fleet-btn');
+            if (btn) {
+                btn.addEventListener('click', (e) => {
+                    window.checkFleetAccessAndSwitch(e);
+                });
+            }
         }
     });
 }
