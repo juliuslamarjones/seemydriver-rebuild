@@ -28,7 +28,7 @@
             }
         };
 
-        const firebaseConfig = {    apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI",    authDomain: "seemydriver-prod.firebaseapp.com",    databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",    projectId: "seemydriver-prod",    storageBucket: "seemydriver-prod.firebasestorage.app",    messagingSenderId: "16366013329",    appId: "1:16366013329:web:7e993e6ee37f940a04a064"};
+        const firebaseConfig = { apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI", authDomain: "seemydriver-prod.firebaseapp.com", databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com", projectId: "seemydriver-prod", storageBucket: "seemydriver-prod.firebasestorage.app", messagingSenderId: "16366013329", appId: "1:16366013329:web:7e993e6ee37f940a04a064"};
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
         }
@@ -286,7 +286,7 @@
 
         <!-- JOB SETUP VIEW -->
         <div id="job-setup-view" class="app-view w-full max-w-xl flex flex-col items-center p-4 sm:p-6 my-auto hidden" style="display: none;">
-            <!-- FLEET COMMAND GATEWAY BUTTON -->
+            <!-- SINGLE HARDCODED FLEET COMMAND GATEWAY BUTTON -->
             <div class="w-full max-w-md mx-auto mb-4">
                 <button onclick="window.checkFleetAccessAndSwitch()" class="w-full bg-gradient-to-r from-amber-500/20 to-amber-400/10 hover:from-amber-500/30 hover:to-amber-400/20 border border-amber-400/40 text-amber-400 text-xs font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-between shadow-lg cursor-pointer">
                     <span class="flex items-center gap-2">🚀 Switch to Fleet Command</span>
@@ -337,7 +337,7 @@
 
         <!-- ACTIVE BROADCAST VIEW -->
         <div id="active-broadcast-view" class="app-view w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4 hidden" style="display: none;">
-            <!-- FLEET COMMAND GATEWAY BUTTON -->
+            <!-- SINGLE HARDCODED FLEET COMMAND GATEWAY BUTTON -->
             <div class="w-full max-w-4xl mx-auto">
                 <button onclick="window.checkFleetAccessAndSwitch()" class="w-full bg-gradient-to-r from-amber-500/20 to-amber-400/10 hover:from-amber-500/30 hover:to-amber-400/20 border border-amber-400/40 text-amber-400 text-xs font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-between shadow-lg cursor-pointer">
                     <span class="flex items-center gap-2">🚀 Switch to Fleet Command</span>
@@ -411,7 +411,7 @@
         <div class="font-bold text-neutral-400">Developed & Architected by Julius Jones</div>
     </footer>
 
-    <!-- LANDING PAGE PREVIEW MAP (light OpenStreetMap tiles + the app's truck) -->
+    <!-- LANDING PAGE PREVIEW MAP -->
     <script>
         window.initLandingPreviewMap = function () {
             const box = document.getElementById('landing-preview-map');
@@ -440,8 +440,8 @@
         };
     </script>
 
-    <!-- App Scripts (Bumped to v36 to match cache buster) -->
-    <script src="js/app.js?v=36"></script>
-    <script src="js/tracker.js?v=36"></script>
+    <!-- App Scripts (Bumped to v38 to ensure cache bust) -->
+    <script src="js/app.js?v=38"></script>
+    <script src="js/tracker.js?v=38"></script>
 </body>
 </html>

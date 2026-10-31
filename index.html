@@ -28,7 +28,7 @@
             }
         };
 
-        const firebaseConfig = {    apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI",    authDomain: "seemydriver-prod.firebaseapp.com",    databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",    projectId: "seemydriver-prod",    storageBucket: "seemydriver-prod.firebasestorage.app",    messagingSenderId: "16366013329",    appId: "1:16366013329:web:7e993e6ee37f940a04a064"};
+        const firebaseConfig = { apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI", authDomain: "seemydriver-prod.firebaseapp.com", databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com", projectId: "seemydriver-prod", storageBucket: "seemydriver-prod.firebasestorage.app", messagingSenderId: "16366013329", appId: "1:16366013329:web:7e993e6ee37f940a04a064"};
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
         }
@@ -411,7 +411,7 @@
         <div class="font-bold text-neutral-400">Developed & Architected by Julius Jones</div>
     </footer>
 
-    <!-- LANDING PAGE PREVIEW MAP (light OpenStreetMap tiles + the app's truck) -->
+    <!-- LANDING PAGE PREVIEW MAP -->
     <script>
         window.initLandingPreviewMap = function () {
             const box = document.getElementById('landing-preview-map');
@@ -440,8 +440,8 @@
         };
     </script>
 
-    <!-- App Scripts (Bumped to v37 to bust cache after cleanup) -->
-    <script src="js/app.js?v=37"></script>
-    <script src="js/tracker.js?v=37"></script>
+    <!-- App Scripts (Bumped to v38 to ensure cache bust) -->
+    <script src="js/app.js?v=38"></script>
+    <script src="js/tracker.js?v=38"></script>
 </body>
 </html>

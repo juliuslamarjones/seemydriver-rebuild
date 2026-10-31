@@ -84,7 +84,7 @@ function addBrowserNotice() {
 }
 
 // ==========================================================
-// FLEET COMMAND UPGRADE & SWITCH GATEWAY (FIXED)
+// FLEET COMMAND UPGRADE & SWITCH GATEWAY
 // ==========================================================
 window.checkFleetAccessAndSwitch = async function(event) {
     if (event) event.preventDefault();
@@ -107,7 +107,6 @@ window.checkFleetAccessAndSwitch = async function(event) {
         }
     }
 
-    // Set to true while testing so you can jump straight to Fleet without paying
     const DEV_BYPASS_MODE = true; 
     if (DEV_BYPASS_MODE) hasFleetAccess = true;
 
@@ -149,40 +148,6 @@ function showFleetPaywallModal() {
     document.body.appendChild(modal);
 }
 
-function injectFleetToggleButton() {
-    ['job-setup-view', 'active-broadcast-view'].forEach(viewId => {
-        const viewEl = document.getElementById(viewId);
-        if (viewEl) {
-            // Sweep and destroy any existing injected containers to completely prevent double stacking
-            const existing = viewEl.querySelectorAll('.smd-fleet-inject-container');
-            existing.forEach(el => el.remove());
-            
-            const oldBtn = viewEl.querySelector('#smd-switch-fleet-btn');
-            if (oldBtn) {
-                const parentContainer = oldBtn.closest('div');
-                if (parentContainer) parentContainer.remove();
-            }
-
-            const container = document.createElement('div');
-            container.className = 'px-4 py-3 w-full max-w-md mx-auto smd-fleet-inject-container';
-            container.innerHTML = `
-                <button id="smd-switch-fleet-btn" type="button" class="w-full bg-gradient-to-r from-amber-500/20 to-amber-400/10 hover:from-amber-500/30 hover:to-amber-400/20 border border-amber-400/40 text-amber-400 text-xs font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-between shadow-lg cursor-pointer">
-                    <span class="font-black flex items-center gap-2">🚀 Switch to Fleet Command</span>
-                    <span class="text-[10px] bg-amber-400 text-black px-2 py-0.5 rounded-full font-black">UPGRADE</span>
-                </button>`;
-            viewEl.insertBefore(container, viewEl.firstChild);
-            
-            // Explicitly bind click listener programmatically
-            const btn = container.querySelector('#smd-switch-fleet-btn');
-            if (btn) {
-                btn.addEventListener('click', (e) => {
-                    window.checkFleetAccessAndSwitch(e);
-                });
-            }
-        }
-    });
-}
-
 window.switchView = function (viewId) {
     document.querySelectorAll('.app-view').forEach((el) => {
         el.classList.add('hidden');
@@ -215,9 +180,6 @@ window.switchView = function (viewId) {
     if (target) {
         target.classList.remove('hidden');
         target.style.display = 'block';
-        
-        // Inject Fleet toggle button when views render
-        injectFleetToggleButton();
         
         if (targetId === 'landing-view' && typeof window.initLandingPreviewMap === 'function') {
             setTimeout(window.initLandingPreviewMap, 150);
@@ -404,7 +366,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ensureInstallView();
     addAuthCrossLinks();
     addBrowserNotice();
-    injectFleetToggleButton();
 
     const q = new URLSearchParams(window.location.search);
     const view = q.get('view');
