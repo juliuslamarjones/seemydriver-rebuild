@@ -84,11 +84,11 @@ function addBrowserNotice() {
 }
 
 // ==========================================================
-// FLEET COMMAND UPGRADE & SWITCH GATEWAY
+// FLEET COMMAND UPGRADE & IN-APP IFRAME GATEWAY
 // ==========================================================
 window.checkFleetAccessAndSwitch = async function(event) {
     if (event) event.preventDefault();
-    console.log("🚀 Switch to Fleet clicked!");
+    console.log("🚀 Switch to Fleet clicked inside PWA!");
 
     const auth = window.firebase && window.firebase.auth ? window.firebase.auth() : null;
     const user = auth ? auth.currentUser : null;
@@ -113,11 +113,31 @@ window.checkFleetAccessAndSwitch = async function(event) {
     if (hasFleetAccess) {
         const token = user ? await user.getIdToken() : '';
         const fleetUrl = `https://seemydriverfleet.vercel.app/?auth_token=${token}`;
-        window.location.assign(fleetUrl);
+        
+        // Open Fleet inside an immersive in-app overlay iframe container to prevent leaving the PWA
+        openInAppFleetModal(fleetUrl);
     } else {
         showFleetPaywallModal();
     }
 };
+
+function openInAppFleetModal(url) {
+    if (document.getElementById('smd-fleet-overlay')) {
+        document.getElementById('smd-fleet-overlay').remove();
+    }
+    
+    const overlay = document.createElement('div');
+    overlay.id = 'smd-fleet-overlay';
+    overlay.className = 'fixed inset-0 bg-black z-50 flex flex-col w-full h-full';
+    overlay.innerHTML = `
+        <div class="bg-[#12141c] border-b border-neutral-800 px-4 py-3 flex items-center justify-between shrink-0">
+            <span class="font-black text-amber-400 text-sm flex items-center gap-2">🚀 Fleet Command Center</span>
+            <button onclick="document.getElementById('smd-fleet-overlay').remove()" class="bg-neutral-900 border border-neutral-800 text-white px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-neutral-800 cursor-pointer">✕ Close Fleet</button>
+        </div>
+        <iframe src="${url}" class="w-full flex-1 border-none bg-black"></iframe>`;
+    
+    document.body.appendChild(overlay);
+}
 
 function showFleetPaywallModal() {
     if (document.getElementById('solo-fleet-paywall')) return;
