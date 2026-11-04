@@ -1,0 +1,5 @@
+Whenever you're ready to lock it down for real-world drivers, you just change STRICT_PRODUCTION_GPS = true; right there at line 6, push to Vercel, and sync your Capacitor build.
+
+we need to have real authitification on the email and password though firebase so users can put in a fake email address
+
+OpenStreetMap tiles and Photon are all public, free-use services. They’re fine for a pilot, but for paying customers you’ll want your own routing and tile provider.

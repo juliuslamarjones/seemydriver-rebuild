@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPS Test</title>
+<style>
+  :root { --bg:#0b0d12; --fg:#e5e7eb; --mut:#9ca3af; --ok:#34d399; --bad:#f87171; --warn:#fbbf24; --card:#151821; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f5f5f4; --fg:#111827; --mut:#4b5563; --ok:#047857; --bad:#b91c1c; --warn:#b45309; --card:#ffffff; } }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui,sans-serif; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { margin:0 0 14px; color:var(--mut); }
+  button { width:100%; padding:14px; font:700 16px system-ui,sans-serif; border:0; border-radius:12px; background:#fbbf24; color:#000; }
+  button:disabled { opacity:.5; }
+  .card { background:var(--card); border-radius:12px; padding:12px; margin-top:12px; }
+  .row { display:flex; justify-content:space-between; gap:10px; padding:4px 0; }
+  .row span:first-child { color:var(--mut); }
+  .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); }
+  #log { font:12px/1.5 ui-monospace,monospace; white-space:pre-wrap; word-break:break-word; }
+</style>
+</head>
+<body>
+<h1>SeeMyDriver GPS Test</h1>
+<p class="sub">Open this on the phone, in Chrome, outside if you can. Tap Run and wait about 40 seconds.</p>
+<button id="go">Run GPS test</button>
+
+<div class="card" id="summary">
+  <div class="row"><span>Secure page (https)</span><span id="s-secure">-</span></div>
+  <div class="row"><span>Location permission</span><span id="s-perm">-</span></div>
+  <div class="row"><span>High accuracy fix</span><span id="s-high">-</span></div>
+  <div class="row"><span>Normal accuracy fix</span><span id="s-low">-</span></div>
+  <div class="row"><span>Live updates (30 s)</span><span id="s-watch">-</span></div>
+  <div class="row"><span>Best accuracy seen</span><span id="s-best">-</span></div>
+  <div class="row"><span>What the app does with it</span><span id="s-verdict">-</span></div>
+</div>
+
+<div class="card"><div id="log">Waiting. Tap Run.</div></div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var logEl = $('log'), t0 = 0, best = Infinity;
+  var ERR = { 1: 'PERMISSION DENIED', 2: 'POSITION UNAVAILABLE', 3: 'TIMEOUT' };
+
+  function log(msg) {
+    var s = ((Date.now() - t0) / 1000).toFixed(1);
+    logEl.textContent += '[' + s + 's] ' + msg + '\n';
+  }
+  function set(id, text, cls) { var el = $(id); el.textContent = text; el.className = cls || ''; }
+  function note(acc) { if (isFinite(acc) && acc < best) { best = acc; set('s-best', '\u00B1' + Math.round(acc) + ' m', acc <= 100 ? 'ok' : (acc <= 300 ? 'warn' : 'bad')); } }
+
+  function once(high) {
+    return new Promise(function (resolve) {
+      var start = Date.now();
+      navigator.geolocation.getCurrentPosition(function (p) {
+        var acc = p.coords.accuracy;
+        note(acc);
+        log((high ? 'HIGH' : 'NORMAL') + ' fix OK in ' + ((Date.now() - start) / 1000).toFixed(1) + 's, accuracy \u00B1' + Math.round(acc) + ' m');
+        resolve({ ok: true, acc: acc });
+      }, function (e) {
+        log((high ? 'HIGH' : 'NORMAL') + ' fix FAILED: ' + (ERR[e.code] || e.code) + ' (' + (e.message || '') + ')');
+        resolve({ ok: false, code: e.code });
+      }, { enableHighAccuracy: high, timeout: 20000, maximumAge: 0 });
+    });
+  }
+
+  function watch() {
+    return new Promise(function (resolve) {
+      var n = 0, errs = 0, id;
+      id = navigator.geolocation.watchPosition(function (p) {
+        n++;
+        note(p.coords.accuracy);
+        log('update #' + n + ': \u00B1' + Math.round(p.coords.accuracy) + ' m, speed ' + (p.coords.speed == null ? 'n/a' : p.coords.speed.toFixed(1) + ' m/s'));
+      }, function (e) {
+        errs++;
+        log('watch error: ' + (ERR[e.code] || e.code));
+      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+      setTimeout(function () { navigator.geolocation.clearWatch(id); resolve({ n: n, errs: errs }); }, 30000);
+    });
+  }
+
+  $('go').addEventListener('click', async function () {
+    var btn = $('go');
+    btn.disabled = true; btn.textContent = 'Testing...';
+    logEl.textContent = ''; t0 = Date.now(); best = Infinity;
+    ['s-perm', 's-high', 's-low', 's-watch', 's-best', 's-verdict'].forEach(function (i) { set(i, '...'); });
+
+    var secure = window.isSecureContext;
+    set('s-secure', secure ? 'yes' : 'NO', secure ? 'ok' : 'bad');
+    log('page: ' + location.href);
+    log('standalone app mode: ' + ((window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) ? 'yes' : 'no (normal tab)'));
+
+    if (!navigator.geolocation) {
+      set('s-perm', 'not supported', 'bad'); log('This browser has no geolocation.');
+      btn.disabled = false; btn.textContent = 'Run again'; return;
+    }
+
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        var st = await navigator.permissions.query({ name: 'geolocation' });
+        set('s-perm', st.state, st.state === 'granted' ? 'ok' : (st.state === 'denied' ? 'bad' : 'warn'));
+        log('permission state: ' + st.state);
+      } else { set('s-perm', 'unknown'); }
+    } catch (e) { set('s-perm', 'unknown'); }
+
+    var hi = await once(true);
+    set('s-high', hi.ok ? 'OK \u00B1' + Math.round(hi.acc) + ' m' : 'FAILED (' + (ERR[hi.code] || '?') + ')', hi.ok ? 'ok' : 'bad');
+    var lo = await once(false);
+    set('s-low', lo.ok ? 'OK \u00B1' + Math.round(lo.acc) + ' m' : 'FAILED (' + (ERR[lo.code] || '?') + ')', lo.ok ? 'ok' : 'bad');
+
+    log('watching for 30 seconds...');
+    var w = await watch();
+    set('s-watch', w.n + ' updates, ' + w.errs + ' errors', w.n > 0 ? 'ok' : 'bad');
+
+    var v, c;
+    if (!isFinite(best)) { v = 'No fix at all. The truck will never appear.'; c = 'bad'; }
+    else if (best <= 100) { v = 'Good. Route and truck should work.'; c = 'ok'; }
+    else if (best <= 300) { v = 'Weak. Truck appears, route may be skipped.'; c = 'warn'; }
+    else { v = 'Too inaccurate. App ignores fixes over 300 m.'; c = 'bad'; }
+    set('s-verdict', v, c);
+    log('done.');
+    btn.disabled = false; btn.textContent = 'Run again';
+  });
+})();
+</script>
+</body>
+</html>
