@@ -6,10 +6,10 @@
 
 const LS = window.SafeStorage;
 const MPS_TO_MPH = 2.23694;
-const ENGINE_VERSION = 'v62';
+const ENGINE_VERSION = 'v63';
 const HEADING_UP = false;
 
-const MAPBOX_TOKEN = 'pk.placeholder_token';
+const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
 const $ = (id) => document.getElementById(id);
