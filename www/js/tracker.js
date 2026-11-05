@@ -651,6 +651,14 @@ window.initDriverActiveMap = function () {
     }
 
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    
+    // Allow manual user interaction (drag, pinch-zoom, wheel) to break 'follow' lock without freezing UI controls
+    ['dragstart', 'zoomstart', 'touchstart', 'wheel'].forEach(evt => {
+        map.on(evt, () => {
+            if (D && D.engine) D.engine.follow = false;
+        });
+    });
+
     if (dest) new mapboxgl.Marker({ element: createPinElement() }).setLngLat([dest.lng, dest.lat]).addTo(map);
 
     const engine = createTripEngine(map, { dest: dest, camera: { pitch: 55, bearing: -17 } });
@@ -691,9 +699,14 @@ window.toggleDriver3D = function () {
 };
 
 window.recenterDriverMap = function () {
-    if (!D || !D.map) return;
+    if (!D || !D.map || !D.engine) return;
     D.engine.follow = true;
-    D.map.setZoom(16);
+    const pos = D.engine.position();
+    if (pos) {
+        D.map.easeTo({ center: [pos.lng, pos.lat], zoom: 16, duration: 800 });
+    } else {
+        D.map.setZoom(16);
+    }
 };
 
 window.fitDriverMap = function () {
@@ -804,6 +817,13 @@ window.initCustomerMapLive = function () {
         return;
     }
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+    ['dragstart', 'zoomstart', 'touchstart', 'wheel'].forEach(evt => {
+        map.on(evt, () => {
+            if (C && C.engine) C.engine.follow = false;
+        });
+    });
+
     map.on('load', () => { map.resize(); });
 
     const me = C = { map: map, engine: null, destMarker: null, ref: null, cb: null, timer: null, lastTs: null, lastChange: Date.now(), ended: false };
@@ -890,9 +910,14 @@ window.initCustomerMapLive = function () {
 };
 
 window.recenterCustomerMap = function () {
-    if (!C || !C.engine) return;
+    if (!C || !C.map || !C.engine) return;
     C.engine.follow = true;
-    C.map.setZoom(16);
+    const pos = C.engine.position();
+    if (pos) {
+        C.map.easeTo({ center: [pos.lng, pos.lat], zoom: 16, duration: 800 });
+    } else {
+        C.map.setZoom(16);
+    }
 };
 
 window.fitCustomerMap = function () {
