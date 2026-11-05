@@ -98,9 +98,9 @@
         .mapboxgl-popup-content { background: #12141c !important; color: #fff !important; border-radius: 12px; border: 1px solid #262626; }
         .pro-vehicle-marker { background: transparent !important; border: none !important; }
         
-        /* Ensure Mapbox control container is fully interactive and optimized for mobile touch PWA */
+        /* Force absolute touch responsiveness on Mapbox controls */
         .mapboxgl-ctrl-top-right {
-            z-index: 50 !important;
+            z-index: 9999 !important;
             pointer-events: auto !important;
         }
         .mapboxgl-ctrl-group {
@@ -127,6 +127,7 @@
         #driver-3d-btn {
             touch-action: manipulation !important;
             -webkit-tap-highlight-color: transparent;
+            pointer-events: auto !important;
         }
 
         #brand-logo, .brand-logo {
