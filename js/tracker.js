@@ -683,7 +683,7 @@ window.toggleDriver3D = function () {
     window.is3DMode = !window.is3DMode;
     D.map.easeTo({ pitch: window.is3DMode ? 55 : 0, duration: 1000 });
     
-    const btn = document.querySelector('button[onclick*="toggleDriver3D"]');
+    const btn = document.getElementById('driver-3d-btn');
     if (btn) {
         btn.textContent = window.is3DMode ? '🌐 3D: ON' : '🌐 3D: OFF';
     }

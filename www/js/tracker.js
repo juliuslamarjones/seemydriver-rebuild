@@ -6,7 +6,7 @@
 
 const LS = window.SafeStorage;
 const MPS_TO_MPH = 2.23694;
-const ENGINE_VERSION = 'v63';
+const ENGINE_VERSION = 'v64';
 const HEADING_UP = false;
 
 const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
@@ -683,7 +683,7 @@ window.toggleDriver3D = function () {
     window.is3DMode = !window.is3DMode;
     D.map.easeTo({ pitch: window.is3DMode ? 55 : 0, duration: 1000 });
     
-    const btn = document.querySelector('button[onclick*="toggleDriver3D"]');
+    const btn = document.getElementById('driver-3d-btn');
     if (btn) {
         btn.textContent = window.is3DMode ? '🌐 3D: ON' : '🌐 3D: OFF';
     }
