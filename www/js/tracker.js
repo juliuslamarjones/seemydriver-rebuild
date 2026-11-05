@@ -634,7 +634,9 @@ window.initDriverActiveMap = function () {
     teardownDriver();
     box.style.width = '100%';
     box.style.height = '100%';
-    window.is3DMode = true;
+    
+    // Default 3D mode explicitly to OFF on startup
+    window.is3DMode = false;
 
     const dest = getDest();
     let map;
@@ -643,7 +645,7 @@ window.initDriverActiveMap = function () {
             container: box,
             style: OSM_STYLE,
             center: dest ? [dest.lng, dest.lat] : [-95.3698, 29.7604],
-            zoom: 15, pitch: 55, bearing: -17, antialias: true
+            zoom: 15, pitch: 0, bearing: -17, antialias: true
         });
     } catch (err) {
         D = { map: null, engine: null, timer: null };
@@ -661,7 +663,7 @@ window.initDriverActiveMap = function () {
 
     if (dest) new mapboxgl.Marker({ element: createPinElement() }).setLngLat([dest.lng, dest.lat]).addTo(map);
 
-    const engine = createTripEngine(map, { dest: dest, camera: { pitch: 55, bearing: -17 } });
+    const engine = createTripEngine(map, { dest: dest, camera: { pitch: 0, bearing: -17 } });
     D = {
         map: map,
         engine: engine,
@@ -700,7 +702,11 @@ window.toggleDriver3D = function () {
 
 window.recenterDriverMap = function () {
     if (!D || !D.map || !D.engine) return;
-    D.engine.follow = false; // Release continuous auto-center lock so zoom and 3D stay fully active
+    D.engine.follow = false;
+    D.map.dragPan.enable();
+    D.map.scrollZoom.enable();
+    D.map.touchZoomRotate.enable();
+    
     const pos = D.engine.position();
     if (pos) {
         D.map.easeTo({ center: [pos.lng, pos.lat], zoom: 16, duration: 800 });
@@ -812,7 +818,7 @@ window.initCustomerMapLive = function () {
 
     let map;
     try {
-        map = new mapboxgl.Map({ container: box, style: OSM_STYLE, center: [-95.3698, 29.7604], zoom: 14, pitch: 45, bearing: -17, antialias: true });
+        map = new mapboxgl.Map({ container: box, style: OSM_STYLE, center: [-95.3698, 29.7604], zoom: 14, pitch: 0, bearing: -17, antialias: true });
     } catch (err) {
         return;
     }
@@ -876,7 +882,7 @@ window.initCustomerMapLive = function () {
         }
 
         if (data.timestamp !== me.lastTs) { me.lastTs = data.timestamp; me.lastChange = Date.now(); }
-        if (!me.engine) me.engine = createTripEngine(map, { dest: dest, camera: { pitch: 45, bearing: -17 } });
+        if (!me.engine) me.engine = createTripEngine(map, { dest: dest, camera: { pitch: 0, bearing: -17 } });
 
         const mph = Number(data.speed) || 0;
         me.engine.feed({ lat: lat, lng: lng, speedMs: mph / MPS_TO_MPH, heading: Number(data.heading), acc: 5 });
@@ -911,7 +917,11 @@ window.initCustomerMapLive = function () {
 
 window.recenterCustomerMap = function () {
     if (!C || !C.map || !C.engine) return;
-    C.engine.follow = false; // Release continuous auto-center lock
+    C.engine.follow = false;
+    C.map.dragPan.enable();
+    C.map.scrollZoom.enable();
+    C.map.touchZoomRotate.enable();
+    
     const pos = C.engine.position();
     if (pos) {
         C.map.easeTo({ center: [pos.lng, pos.lat], zoom: 16, duration: 800 });
