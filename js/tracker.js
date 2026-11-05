@@ -652,7 +652,7 @@ window.initDriverActiveMap = function () {
 
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
     
-    // Allow manual user interaction (drag, pinch-zoom, wheel) to break 'follow' lock without freezing UI controls
+    // Allow manual user interaction to break follow lock
     ['dragstart', 'zoomstart', 'touchstart', 'wheel'].forEach(evt => {
         map.on(evt, () => {
             if (D && D.engine) D.engine.follow = false;
@@ -700,7 +700,7 @@ window.toggleDriver3D = function () {
 
 window.recenterDriverMap = function () {
     if (!D || !D.map || !D.engine) return;
-    D.engine.follow = true;
+    D.engine.follow = false; // Release continuous auto-center lock so zoom and 3D stay fully active
     const pos = D.engine.position();
     if (pos) {
         D.map.easeTo({ center: [pos.lng, pos.lat], zoom: 16, duration: 800 });
@@ -911,7 +911,7 @@ window.initCustomerMapLive = function () {
 
 window.recenterCustomerMap = function () {
     if (!C || !C.map || !C.engine) return;
-    C.engine.follow = true;
+    C.engine.follow = false; // Release continuous auto-center lock
     const pos = C.engine.position();
     if (pos) {
         C.map.easeTo({ center: [pos.lng, pos.lat], zoom: 16, duration: 800 });
