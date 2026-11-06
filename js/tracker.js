@@ -188,7 +188,6 @@ window.launchLiveBroadcast = function() {
     }
 };
 
-// The database refused the broadcast: free trial over or account not verified yet
 function broadcastDenied() {
     LS.removeItem('smd_active_broadcast');
     LS.removeItem('smd_session_id');
@@ -332,7 +331,7 @@ window.startRealTimeTracking = function () {
     if (gps.running) return;
     gps.running = true;
     watchGps();
-    requestWakeLock(); // keeps the screen on while the app is open so GPS is not put to sleep
+    requestWakeLock();
 };
 
 window.stopRealTimeTracking = function () {
@@ -350,7 +349,7 @@ document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
     if (gps.running) {
         requestWakeLock();
-        if (!gps.last || Date.now() - gps.last.t > 5000) watchGps(); // back in the app: restart the GPS watch
+        if (!gps.last || Date.now() - gps.last.t > 5000) watchGps();
     }
     if (C && C.resync) C.resync();
 });
@@ -424,7 +423,6 @@ function createTripEngine(map, opts) {
         const get = async (url) => (await fetch(url)).json();
         try {
             let data = null;
-            // moving? ask for a route that starts in the direction the truck is really heading
             if (headingDeg !== null && headingDeg !== undefined && E.speedMs > 2) {
                 try { data = await get(base + '&bearings=' + Math.round(normDeg(headingDeg)) + ',90;'); } catch (e) { data = null; }
             }
@@ -433,7 +431,7 @@ function createTripEngine(map, opts) {
             if (data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry.coordinates.length > 1) {
                 const r = data.routes[0];
                 E.route = buildRoute(r.geometry.coordinates, r.duration);
-                E.snapped = false;                       // the next fixes snap onto the new line
+                E.snapped = false;
                 E.refLng = E.freeLng = E.drawLng;
                 E.refLat = E.freeLat = E.drawLat;
                 E.offCount = 0; E.offSince = 0; E.nearCount = 0; E.backCount = 0; E.dir = 1;
@@ -614,7 +612,6 @@ function createTripEngine(map, opts) {
                     if (b !== null && E.headingDeg !== null && E.speedMs > 2) {
                         E.dir = Math.abs(angleDiff(b, E.headingDeg)) > 120 ? -1 : 1;
                     }
-                    // driving against the line for about 3 fixes means the route is behind us: plan a new one from here
                     if (E.dir < 0 && E.speedMs > 3) E.backCount++; else if (E.dir > 0) E.backCount = 0;
                     if (dest && !E.arrived && E.backCount >= 3 && now - E.lastRerouteAt > 8000) {
                         E.backCount = 0; E.lastRerouteAt = now;
@@ -696,7 +693,6 @@ window.initDriverActiveMap = function () {
     box.style.width = '100%';
     box.style.height = '100%';
     
-    // Default 3D mode explicitly to OFF on startup
     window.is3DMode = false;
 
     const dest = getDest();
@@ -715,7 +711,7 @@ window.initDriverActiveMap = function () {
 
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
     
-    // Allow any manual user interaction to break follow lock
+    // Allow ANY manual user interaction (drag, pinch zoom, touch, wheel) to break follow lock
     ['dragstart', 'zoomstart', 'touchstart', 'wheel'].forEach(evt => {
         map.on(evt, () => {
             if (D && D.engine) D.engine.follow = false;
@@ -768,7 +764,7 @@ window.recenterDriverMap = function () {
     D.map.dragPan.enable();
     D.map.scrollZoom.enable();
     D.map.touchZoomRotate.enable();
-    D.engine.follow = true; // follow the truck again
+    D.engine.follow = true;
     D.map.setZoom(16);
     toast('Following your truck');
 };
@@ -882,7 +878,6 @@ window.initCustomerMapLive = function () {
     }
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-    // Allow any manual user interaction to break follow lock
     ['dragstart', 'zoomstart', 'touchstart', 'wheel'].forEach(evt => {
         map.on(evt, () => {
             if (C && C.engine) C.engine.follow = false;
