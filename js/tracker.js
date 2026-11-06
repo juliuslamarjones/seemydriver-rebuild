@@ -715,8 +715,8 @@ window.initDriverActiveMap = function () {
 
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
     
-    // Allow manual user interaction to break follow lock
-    ['dragstart'].forEach(evt => {
+    // Allow any manual user interaction to break follow lock
+    ['dragstart', 'zoomstart', 'touchstart', 'wheel'].forEach(evt => {
         map.on(evt, () => {
             if (D && D.engine) D.engine.follow = false;
         });
@@ -882,7 +882,8 @@ window.initCustomerMapLive = function () {
     }
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-    ['dragstart'].forEach(evt => {
+    // Allow any manual user interaction to break follow lock
+    ['dragstart', 'zoomstart', 'touchstart', 'wheel'].forEach(evt => {
         map.on(evt, () => {
             if (C && C.engine) C.engine.follow = false;
         });
