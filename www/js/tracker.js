@@ -6,7 +6,7 @@
 
 const LS = window.SafeStorage;
 const MPS_TO_MPH = 2.23694;
-const ENGINE_VERSION = 'v65';
+const ENGINE_VERSION = 'v66';
 const HEADING_UP = false;
 
 const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
@@ -95,6 +95,36 @@ function bearingAtS(route, s) {
     const a = pointAtS(route, s0), b = pointAtS(route, s0 + 12);
     if (Math.hypot(b.x - a.x, b.y - a.y) < 0.5) return null;
     return normDeg(toDeg(Math.atan2(b.x - a.x, b.y - a.y)));
+}
+
+function estimateMotion(hist, now) {
+    if (hist.length < 4) return null;
+    let accSum = 0;
+    for (const h of hist) accSum += h.acc;
+    const avgAcc = accSum / hist.length;
+    const win = avgAcc > 40 ? 20000 : 8000;
+    const pts = hist.filter((h) => now - h.t <= win);
+    if (pts.length < 4) return null;
+    const span = (pts[pts.length - 1].t - pts[0].t) / 1000;
+    if (span < (avgAcc > 40 ? 8 : 3)) return null;
+    const p0 = pts[0], n = pts.length;
+    const k = Math.cos(toRad(p0.lat)) * M_PER_DEG;
+    const ts = pts.map((h) => (h.t - p0.t) / 1000);
+    const xs = pts.map((h) => (h.lng - p0.lng) * k);
+    const ys = pts.map((h) => (h.lat - p0.lat) * M_PER_DEG);
+    const mean = (a) => a.reduce((s, v) => s + v, 0) / n;
+    const tm = mean(ts), xm = mean(xs), ym = mean(ys);
+    let sxx = 0, sxt = 0, syt = 0;
+    for (let i = 0; i < n; i++) {
+        const dt = ts[i] - tm;
+        sxx += dt * dt; sxt += dt * (xs[i] - xm); syt += dt * (ys[i] - ym);
+    }
+    if (sxx < 1e-6) return null;
+    const vx = sxt / sxx, vy = syt / sxx;
+    const speed = Math.hypot(vx, vy);
+    const noise = (avgAcc * 0.7) / Math.sqrt(sxx);
+    const moving = speed > Math.max(1.5, noise * 2.5);
+    return { speed: moving ? speed : 0, heading: moving ? normDeg(toDeg(Math.atan2(vx, vy))) : null };
 }
 
 function formatEta(seconds) {
@@ -393,7 +423,7 @@ function createTripEngine(map, opts) {
         refLng: 0, refLat: 0, freeLng: 0, freeLat: 0,
         rBearing: 0, offLng: 0, offLat: 0,
         drawLng: 0, drawLat: 0, lastFrame: 0,
-        lastLine: 0, arrived: false, arriveCount: 0, nearCount: 0, backCount: 0
+        lastLine: 0, arrived: false, arriveCount: 0, nearCount: 0, backCount: 0, backSince: 0, hist: []
     };
 
     function drawRoute(coords, attempt) {
@@ -526,6 +556,8 @@ function createTripEngine(map, opts) {
             targetBearing = h;
         }
 
+        if (E.speedMs < 1.5) targetBearing = E.rBearing;
+
         if (E.pendingBlend) {
             E.offLng = E.drawLng - baseLng;
             E.offLat = E.drawLat - baseLat;
@@ -541,7 +573,7 @@ function createTripEngine(map, opts) {
         E.marker.setLngLat([lng, lat]);
         E.marker.setRotation(E.rBearing);
         updateLine(now);
-        if (E.follow) {
+        if (E.follow && !map.isEasing()) {
             map.setCenter([lng, lat]);
             if (HEADING_UP) map.setBearing(E.rBearing);
         }
@@ -551,22 +583,21 @@ function createTripEngine(map, opts) {
         const now = performance.now();
         if (E.hasFix && fix.acc > 120) return null;
 
-        let sp = (fix.speedMs !== null && fix.speedMs !== undefined && isFinite(fix.speedMs)) ? fix.speedMs : null;
-        if (sp === null) {
-            const dtSec = (now - E.fixAt) / 1000;
-            sp = (E.hasFix && dtSec > 0.3) ? distM(E.fixLng, E.fixLat, fix.lng, fix.lat) / dtSec : 0;
-        }
-        sp = E.hasFix ? E.speedMs * 0.4 + sp * 0.6 : sp;
+        const hasDeviceSpeed = fix.speedMs !== null && fix.speedMs !== undefined && isFinite(fix.speedMs);
+        E.hist.push({ t: now, lng: fix.lng, lat: fix.lat, acc: Math.max(fix.acc || 0, 5) });
+        while (E.hist.length && now - E.hist[0].t > 25000) E.hist.shift();
+        const est = estimateMotion(E.hist, now);
+        let sp = hasDeviceSpeed ? fix.speedMs : (est ? est.speed : 0);
+        const keep = hasDeviceSpeed ? 0.3 : 0.6;
+        sp = E.hasFix ? E.speedMs * keep + sp * (1 - keep) : sp;
         E.speedMs = sp < 0.8 ? 0 : sp;
 
-        const movedFar = !E.hasFix || distM(E.moveLng, E.moveLat, fix.lng, fix.lat) > 8;
         let hd = E.headingDeg;
-        if (fix.heading !== null && fix.heading !== undefined && isFinite(fix.heading) && E.speedMs > 2) {
+        if (hasDeviceSpeed && fix.heading !== null && fix.heading !== undefined && isFinite(fix.heading) && E.speedMs > 3) {
             hd = normDeg(fix.heading);
-        } else if (E.hasFix && movedFar && E.speedMs > 1.5) {
-            hd = bearingBetween(E.moveLng, E.moveLat, fix.lng, fix.lat);
+        } else if (est && est.heading !== null && E.speedMs > 3) {
+            hd = est.heading;
         }
-        if (movedFar) { E.moveLng = fix.lng; E.moveLat = fix.lat; }
         E.headingDeg = hd;
 
         if (!E.hasFix) {
@@ -609,12 +640,13 @@ function createTripEngine(map, opts) {
                     onLine = true;
                     const justSnapped = !E.snapped;
                     const b = bearingAtS(E.route, sn.s);
-                    if (b !== null && E.headingDeg !== null && E.speedMs > 2) {
+                    if (b !== null && E.headingDeg !== null && E.speedMs > 3) {
                         E.dir = Math.abs(angleDiff(b, E.headingDeg)) > 120 ? -1 : 1;
                     }
-                    if (E.dir < 0 && E.speedMs > 3) E.backCount++; else if (E.dir > 0) E.backCount = 0;
-                    if (dest && !E.arrived && E.backCount >= 3 && now - E.lastRerouteAt > 8000) {
-                        E.backCount = 0; E.lastRerouteAt = now;
+                    if (E.dir < 0 && E.speedMs > 3) { if (!E.backSince) E.backSince = now; E.backCount++; }
+                    else if (E.dir > 0 || E.speedMs <= 1) { E.backCount = 0; E.backSince = 0; }
+                    if (dest && !E.arrived && E.backCount >= 4 && now - E.backSince > 4000 && now - E.lastRerouteAt > 12000) {
+                        E.backCount = 0; E.backSince = 0; E.lastRerouteAt = now;
                         fetchRoute(fix.lng, fix.lat, E.headingDeg);
                     }
                     if (justSnapped) {
@@ -631,14 +663,29 @@ function createTripEngine(map, opts) {
                 E.nearCount = 0;
                 E.offCount++;
                 if (!E.offSince) E.offSince = now;
-                if (E.snapped && E.offCount < 2) {
+                
+                // ========================================================
+                // OVERPASS / TUNNEL / DEAD-ZONE LOCK
+                // If GPS accuracy degrades or drops out in an overpass/tunnel,
+                // hold snap mode and advance along the polyline using speed.
+                // ========================================================
+                const isDeadZone = (fix.acc > 60 || fix.acc === 0);
+                
+                if (E.snapped && isDeadZone) {
+                    onLine = true;
+                    if (E.speedMs > 0) {
+                        E.sRef = clampS(E.sRef + E.dir * E.speedMs * 1.5);
+                        E.rS = E.sRef;
+                    }
+                } else if (E.snapped && E.offCount < 4) {
                     onLine = true;
                 } else if (E.snapped) {
                     E.snapped = false;
                     E.refLng = E.freeLng = E.drawLng; E.refLat = E.freeLat = E.drawLat;
                     E.offLng = 0; E.offLat = 0;
                 }
-                if (dest && !E.arrived && E.offCount >= 3 && now - E.offSince > 4000 && now - E.lastRerouteAt > 10000) {
+
+                if (dest && !E.arrived && !isDeadZone && E.speedMs > 3 && E.offCount >= 3 && now - E.offSince > 4000 && now - E.lastRerouteAt > 12000) {
                     E.lastRerouteAt = now;
                     fetchRoute(fix.lng, fix.lat, E.headingDeg);
                 }
@@ -711,7 +758,6 @@ window.initDriverActiveMap = function () {
 
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
     
-    // Allow ANY manual user interaction (drag, pinch zoom, touch, wheel) to break follow lock
     ['dragstart', 'zoomstart', 'touchstart', 'wheel'].forEach(evt => {
         map.on(evt, () => {
             if (D && D.engine) D.engine.follow = false;
