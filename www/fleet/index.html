@@ -77,34 +77,34 @@
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="text-neutral-400 block mb-1 text-[10px]">DRIVER NAME *</label>
-                        <input type="text" id="modal-driver-name" placeholder="e.g. Marcus" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
+                        <input type="text" id="job-driver-name" placeholder="e.g. Marcus" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
                     </div>
                     <div>
                         <label class="text-neutral-400 block mb-1 text-[10px]">DRIVER PHONE</label>
-                        <input type="tel" id="modal-driver-phone" placeholder="8329025417" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
+                        <input type="tel" id="job-driver-phone" placeholder="8329025417" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
                     </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="text-neutral-400 block mb-1 text-[10px]">CUSTOMER NAME</label>
-                        <input type="text" id="modal-cust-name" placeholder="John Smith" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
+                        <input type="text" id="job-cust-name" placeholder="John Smith" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
                     </div>
                     <div>
                         <label class="text-neutral-400 block mb-1 text-[10px]">CUSTOMER PHONE</label>
-                        <input type="tel" id="modal-cust-phone" placeholder="555-0142" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
+                        <input type="tel" id="job-cust-phone" placeholder="555-0142" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
                     </div>
                 </div>
 
                 <div class="relative">
                     <label class="text-neutral-400 block mb-1 text-[10px]">DESTINATION ADDRESS *</label>
-                    <input type="text" id="modal-dest-address" oninput="window.handleAddressInput(this.value)" autocomplete="off" placeholder="Start typing address..." class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
+                    <input type="text" id="job-cust-address" oninput="window.handleAddressInput(this.value)" autocomplete="off" placeholder="Start typing address..." class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
                     <div id="address-suggestions" class="hidden absolute left-0 right-0 top-full mt-1 bg-[#161923] border border-neutral-800 rounded-xl shadow-2xl z-[99999] max-h-48 overflow-y-auto"></div>
                 </div>
 
                 <div class="flex gap-2 mt-1">
-                    <button onclick="submitManualDispatch(true)" class="flex-1 bg-neutral-800 hover:bg-neutral-700 text-amber-400 font-black text-xs py-2.5 rounded-xl border border-neutral-700 transition-all cursor-pointer">📱 Text & Deploy</button>
-                    <button onclick="submitManualDispatch(false)" class="flex-1 bg-amber-400 hover:bg-amber-500 text-black font-black text-xs py-2.5 rounded-xl transition-all shadow-md cursor-pointer">Deploy Only 🚀</button>
+                    <button onclick="window.handleFleetDispatch(true)" class="flex-1 bg-neutral-800 hover:bg-neutral-700 text-amber-400 font-black text-xs py-2.5 rounded-xl border border-neutral-700 transition-all cursor-pointer">📱 Text & Deploy</button>
+                    <button onclick="window.handleFleetDispatch(false)" class="flex-1 bg-amber-400 hover:bg-amber-500 text-black font-black text-xs py-2.5 rounded-xl transition-all shadow-md cursor-pointer">Deploy Only 🚀</button>
                 </div>
             </div>
 
@@ -165,6 +165,8 @@
         let cachedDestLng = null;
         let geocodeTimer = null;
         let is3DMode = true;
+
+        const $ = (id) => document.getElementById(id);
 
         function initMap() {
             map = new mapboxgl.Map({
@@ -258,7 +260,7 @@
                         div.innerText = name;
                         div.onpointerdown = (e) => {
                             e.preventDefault();
-                            const inputField = document.getElementById('modal-dest-address');
+                            const inputField = document.getElementById('job-cust-address');
                             if (inputField) inputField.value = name;
                             
                             cachedDestLat = coords[1];
@@ -293,11 +295,14 @@
                 }
             });
 
-            const broadcastsRef = db.ref('broadcasts');
+            // Listen to company-namespaced broadcasts or fallback to global root for backward compatibility
+            const authUser = firebase.auth().currentUser;
+            const compUuid = authUser ? authUser.uid : 'default_fleet_owner';
+            const broadcastsRef = db.ref(`companies/${compUuid}/broadcasts`);
             
             broadcastsRef.on('value', (snapshot) => {
                 const val = snapshot.val();
-                console.log("Firebase Broadcasts Loaded Successfully:", val);
+                console.log("Firebase Company Broadcasts Loaded Successfully:", val);
                 
                 fleetData = { ...(window.localFleetCache || {}), ...(val || {}) };
                 renderFleetRosterAndMarkers();
@@ -421,15 +426,18 @@
 
         function filterRoster() { renderFleetRosterAndMarkers(); }
 
-        window.submitManualDispatch = function(sendSms) {
-            const user = firebase.auth().currentUser;
-            const ownerUid = user ? user.uid : 'default_fleet_owner';
+        // ==========================================
+        // MULTI-TENANT DISPATCH CONTROLLER
+        // ==========================================
+        window.handleFleetDispatch = function(isTextDeploy) {
+            const authUser = window.firebase && window.firebase.auth ? window.firebase.auth().currentUser : null;
+            const compUuid = authUser ? authUser.uid : 'default_fleet_owner';
 
-            const driverName = document.getElementById('modal-driver-name').value.trim();
-            const driverPhone = document.getElementById('modal-driver-phone').value.trim().replace(/[^\d+]/g, '');
-            const custName = document.getElementById('modal-cust-name').value.trim();
-            const custPhone = document.getElementById('modal-cust-phone').value.trim();
-            const address = document.getElementById('modal-dest-address').value.trim();
+            const driverName = $('job-driver-name').value.trim();
+            const driverPhone = $('job-driver-phone').value.trim().replace(/[^\d+]/g, '');
+            const custName = $('job-cust-name').value.trim();
+            const custPhone = $('job-cust-phone').value.trim();
+            const address = $('job-cust-address').value.trim();
 
             if (!driverName || !address) {
                 alert('Please enter a driver name and destination address.');
@@ -439,12 +447,12 @@
             let lat = cachedDestLat || 29.9731;
             let lng = cachedDestLng || -95.2831;
 
-            const buffer = new Uint8Array(6);
+            const buffer = new Uint8Array(8);
             window.crypto.getRandomValues(buffer);
-            const newSid = 'smd_cmd_' + Array.from(buffer, b => b.toString(16).padStart(2, '0')).join('');
+            const sessionId = 'smd_' + Array.from(buffer, b => b.toString(16).padStart(2, '0')).join('');
 
             const payload = {
-                ownerUid: ownerUid,
+                ownerUid: compUuid,
                 driverName: driverName,
                 driverPhone: driverPhone,
                 custName: custName,
@@ -459,30 +467,44 @@
                 timestamp: Date.now()
             };
 
-            db.ref('broadcasts/' + newSid).set(payload).then(() => {
-                console.log("Firebase write success for session:", newSid);
-                alert('Job deployed successfully!');
+            // Save inside company-isolated namespace tree
+            db.ref(`companies/${compUuid}/broadcasts/${sessionId}`).set(payload).then(() => {
+                console.log("Firebase company dispatch success for session:", sessionId);
+                if (!isTextDeploy) alert('Job deployed successfully!');
             }).catch(err => {
-                console.error("Firebase write error:", err);
+                console.error("Firebase dispatch error:", err);
                 alert("Dispatch failed: " + err.message);
             });
 
             if (!window.localFleetCache) window.localFleetCache = {};
-            window.localFleetCache[newSid] = payload;
-            fleetData[newSid] = payload;
+            window.localFleetCache[sessionId] = payload;
+            fleetData[sessionId] = payload;
             renderFleetRosterAndMarkers();
-            selectDriver(newSid);
+            selectDriver(sessionId);
 
-            if (sendSms && driverPhone) {
-                const dispatchLink = `https://www.seemydriver.com/?owner=${ownerUid}&session=${newSid}&driver=${encodeURIComponent(driverName)}`;
-                const msg = `${driverName}, new dispatch to ${address}. Tap to connect: ${dispatchLink}`;
-                window.location.href = `sms:${driverPhone}?body=${encodeURIComponent(msg)}`;
+            // Construct the dedicated driver broadcast link pointing to /fleet/driver-broadcast.html
+            const driverLink = `${window.location.origin}/fleet/driver-broadcast.html?comp=${compUuid}&session=${sessionId}&driver=${encodeURIComponent(driverName)}&dest=${encodeURIComponent(address)}&lat=${lat}&lng=${lng}&phone=${encodeURIComponent(custPhone)}`;
+
+            if (isTextDeploy && driverPhone) {
+                const smsUrl = `sms:${driverPhone}?body=` + encodeURIComponent(`SeeMyDriver Dispatch: Tap to start your route to ${address}: ${driverLink}`);
+                window.open(smsUrl, '_blank');
             }
+
+            // Reset Form Fields
+            $('job-driver-name').value = '';
+            $('job-driver-phone').value = '';
+            $('job-cust-name').value = '';
+            $('job-cust-phone').value = '';
+            $('job-cust-address').value = '';
+            cachedDestLat = null;
+            cachedDestLng = null;
         };
 
         window.deleteDriverSession = function(sid) {
+            const authUser = window.firebase && window.firebase.auth ? window.firebase.auth().currentUser : null;
+            const compUuid = authUser ? authUser.uid : 'default_fleet_owner';
             if (confirm(`Delete session ${sid}?`)) {
-                db.ref(`broadcasts/${sid}`).remove().then(() => {
+                db.ref(`companies/${compUuid}/broadcasts/${sid}`).remove().then(() => {
                     if (activeMarkers[sid]) { activeMarkers[sid].marker.remove(); delete activeMarkers[sid]; }
                     delete fleetData[sid];
                     if (window.localFleetCache) delete window.localFleetCache[sid];
@@ -492,8 +514,10 @@
         };
 
         window.purgeAllBroadcasts = function() {
-            if (confirm("⚠️ WARNING: Delete ALL broadcast sessions?")) {
-                db.ref('broadcasts').remove().then(() => {
+            const authUser = window.firebase && window.firebase.auth ? window.firebase.auth().currentUser : null;
+            const compUuid = authUser ? authUser.uid : 'default_fleet_owner';
+            if (confirm("⚠️ WARNING: Delete ALL company broadcast sessions?")) {
+                db.ref(`companies/${compUuid}/broadcasts`).remove().then(() => {
                     Object.keys(activeMarkers).forEach(id => { activeMarkers[id].marker.remove(); });
                     activeMarkers = {}; fleetData = {}; window.localFleetCache = {}; renderFleetRosterAndMarkers();
                 });

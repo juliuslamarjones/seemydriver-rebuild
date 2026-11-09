@@ -320,7 +320,10 @@ function sendFirebase(out) {
     if (now - gps.lastSend < 1500) return;
     gps.lastSend = now;
 
-    database.ref('broadcasts/' + sid).update({
+    const authUser = window.firebase && window.firebase.auth ? window.firebase.auth().currentUser : null;
+    const compUuid = window.activeCompanyUuid || LS.getItem('smd_comp_uuid') || (authUser ? authUser.uid : 'default_fleet');
+
+    database.ref(`companies/${compUuid}/broadcasts/${sid}`).update({
         lat: out.lat,
         lng: out.lng,
         speed: out.speedMph,
