@@ -50,8 +50,8 @@
             </div>
         </div>
         <div class="flex items-center gap-3 shrink-0">
-            <button onclick="purgeAllBroadcasts()" class="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 text-xs font-bold px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5">
-                🛑 End Broadcasts
+            <button onclick="window.location.href = '../index.html';" class="bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800 text-xs font-bold px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-2">
+                <span>✖ End Broadcast</span>
             </button>
             <span id="connection-status" class="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20 hidden sm:flex items-center gap-1.5">
                 <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live
@@ -451,9 +451,21 @@
         // ==========================================
         // MULTI-TENANT DISPATCH CONTROLLER
         // ==========================================
-        window.handleFleetDispatch = function(isTextDeploy) {
-            const authUser = window.firebase && window.firebase.auth ? window.firebase.auth().currentUser : null;
-            const compUuid = authUser ? authUser.uid : 'default_fleet_owner';
+        window.handleFleetDispatch = async function(isTextDeploy) {
+            let authUser = firebase.auth().currentUser;
+            if (!authUser) {
+                try {
+                    const cred = await firebase.auth().signInAnonymously();
+                    authUser = cred.user;
+                } catch (e) {
+                    console.error("Anonymous auth failed:", e);
+                }
+            }
+            const compUuid = authUser ? authUser.uid : null;
+            if (!compUuid) {
+                alert('Authentication required. Please wait a moment or sign in.');
+                return;
+            }
 
             const driverName = $('job-driver-name').value.trim();
             const driverPhone = $('job-driver-phone').value.trim().replace(/[^\d+]/g, '');
@@ -489,7 +501,7 @@
                 timestamp: Date.now()
             };
 
-            // Save inside company-isolated namespace tree
+            // Save inside company-isolated namespace tree using verified auth UID
             db.ref(`companies/${compUuid}/broadcasts/${sessionId}`).set(payload).then(() => {
                 console.log("Firebase company dispatch success for session:", sessionId);
                 if (!isTextDeploy) alert('Job deployed successfully!');
