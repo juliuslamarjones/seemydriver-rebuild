@@ -51,7 +51,7 @@
         </div>
         <div class="flex items-center gap-3 shrink-0">
             <button onclick="window.location.href = '../index.html';" class="bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800 text-xs font-bold px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-2">
-                <span>✖ End Broadcast</span>
+                <span>✖ Close Fleet</span>
             </button>
             <span id="connection-status" class="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20 hidden sm:flex items-center gap-1.5">
                 <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live
@@ -282,7 +282,6 @@
             }, 300);
         };
 
-        // Load any previously persisted local fleet roster instantly on startup to prevent blank screens when switching views
         let fleetData = {};
         try {
             const cachedRoster = localStorage.getItem('smd_persistent_fleet_roster');
@@ -312,18 +311,14 @@
             
             broadcastsRef.on('value', (snapshot) => {
                 const val = snapshot.val();
-                console.log("Firebase Company Broadcasts Loaded Successfully:", val);
-                
                 if (val && typeof val === 'object' && Object.keys(val).length > 0) {
                     fleetData = { ...fleetData, ...(window.localFleetCache || {}), ...val };
                 } else if (!val) {
-                    // If firebase snapshot is empty or null, keep local cache intact so view switches don't wipe active drivers
                     const saved = localStorage.getItem('smd_persistent_fleet_roster');
                     if (saved) {
                         try { fleetData = JSON.parse(saved); } catch(e) {}
                     }
                 }
-                
                 try {
                     localStorage.setItem('smd_persistent_fleet_roster', JSON.stringify(fleetData));
                 } catch(e) {}
@@ -448,9 +443,6 @@
 
         function filterRoster() { renderFleetRosterAndMarkers(); }
 
-        // ==========================================
-        // MULTI-TENANT DISPATCH CONTROLLER (STRICT ASYNC AUTH)
-        // ==========================================
         window.handleFleetDispatch = async function(isTextDeploy) {
             let authUser = firebase.auth().currentUser;
             if (!authUser) {
@@ -461,7 +453,6 @@
                     console.error("Anonymous auth failed:", e);
                 }
             }
-
             const compUuid = authUser ? authUser.uid : null;
             if (!compUuid) {
                 alert('Authentication required. Please wait a moment or sign in.');
@@ -502,12 +493,9 @@
                 timestamp: Date.now()
             };
 
-            // Save inside company-isolated namespace tree using verified auth UID
             db.ref(`companies/${compUuid}/broadcasts/${sessionId}`).set(payload).then(() => {
-                console.log("Firebase company dispatch success for session:", sessionId);
                 if (!isTextDeploy) alert('Job deployed successfully!');
             }).catch(err => {
-                console.error("Firebase dispatch error:", err);
                 alert("Dispatch failed: " + err.message);
             });
 
