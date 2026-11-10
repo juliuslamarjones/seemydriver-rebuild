@@ -1,7 +1,7 @@
 // ==========================================
 // SEEMYDRIVER - PWA SERVICE WORKER
 // ==========================================
-const CACHE_NAME = 'smd-cache-v48';
+const CACHE_NAME = 'smd-cache-v49';
 const ASSETS_TO_CACHE = [
     '/',
     '/index.html',
