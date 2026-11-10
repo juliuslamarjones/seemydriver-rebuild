@@ -449,7 +449,7 @@
         function filterRoster() { renderFleetRosterAndMarkers(); }
 
         // ==========================================
-        // MULTI-TENANT DISPATCH CONTROLLER
+        // MULTI-TENANT DISPATCH CONTROLLER (STRICT ASYNC AUTH)
         // ==========================================
         window.handleFleetDispatch = async function(isTextDeploy) {
             let authUser = firebase.auth().currentUser;
@@ -461,6 +461,7 @@
                     console.error("Anonymous auth failed:", e);
                 }
             }
+
             const compUuid = authUser ? authUser.uid : null;
             if (!compUuid) {
                 alert('Authentication required. Please wait a moment or sign in.');
@@ -521,7 +522,6 @@
             renderFleetRosterAndMarkers();
             selectDriver(sessionId);
 
-            // Construct the dedicated driver broadcast link pointing to /fleet/driver-broadcast.html
             const driverLink = `${window.location.origin}/fleet/driver-broadcast.html?comp=${compUuid}&session=${sessionId}&driver=${encodeURIComponent(driverName)}&dest=${encodeURIComponent(address)}&lat=${lat}&lng=${lng}&phone=${encodeURIComponent(custPhone)}`;
 
             if (isTextDeploy && driverPhone) {
@@ -529,7 +529,6 @@
                 window.open(smsUrl, '_blank');
             }
 
-            // Reset Form Fields
             $('job-driver-name').value = '';
             $('job-driver-phone').value = '';
             $('job-cust-name').value = '';
