@@ -31,21 +31,26 @@
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
 
-    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .mapboxgl-popup-content { background: #12141c !important; color: #fff !important; border-radius: 12px; border: 1px solid #262626; padding: 14px !important; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0f1117; }
+        ::-webkit-scrollbar-thumb { background: #262626; border-radius: 3px; }
+    </style>
 </head>
-<body class="bg-black text-white min-h-screen flex flex-col font-sans antialiased">
+<body class="bg-black text-white min-h-screen flex flex-col font-sans antialiased selection:bg-amber-400 selection:text-black">
 
     <!-- HEADER -->
-    <header class="w-full border-b border-neutral-900 bg-black/80 backdrop-blur-md px-4 py-3 flex items-center justify-between">
+    <header class="w-full border-b border-neutral-900 bg-black/80 backdrop-blur-md px-4 py-3.5 flex items-center justify-between shrink-0">
         <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-amber-400 rounded-xl flex items-center justify-center font-black text-black">👀</div>
+            <div class="w-10 h-10 bg-amber-400 rounded-xl flex items-center justify-center font-black text-black text-xl shadow-[0_0_20px_rgba(251,191,36,0.3)]">👀</div>
             <div class="flex flex-col">
-                <span class="font-black text-lg text-white">Driver <span class="text-amber-400">Broadcast</span></span>
-                <span id="driver-company-tag" class="text-[10px] font-mono text-neutral-400">Loading Fleet Tenant...</span>
+                <span class="font-black text-base text-white">Driver <span class="text-amber-400">Broadcast</span></span>
+                <span id="driver-company-tag" class="text-[10px] font-mono text-neutral-400">Loading Tenant...</span>
             </div>
         </div>
-        <div id="broadcast-status-badge" class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold px-3 py-1 rounded-full animate-pulse">
-            ● Live Broadcast
+        <div id="broadcast-status-badge" class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5 shadow-inner">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Live Broadcast
         </div>
     </header>
 
@@ -53,95 +58,175 @@
     <main class="flex-1 flex flex-col p-4 max-w-4xl mx-auto w-full gap-4">
         
         <!-- Job Info Card -->
-        <div class="bg-[#12141c] border border-neutral-800 rounded-2xl p-4 flex flex-col gap-2">
+        <div class="bg-[#12141c] border border-neutral-800 rounded-2xl p-4 flex flex-col gap-2 shadow-lg">
             <div class="flex justify-between items-center text-xs">
                 <span class="text-neutral-400">Assigned Driver: <strong id="lbl-driver-name" class="text-white">--</strong></span>
-                <span class="text-amber-400 font-mono" id="driver-map-speed">0 mph</span>
+                <span class="text-amber-400 font-mono font-bold" id="driver-map-speed">0 mph</span>
             </div>
             <div class="text-xs text-neutral-300">
-                Destination: <strong id="lbl-dest-address" class="text-amber-300">--</strong>
+                Destination: <strong id="lbl-dest-address" class="text-amber-300 font-medium">--</strong>
             </div>
         </div>
 
-        <!-- Map Container (Cloned from Solo Mode v68 Engine) -->
+        <!-- Map Container -->
         <div class="w-full h-[400px] bg-neutral-900 border border-neutral-800 rounded-3xl relative overflow-hidden shadow-2xl">
             <div id="driver-map-container" class="w-full h-full"></div>
             
             <!-- GPS Badge -->
-            <div class="smd-gps-badge absolute top-3 left-3 z-20 bg-black/85 border border-neutral-800 rounded-xl px-3 py-1 font-mono text-[11px] font-bold text-amber-400 backdrop-blur-md">
+            <div class="absolute top-3 left-3 z-20 bg-black/85 border border-neutral-800 rounded-xl px-3 py-1 font-mono text-[11px] font-bold text-amber-400 backdrop-blur-md shadow-lg">
                 GPS: searching… · v68
             </div>
 
             <!-- 3D Toggle -->
-            <button type="button" id="driver-3d-btn" onclick="window.toggleDriver3D()" class="absolute top-3 right-3 z-20 bg-[#12141c] hover:bg-neutral-800 border border-neutral-800 text-amber-400 font-bold text-xs px-3 py-2 rounded-xl shadow cursor-pointer">
-                🌐 3D: OFF
+            <button type="button" id="driver-3d-btn" onclick="window.toggleDriver3D()" class="absolute top-3 right-3 z-20 bg-[#12141c] hover:bg-neutral-800 border border-neutral-800 text-amber-400 font-bold text-xs px-3.5 py-2 rounded-xl shadow-xl cursor-pointer transition">
+                🌐 3D: ON
             </button>
 
             <!-- Map Controls -->
             <div class="absolute bottom-4 left-4 right-4 z-20 flex justify-between items-center">
                 <div class="flex gap-2">
-                    <button onclick="window.fitDriverMap()" class="bg-neutral-900/90 text-white text-xs font-bold px-3 py-2 rounded-xl border border-neutral-800">Fit Route</button>
-                    <button onclick="window.recenterDriverMap()" class="bg-neutral-900/90 text-amber-400 text-xs font-bold px-3 py-2 rounded-xl border border-neutral-800">Recenter</button>
+                    <button onclick="window.fitDriverMap()" class="bg-neutral-900/90 hover:bg-neutral-800 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl border border-neutral-800 shadow-xl transition cursor-pointer">Fit Route</button>
+                    <button onclick="window.recenterDriverMap()" class="bg-neutral-900/90 hover:bg-neutral-800 text-amber-400 text-xs font-bold px-3.5 py-2.5 rounded-xl border border-neutral-800 shadow-xl transition cursor-pointer">Recenter</button>
                 </div>
-                <button onclick="window.openDriverDirections()" class="bg-amber-400 text-black text-xs font-black px-4 py-2 rounded-xl">Directions</button>
+                <button onclick="window.openDriverDirections()" class="bg-amber-400 hover:bg-amber-300 text-black text-xs font-black px-4.5 py-2.5 rounded-xl shadow-xl transition cursor-pointer">Directions</button>
             </div>
         </div>
 
         <!-- Action Buttons -->
-        <div class="flex flex-col gap-3">
-            <button onclick="window.textCustomerLink()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm py-3.5 rounded-2xl transition shadow-lg cursor-pointer">
+        <div class="flex flex-col gap-3 pb-4">
+            <button onclick="window.textCustomerLink()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm py-3.5 rounded-2xl transition shadow-lg cursor-pointer flex items-center justify-center gap-2">
                 💬 Text Live Tracking Link to Customer
             </button>
-            <button onclick="window.copyCustomerLink()" class="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white font-bold text-sm py-3.5 rounded-2xl transition cursor-pointer">
+            <button onclick="window.copyCustomerLink()" class="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white font-bold text-sm py-3.5 rounded-2xl transition cursor-pointer flex items-center justify-center gap-2">
                 📋 Copy Customer Tracking Link
             </button>
         </div>
     </main>
 
-    <!-- Wire up the v68 Engine & Tenant Link Parser -->
-    <script src="js/tracker.js?v=68"></script>
+    <!-- Embedded Driver Tracking Engine & Mapbox Implementation -->
     <script>
+        const FULL_MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+        mapboxgl.accessToken = FULL_MAPBOX_TOKEN;
+
+        let driverMap;
+        let driverMarker = null;
+        let watchId = null;
+        let isDriver3D = true;
+        let currentDestLat = 29.7604;
+        let currentDestLng = -95.3698;
+        let activeCompUuid = 'default_fleet';
+        let activeSessionId = null;
+
+        function initDriverMap() {
+            driverMap = new mapboxgl.Map({
+                container: 'driver-map-container',
+                style: {
+                    version: 8,
+                    sources: { 'osm': { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256 } },
+                    layers: [{ id: 'osm-raster', type: 'raster', source: 'osm' }]
+                },
+                center: [currentDestLng, currentDestLat],
+                zoom: 15,
+                pitch: 55,
+                bearing: -17,
+                antialias: true
+            });
+            driverMap.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        }
+
+        window.toggleDriver3D = function() {
+            if (!driverMap) return;
+            isDriver3D = !isDriver3D;
+            driverMap.easeTo({
+                pitch: isDriver3D ? 55 : 0,
+                bearing: isDriver3D ? -17 : 0,
+                duration: 1000
+            });
+            const btn = document.getElementById('driver-3d-btn');
+            if (btn) btn.textContent = isDriver3D ? '🌐 3D: ON' : '🌐 2D: ON';
+        };
+
+        window.fitDriverMap = function() {
+            if (!driverMap) return;
+            driverMap.flyTo({ center: [currentDestLng, currentDestLat], zoom: 16, pitch: 55, duration: 1000 });
+        };
+
+        window.recenterDriverMap = function() {
+            if (!driverMap || !driverMarker) return;
+            const pos = driverMarker.getLngLat();
+            driverMap.flyTo({ center: [pos.lng, pos.lat], zoom: 17, pitch: 55, duration: 1000 });
+        };
+
+        window.openDriverDirections = function() {
+            const url = `https://www.google.com/maps/dir/?api=1&destination=${currentDestLat},${currentDestLng}&travelmode=driving`;
+            window.open(url, '_blank');
+        };
+
+        function createVehicleElement() {
+            const el = document.createElement('div');
+            el.innerHTML = `
+                <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0px 10px 14px rgba(0,0,0,0.8));">
+                    <svg viewBox="0 0 24 36" width="36" height="54" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3.5" y="11" width="17" height="22" rx="3" fill="#1f2937" stroke="#fbbf24" stroke-width="1.25"/>
+                        <rect x="3.5" y="20" width="17" height="4" fill="#f59e0b"/>
+                        <path d="M5.5 11H18.5V5C18.5 3.34315 17.1569 2 15.5 2H8.5C6.84315 2 5.5 3.34315 5.5 5V11Z" fill="#111827" stroke="#374151" stroke-width="1.25"/>
+                        <path d="M7 7.5H17L16 4H8L7 7.5Z" fill="#38bdf8" fill-opacity="0.95"/>
+                    </svg>
+                </div>
+            `;
+            return el;
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             const params = new URLSearchParams(window.location.search);
-            const compUuid = params.get('comp') || 'default_fleet';
-            const sessionId = params.get('session');
+            activeCompUuid = params.get('comp') || 'default_fleet';
+            activeSessionId = params.get('session');
             const driverName = params.get('driver') || 'Driver';
             const destAddress = params.get('dest') || 'Destination';
-            const destLat = parseFloat(params.get('lat')) || 29.7604;
-            const destLng = parseFloat(params.get('lng')) || -95.3698;
+            currentDestLat = parseFloat(params.get('lat')) || 29.7604;
+            currentDestLng = parseFloat(params.get('lng')) || -95.3698;
 
-            document.getElementById('driver-company-tag').textContent = `Tenant UUID: ${compUuid}`;
+            document.getElementById('driver-company-tag').textContent = `Tenant UUID: ${activeCompUuid}`;
             document.getElementById('lbl-driver-name').textContent = driverName;
             document.getElementById('lbl-dest-address').textContent = destAddress;
 
-            // Save state into SafeStorage for the v68 engine
-            SafeStorage.setItem('smd_session_id', sessionId);
-            SafeStorage.setItem('smd_active_broadcast', 'true');
-            SafeStorage.setItem('smd_dest_lat', destLat);
-            SafeStorage.setItem('smd_dest_lng', destLng);
-            window.activeSessionId = sessionId;
-            window.activeCompanyUuid = compUuid; // Multi-tenant namespace lock
+            initDriverMap();
 
-            // Override Firebase target path to include company UUID namespace
-            window.sendTenantFirebase = function(out) {
-                const database = window.db;
-                if (!out || !database || !sessionId) return;
-                database.ref(`companies/${compUuid}/broadcasts/${sessionId}`).update({
-                    lat: out.lat,
-                    lng: out.lng,
-                    speed: out.speedMph,
-                    heading: out.heading,
-                    driverName: driverName,
-                    timestamp: Date.now()
-                }).catch(err => console.error('Tenant sync error:', err));
-            };
+            // Start Geolocation watch and stream to Firebase
+            if (navigator.geolocation) {
+                watchId = navigator.geolocation.watchPosition((position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const speedMps = position.coords.speed || 0;
+                    const speedMph = Math.round(speedMps * 2.23694);
+                    const heading = position.coords.heading || 0;
 
-            // Hook up map and start v68 tracking
-            if (typeof window.initDriverActiveMap === 'function') {
-                window.initDriverActiveMap();
-            }
-            if (typeof window.startRealTimeTracking === 'function') {
-                window.startRealTimeTracking();
+                    document.getElementById('driver-map-speed').textContent = `${speedMph} mph`;
+                    document.getElementById().textContent = "GPS: active";
+
+                    const lngLat = [lng, lat];
+                    if (!driverMarker) {
+                        const el = createVehicleElement();
+                        driverMarker = new mapboxgl.Marker(el).setLngLat(lngLat).addTo(driverMap);
+                        driverMap.flyTo({ center: lngLat, zoom: 16 });
+                    } else {
+                        driverMarker.setLngLat(lngLat);
+                    }
+
+                    // Sync telemetry to multi-tenant Firebase path
+                    if (window.db && activeSessionId && activeCompUuid) {
+                        window.db.ref(`companies/${activeCompUuid}/broadcasts/${activeSessionId}`).update({
+                            lat: lat,
+                            lng: lng,
+                            speed: speedMph,
+                            heading: heading,
+                            driverName: driverName,
+                            timestamp: Date.now()
+                        }).catch(err => console.error('Firebase sync error:', err));
+                    }
+                }, (error) => {
+                    console.error('Geolocation error:', error);
+                }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 });
             }
         });
 
@@ -159,7 +244,7 @@
             const sessionId = params.get('session');
             const u = `${window.location.origin}/?view=customer&comp=${compUuid}&session=${sessionId}`;
             const clientPhone = params.get('phone') || '';
-            window.open(`sms:${clientPhone}?body=` + encodeURIComponent(`Your tow truck is on the way! Track live here: ${u}`));
+            window.open(`sms:${clientPhone}?body=` + encodeURIComponent(`Your service provider is on the way! Track live here: ${u}`));
         };
     </script>
 </body>
