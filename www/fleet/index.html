@@ -160,7 +160,6 @@
 
         let map;
         let activeMarkers = {}; 
-        let fleetData = {};
         let cachedDestLat = null;
         let cachedDestLng = null;
         let geocodeTimer = null;
@@ -280,6 +279,15 @@
             }, 300);
         };
 
+        // Load any previously persisted local fleet roster instantly on startup to prevent blank screens when switching views
+        let fleetData = {};
+        try {
+            const cachedRoster = localStorage.getItem('smd_persistent_fleet_roster');
+            if (cachedRoster) {
+                fleetData = JSON.parse(cachedRoster);
+            }
+        } catch(e) {}
+
         function initFirebaseListeners() {
             db.ref('.info/connected').on('value', (snap) => {
                 const connected = snap.val();
@@ -295,7 +303,6 @@
                 }
             });
 
-            // Listen to company-namespaced broadcasts or fallback to global root for backward compatibility
             const authUser = firebase.auth().currentUser;
             const compUuid = authUser ? authUser.uid : 'default_fleet_owner';
             const broadcastsRef = db.ref(`companies/${compUuid}/broadcasts`);
@@ -304,7 +311,10 @@
                 const val = snapshot.val();
                 console.log("Firebase Company Broadcasts Loaded Successfully:", val);
                 
-                fleetData = { ...(window.localFleetCache || {}), ...(val || {}) };
+                fleetData = { ...fleetData, ...(window.localFleetCache || {}), ...(val || {}) };
+                try {
+                    localStorage.setItem('smd_persistent_fleet_roster', JSON.stringify(fleetData));
+                } catch(e) {}
                 renderFleetRosterAndMarkers();
             }, (error) => {
                 console.error("Firebase sync error:", error);
@@ -479,6 +489,12 @@
             if (!window.localFleetCache) window.localFleetCache = {};
             window.localFleetCache[sessionId] = payload;
             fleetData[sessionId] = payload;
+            
+            // Persist locally immediately
+            try {
+                localStorage.setItem('smd_persistent_fleet_roster', JSON.stringify(fleetData));
+            } catch(e) {}
+
             renderFleetRosterAndMarkers();
             selectDriver(sessionId);
 
@@ -508,6 +524,9 @@
                     if (activeMarkers[sid]) { activeMarkers[sid].marker.remove(); delete activeMarkers[sid]; }
                     delete fleetData[sid];
                     if (window.localFleetCache) delete window.localFleetCache[sid];
+                    try {
+                        localStorage.setItem('smd_persistent_fleet_roster', JSON.stringify(fleetData));
+                    } catch(e) {}
                     renderFleetRosterAndMarkers();
                 });
             }
@@ -519,7 +538,11 @@
             if (confirm("⚠️ WARNING: Delete ALL company broadcast sessions?")) {
                 db.ref(`companies/${compUuid}/broadcasts`).remove().then(() => {
                     Object.keys(activeMarkers).forEach(id => { activeMarkers[id].marker.remove(); });
-                    activeMarkers = {}; fleetData = {}; window.localFleetCache = {}; renderFleetRosterAndMarkers();
+                    activeMarkers = {}; fleetData = {}; window.localFleetCache = {};
+                    try {
+                        localStorage.removeItem('smd_persistent_fleet_roster');
+                    } catch(e) {}
+                    renderFleetRosterAndMarkers();
                 });
             }
         };
