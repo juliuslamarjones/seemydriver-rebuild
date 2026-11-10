@@ -50,6 +50,9 @@
             </div>
         </div>
         <div class="flex items-center gap-3 shrink-0">
+            <button onclick="purgeAllBroadcasts()" class="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 text-xs font-bold px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5">
+                🛑 End Broadcasts
+            </button>
             <span id="connection-status" class="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20 hidden sm:flex items-center gap-1.5">
                 <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live
             </span>
@@ -311,7 +314,16 @@
                 const val = snapshot.val();
                 console.log("Firebase Company Broadcasts Loaded Successfully:", val);
                 
-                fleetData = { ...fleetData, ...(window.localFleetCache || {}), ...(val || {}) };
+                if (val && typeof val === 'object' && Object.keys(val).length > 0) {
+                    fleetData = { ...fleetData, ...(window.localFleetCache || {}), ...val };
+                } else if (!val) {
+                    // If firebase snapshot is empty or null, keep local cache intact so view switches don't wipe active drivers
+                    const saved = localStorage.getItem('smd_persistent_fleet_roster');
+                    if (saved) {
+                        try { fleetData = JSON.parse(saved); } catch(e) {}
+                    }
+                }
+                
                 try {
                     localStorage.setItem('smd_persistent_fleet_roster', JSON.stringify(fleetData));
                 } catch(e) {}
@@ -490,7 +502,6 @@
             window.localFleetCache[sessionId] = payload;
             fleetData[sessionId] = payload;
             
-            // Persist locally immediately
             try {
                 localStorage.setItem('smd_persistent_fleet_roster', JSON.stringify(fleetData));
             } catch(e) {}
