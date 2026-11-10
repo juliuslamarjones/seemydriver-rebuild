@@ -72,8 +72,8 @@
         <div class="w-full h-[400px] bg-neutral-900 border border-neutral-800 rounded-3xl relative overflow-hidden shadow-2xl">
             <div id="driver-map-container" class="w-full h-full"></div>
             
-            <!-- GPS Badge -->
-            <div class="absolute top-3 left-3 z-20 bg-black/85 border border-neutral-800 rounded-xl px-3 py-1 font-mono text-[11px] font-bold text-amber-400 backdrop-blur-md shadow-lg">
+            <!-- GPS Badge with fixed ID reference -->
+            <div id="gps-badge" class="absolute top-3 left-3 z-20 bg-black/85 border border-neutral-800 rounded-xl px-3 py-1 font-mono text-[11px] font-bold text-amber-400 backdrop-blur-md shadow-lg">
                 GPS: searching… · v68
             </div>
 
@@ -200,9 +200,10 @@
                     const speedMps = position.coords.speed || 0;
                     const speedMph = Math.round(speedMps * 2.23694);
                     const heading = position.coords.heading || 0;
+                    const accuracy = Math.round(position.coords.accuracy || 0);
 
                     document.getElementById('driver-map-speed').textContent = `${speedMph} mph`;
-                    document.getElementById().textContent = "GPS: active";
+                    document.getElementById('gps-badge').textContent = `GPS: active ±${accuracy} m · v68`;
 
                     const lngLat = [lng, lat];
                     if (!driverMarker) {
@@ -226,6 +227,7 @@
                     }
                 }, (error) => {
                     console.error('Geolocation error:', error);
+                    document.getElementById('gps-badge').textContent = 'GPS: signal error';
                 }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 });
             }
         });
