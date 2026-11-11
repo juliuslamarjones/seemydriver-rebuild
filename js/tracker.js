@@ -252,7 +252,11 @@ window.handleAddressInput = async function(value) {
     LS.removeItem('smd_dest_lat');
     LS.removeItem('smd_dest_lng');
     
-    const suggestions = document.getElementById('address-suggestions');
+    // Robust fallback search for container element
+    let suggestions = document.getElementById('address-suggestions');
+    if (!suggestions) {
+        suggestions = document.querySelector('[id*="suggestions"]') || document.querySelector('.address-suggestions');
+    }
     if (!suggestions) return;
 
     clearTimeout(geocodeTimer);
@@ -283,7 +287,8 @@ window.handleAddressInput = async function(value) {
                 div.innerText = name;
                 div.onpointerdown = (e) => {
                     e.preventDefault();
-                    document.getElementById('job-cust-address').value = name;
+                    const inputField = document.getElementById('job-cust-address') || document.querySelector('input[name*="address"]');
+                    if (inputField) inputField.value = name;
                     window.cachedDestLat = coords[1];
                     window.cachedDestLng = coords[0];
                     LS.setItem('smd_dest_lat', window.cachedDestLat);
