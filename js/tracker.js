@@ -6,10 +6,10 @@
 
 const LS = window.SafeStorage;
 const MPS_TO_MPH = 2.23694;
-const ENGINE_VERSION = 'v69';
+const ENGINE_VERSION = 'v65-stable-geo';
 const HEADING_UP = false;
 
-const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.Ex0EVNUoTyEeWQiH0jqMQ';
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
 const $ = (id) => document.getElementById(id);
@@ -97,8 +97,6 @@ function bearingAtS(route, s) {
     return normDeg(toDeg(Math.atan2(b.x - a.x, b.y - a.y)));
 }
 
-// Least-squares velocity over the recent fixes. Works with no device speed/heading (network location),
-// and answers "not moving" unless the movement is clearly bigger than the GPS noise.
 function estimateMotion(hist, now) {
     if (hist.length < 4) return null;
     let accSum = 0;
@@ -124,7 +122,7 @@ function estimateMotion(hist, now) {
     if (sxx < 1e-6) return null;
     const vx = sxt / sxx, vy = syt / sxx;
     const speed = Math.hypot(vx, vy);
-    const noise = (avgAcc * 0.7) / Math.sqrt(sxx);   // speed error the GPS noise alone could cause
+    const noise = (avgAcc * 0.7) / Math.sqrt(sxx);
     const moving = speed > Math.max(1.5, noise * 2.5);
     return { speed: moving ? speed : 0, heading: moving ? normDeg(toDeg(Math.atan2(vx, vy))) : null };
 }
@@ -147,8 +145,6 @@ function toast(msg) {
 const broadcasting = () => LS.getItem('smd_active_broadcast') === 'true';
 const sessionId = () => window.activeSessionId || LS.getItem('smd_session_id');
 
-// Each account's jobs live under companies/<account id>/broadcasts/<job id>.
-// Old links that have no "comp" in them still read the old top-level broadcasts/<job id> path.
 function compId() {
     const u = window.firebase && window.firebase.auth ? window.firebase.auth().currentUser : null;
     return (u && u.uid) || window.activeCompanyUuid || LS.getItem('smd_comp_uuid') || null;
@@ -209,7 +205,6 @@ window.launchLiveBroadcast = function() {
 
     const sid = sessionId();
     const database = getDb();
-
     const comp = authUser.uid;
     window.activeCompanyUuid = comp;
     LS.setItem('smd_comp_uuid', comp);
@@ -238,7 +233,6 @@ window.launchLiveBroadcast = function() {
     }
 };
 
-// The database refused the broadcast: free trial over or account not verified yet
 function broadcastDenied() {
     LS.removeItem('smd_active_broadcast');
     LS.removeItem('smd_session_id');
@@ -257,7 +251,10 @@ window.handleAddressInput = async function(value) {
     LS.removeItem('smd_dest_lat');
     LS.removeItem('smd_dest_lng');
     
-    const suggestions = document.getElementById('address-suggestions');
+    let suggestions = document.getElementById('address-suggestions');
+    if (!suggestions) {
+        suggestions = document.querySelector('[id*="suggestions"]') || document.querySelector('.address-suggestions');
+    }
     if (!suggestions) return;
 
     clearTimeout(geocodeTimer);
@@ -288,7 +285,8 @@ window.handleAddressInput = async function(value) {
                 div.innerText = name;
                 div.onpointerdown = (e) => {
                     e.preventDefault();
-                    document.getElementById('job-cust-address').value = name;
+                    const inputField = document.getElementById('job-cust-address') || document.querySelector('input[name*="address"]');
+                    if (inputField) inputField.value = name;
                     window.cachedDestLat = coords[1];
                     window.cachedDestLng = coords[0];
                     LS.setItem('smd_dest_lat', window.cachedDestLat);
@@ -383,7 +381,7 @@ window.startRealTimeTracking = function () {
     if (gps.running) return;
     gps.running = true;
     watchGps();
-    requestWakeLock(); // keeps the screen on while the app is open so GPS is not put to sleep
+    requestWakeLock();
 };
 
 window.stopRealTimeTracking = function () {
@@ -401,7 +399,7 @@ document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
     if (gps.running) {
         requestWakeLock();
-        if (!gps.last || Date.now() - gps.last.t > 5000) watchGps(); // back in the app: restart the GPS watch
+        if (!gps.last || Date.now() - gps.last.t > 5000) watchGps();
     }
     if (C && C.resync) C.resync();
 });
@@ -475,7 +473,6 @@ function createTripEngine(map, opts) {
         const get = async (url) => (await fetch(url)).json();
         try {
             let data = null;
-            // moving? ask for a route that starts in the direction the truck is really heading
             if (headingDeg !== null && headingDeg !== undefined && E.speedMs > 2) {
                 try { data = await get(base + '&bearings=' + Math.round(normDeg(headingDeg)) + ',90;'); } catch (e) { data = null; }
             }
@@ -484,7 +481,7 @@ function createTripEngine(map, opts) {
             if (data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry.coordinates.length > 1) {
                 const r = data.routes[0];
                 E.route = buildRoute(r.geometry.coordinates, r.duration);
-                E.snapped = false;                       // the next fixes snap onto the new line
+                E.snapped = false;
                 E.refLng = E.freeLng = E.drawLng;
                 E.refLat = E.freeLat = E.drawLat;
                 E.offCount = 0; E.offSince = 0; E.nearCount = 0; E.backCount = 0; E.dirVotes = 0; E.sHist = []; E.dir = 1;
@@ -537,7 +534,7 @@ function createTripEngine(map, opts) {
                 if (r.cum[mid] <= s) lo = mid; else hi = mid;
             }
             const p = pointAtS(r, s);
-            src.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[p.lng, p.lat]].concat(r.coords.slice(hi)) } });
+            src.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[p.lng, p.lat']].concat(r.coords.slice(hi)) } });
         } catch (e) {}
     }
 
@@ -580,7 +577,6 @@ function createTripEngine(map, opts) {
         }
 
         if (E.speedMs < 1.5) {
-            // stopped: line the nose up with the road, but never swing around backwards
             if (!(E.snapped && E.route) || Math.abs(angleDiff(E.rBearing, targetBearing)) > 100) targetBearing = E.rBearing;
         }
 
@@ -599,8 +595,7 @@ function createTripEngine(map, opts) {
         E.marker.setLngLat([lng, lat]);
         E.marker.setRotation(E.rBearing);
         updateLine(now);
-        // follow the truck, but never in the middle of a zoom / 3D animation: moving the camera every
-        // frame cancels those animations, which is why the + / - and 3D buttons did nothing while following
+        
         if (E.follow && !map.isEasing()) {
             map.setCenter([lng, lat]);
             if (HEADING_UP) map.setBearing(E.rBearing);
@@ -611,18 +606,15 @@ function createTripEngine(map, opts) {
         const now = performance.now();
         if (E.hasFix && fix.acc > 120) return null;
 
-        // ---- motion: how fast, and which way? Never guess from a single noisy fix.
         const hasDeviceSpeed = fix.speedMs !== null && fix.speedMs !== undefined && isFinite(fix.speedMs);
         E.hist.push({ t: now, lng: fix.lng, lat: fix.lat, acc: Math.max(fix.acc || 0, 5) });
         while (E.hist.length && now - E.hist[0].t > 25000) E.hist.shift();
         const est = estimateMotion(E.hist, now);
         let sp = hasDeviceSpeed ? fix.speedMs : (est ? est.speed : 0);
-        // a real device speed is trusted quickly (so the truck stops when you stop); an estimate is smoothed harder
         const keep = hasDeviceSpeed ? 0.3 : 0.6;
         sp = E.hasFix ? E.speedMs * keep + sp * (1 - keep) : sp;
         E.speedMs = sp < 0.8 ? 0 : sp;
 
-        // heading: the device's when it has one and the truck is really moving, else the trend of recent fixes
         let hd = E.headingDeg;
         if (hasDeviceSpeed && fix.heading !== null && fix.heading !== undefined && isFinite(fix.heading) && E.speedMs > 3) {
             hd = normDeg(fix.heading);
@@ -663,11 +655,9 @@ function createTripEngine(map, opts) {
         if (E.route) {
             const accC = Math.max(fix.acc || 0, 6);
             const sn = snapToRoute(E.route, fix.lng, fix.lat, E.snapped ? E.sRef : null, 150, 600);
-            // how far from the line a reading may be and still count as "on the road"; weaker GPS = wider
             const limit = Math.max(50, accC * 2);
 
             if (!E.snapped) {
-                // get onto the line as soon as a reading is near it (the line starts where the truck was)
                 if (sn.dist <= Math.max(60, accC * 2.5)) {
                     E.snapped = true; E.sRef = sn.s; E.rS = sn.s; E.pendingBlend = true;
                     E.offCount = 0; E.offSince = 0;
@@ -677,8 +667,6 @@ function createTripEngine(map, opts) {
                     if (!E.offSince) E.offSince = now;
                 }
             } else {
-                // once on the line the truck STAYS on it. A far-off reading never pulls it into a field or a parking lot;
-                // it only counts toward "the driver has really left this route" (which plans a new route below).
                 onLine = true;
                 if (sn.dist <= limit * 1.5) {
                     E.sHist.push({ t: now, s: sn.s });
@@ -698,12 +686,10 @@ function createTripEngine(map, opts) {
                 }
             }
 
-            // which way along the line is the truck going? A flip needs 3 readings in a row that agree.
             if (E.snapped) {
                 const b = bearingAtS(E.route, E.sRef);
-                // meters gained along the line over the last few seconds (negative = really going backwards)
                 let trend = null;
-                const trendWin = accC > 40 ? 10000 : 6000;   // weak GPS needs a longer look to be sure
+                const trendWin = accC > 40 ? 10000 : 6000;
                 const th = E.sHist.filter((q) => now - q.t <= trendWin);
                 if (th.length >= 3 && (th[th.length - 1].t - th[0].t) >= (accC > 40 ? 4000 : 2500)) {
                     const k = Math.min(2, Math.floor(th.length / 2));
@@ -715,12 +701,11 @@ function createTripEngine(map, opts) {
                 const reallyBackwards = trend !== null && trend < -backThr;
                 if (b !== null && E.headingDeg !== null && E.speedMs > 3) {
                     let want = Math.abs(angleDiff(b, E.headingDeg)) > 120 ? -1 : 1;
-                    if (want < 0 && !reallyBackwards) want = E.dir;              // the compass says "backwards" but the position does not: ignore it
-                    if (want > 0 && E.dir < 0 && reallyBackwards) want = E.dir;  // still losing ground along the line: stay reversed
+                    if (want < 0 && !reallyBackwards) want = E.dir;
+                    if (want > 0 && E.dir < 0 && reallyBackwards) want = E.dir;
                     if (want !== E.dir) { if (++E.dirVotes >= 3) { E.dir = want; E.dirVotes = 0; } }
                     else E.dirVotes = 0;
                 }
-                // driving against the line, for real (4+ readings, 4+ s, believable speed): plan a new route from here
                 if (E.dir < 0 && E.speedMs > 3) { if (!E.backSince) E.backSince = now; E.backCount++; }
                 else if (E.dir > 0 || E.speedMs <= 1) { E.backCount = 0; E.backSince = 0; }
                 if (dest && !E.arrived && reallyBackwards && E.backCount >= 4 && now - E.backSince > 4000 && now - E.lastRerouteAt > 12000) {
@@ -728,14 +713,12 @@ function createTripEngine(map, opts) {
                     fetchRoute(fix.lng, fix.lat, E.headingDeg);
                 }
             }
-            // far from the line for several readings over several seconds while moving: this route is no longer the road
             if (dest && !E.arrived && E.speedMs > 3 && E.offCount >= 3 && now - E.offSince > 4000 && now - E.lastRerouteAt > 12000) {
                 E.lastRerouteAt = now;
                 fetchRoute(fix.lng, fix.lat, E.headingDeg);
             }
         }
         if (!onLine) {
-            // no route yet (or it could not be fetched): follow the GPS gently
             const acc = Math.max(fix.acc || 0, 6);
             const miss = distM(E.refLng, E.refLat, fix.lng, fix.lat);
             if (E.speedMs > 0) {
@@ -784,7 +767,6 @@ window.initDriverActiveMap = function () {
     box.style.width = '100%';
     box.style.height = '100%';
     
-    // Default 3D mode explicitly to OFF on startup
     window.is3DMode = false;
 
     const dest = getDest();
@@ -802,13 +784,6 @@ window.initDriverActiveMap = function () {
     }
 
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    
-    // Allow manual user interaction to break follow lock
-    ['dragstart'].forEach(evt => {
-        map.on(evt, () => {
-            if (D && D.engine) D.engine.follow = false;
-        });
-    });
 
     if (dest) new mapboxgl.Marker({ element: createPinElement() }).setLngLat([dest.lng, dest.lat]).addTo(map);
 
@@ -856,7 +831,7 @@ window.recenterDriverMap = function () {
     D.map.dragPan.enable();
     D.map.scrollZoom.enable();
     D.map.touchZoomRotate.enable();
-    D.engine.follow = true; // follow the truck again
+    D.engine.follow = true;
     D.map.setZoom(16);
     toast('Following your truck');
 };
@@ -925,7 +900,7 @@ function teardownCustomer() {
 
 window.playCustomerAudio = function () {
     if (!window.speechSynthesis) return;
-    const driverName = (document.getElementById('cust-driver-header') ? document.getElementById('cust-driver-header').textContent : 'Your driver');
+    const driverName = (document.getElementById('cust-driver-header') ? document.getElementById('cust-driver-header'].textContent : 'Your driver');
     const companyName = window.activeCompanyName || LS.getItem('smd_company_name') || '';
 
     let text = '';
@@ -969,12 +944,6 @@ window.initCustomerMapLive = function () {
         return;
     }
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-
-    ['dragstart'].forEach(evt => {
-        map.on(evt, () => {
-            if (C && C.engine) C.engine.follow = false;
-        });
-    });
 
     map.on('load', () => { map.resize(); });
 
@@ -1087,7 +1056,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasSession = q.has('session') || q.has('sid') || q.has('s') || q.get('view') === 'customer';
     
     if (hasSession) {
-        // customers: app.js shows the tracking screen; make sure it stays visible and the map is started
         const cv = $('customer-view-view') || $('customer-view');
         if (cv) {
             document.querySelectorAll('.app-view').forEach((v) => {
