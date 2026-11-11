@@ -9,11 +9,9 @@ const MPS_TO_MPH = 2.23694;
 const ENGINE_VERSION = 'v69-pan-glide';
 const HEADING_UP = false;
 
-// Secure Mapbox Token placeholder (loaded from window or fallback)
-const MAPBOX_TOKEN = window.MAPBOX_TOKEN || 'YOUR_MAPBOX_TOKEN_HERE';
-if (MAPBOX_TOKEN && MAPBOX_TOKEN !== 'YOUR_MAPBOX_TOKEN_HERE') {
-    mapboxgl.accessToken = MAPBOX_TOKEN;
-}
+// Active production Mapbox token restoration
+const MAPBOX_TOKEN = window.MAPBOX_TOKEN || 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+mapboxgl.accessToken = MAPBOX_TOKEN;
 
 const $ = (id) => document.getElementById(id);
 const getDb = () => window.db || (typeof db !== 'undefined' ? db : null);
