@@ -9,8 +9,11 @@ const MPS_TO_MPH = 2.23694;
 const ENGINE_VERSION = 'v69-pan-glide';
 const HEADING_UP = false;
 
-const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
-mapboxgl.accessToken = MAPBOX_TOKEN;
+// Secure Mapbox Token placeholder (loaded from window or fallback)
+const MAPBOX_TOKEN = window.MAPBOX_TOKEN || 'YOUR_MAPBOX_TOKEN_HERE';
+if (MAPBOX_TOKEN && MAPBOX_TOKEN !== 'YOUR_MAPBOX_TOKEN_HERE') {
+    mapboxgl.accessToken = MAPBOX_TOKEN;
+}
 
 const $ = (id) => document.getElementById(id);
 const getDb = () => window.db || (typeof db !== 'undefined' ? db : null);
@@ -97,7 +100,6 @@ function bearingAtS(route, s) {
     return normDeg(toDeg(Math.atan2(b.x - a.x, b.y - a.y)));
 }
 
-// Least-squares velocity over recent fixes.
 function estimateMotion(hist, now) {
     if (hist.length < 4) return null;
     let accSum = 0;
@@ -464,7 +466,7 @@ function createTripEngine(map, opts) {
                         const pos = E.position();
                         map.easeTo({ center: [pos.lng, pos.lat], zoom: 16, duration: 1200 });
                     }
-                }, 6000); // 6-second idle timeout before glide-centering back to truck
+                }, 6000);
             }
         });
     });
