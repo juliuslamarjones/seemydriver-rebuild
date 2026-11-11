@@ -6,7 +6,7 @@
 
 const LS = window.SafeStorage;
 const MPS_TO_MPH = 2.23694;
-const ENGINE_VERSION = 'v69';
+const ENGINE_VERSION = 'v69-stable-geo';
 const HEADING_UP = false;
 
 const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
@@ -244,6 +244,7 @@ function broadcastDenied() {
     window.switchView('job-setup-view');
 }
 
+// RESTORED GEOCODER AUTOCOMPLETE
 let geocodeTimer = null;
 window.handleAddressInput = async function(value) {
     window.cachedDestLat = null;
@@ -251,7 +252,10 @@ window.handleAddressInput = async function(value) {
     LS.removeItem('smd_dest_lat');
     LS.removeItem('smd_dest_lng');
     
-    const suggestions = document.getElementById('address-suggestions');
+    let suggestions = document.getElementById('address-suggestions');
+    if (!suggestions) {
+        suggestions = document.querySelector('[id*="suggestions"]') || document.querySelector('.address-suggestions');
+    }
     if (!suggestions) return;
 
     clearTimeout(geocodeTimer);
@@ -282,7 +286,8 @@ window.handleAddressInput = async function(value) {
                 div.innerText = name;
                 div.onpointerdown = (e) => {
                     e.preventDefault();
-                    document.getElementById('job-cust-address').value = name;
+                    const inputField = document.getElementById('job-cust-address') || document.querySelector('input[name*="address"]');
+                    if (inputField) inputField.value = name;
                     window.cachedDestLat = coords[1];
                     window.cachedDestLng = coords[0];
                     LS.setItem('smd_dest_lat', window.cachedDestLat);
@@ -780,12 +785,6 @@ window.initDriverActiveMap = function () {
     }
 
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    
-    ['dragstart'].forEach(evt => {
-        map.on(evt, () => {
-            if (D && D.engine) D.engine.follow = false;
-        });
-    });
 
     if (dest) new mapboxgl.Marker({ element: createPinElement() }).setLngLat([dest.lng, dest.lat]).addTo(map);
 
@@ -946,12 +945,6 @@ window.initCustomerMapLive = function () {
         return;
     }
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-
-    ['dragstart'].forEach(evt => {
-        map.on(evt, () => {
-            if (C && C.engine) C.engine.follow = false;
-        });
-    });
 
     map.on('load', () => { map.resize(); });
 
