@@ -6,11 +6,10 @@
 
 const LS = window.SafeStorage;
 const MPS_TO_MPH = 2.23694;
-const ENGINE_VERSION = 'v69-pan-glide';
+const ENGINE_VERSION = 'v69';
 const HEADING_UP = false;
 
-// Active production Mapbox token restoration
-const MAPBOX_TOKEN = window.MAPBOX_TOKEN || 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
 const $ = (id) => document.getElementById(id);
@@ -252,11 +251,7 @@ window.handleAddressInput = async function(value) {
     LS.removeItem('smd_dest_lat');
     LS.removeItem('smd_dest_lng');
     
-    // Robust fallback search for container element
-    let suggestions = document.getElementById('address-suggestions');
-    if (!suggestions) {
-        suggestions = document.querySelector('[id*="suggestions"]') || document.querySelector('.address-suggestions');
-    }
+    const suggestions = document.getElementById('address-suggestions');
     if (!suggestions) return;
 
     clearTimeout(geocodeTimer);
@@ -287,8 +282,7 @@ window.handleAddressInput = async function(value) {
                 div.innerText = name;
                 div.onpointerdown = (e) => {
                     e.preventDefault();
-                    const inputField = document.getElementById('job-cust-address') || document.querySelector('input[name*="address"]');
-                    if (inputField) inputField.value = name;
+                    document.getElementById('job-cust-address').value = name;
                     window.cachedDestLat = coords[1];
                     window.cachedDestLng = coords[0];
                     LS.setItem('smd_dest_lat', window.cachedDestLat);
@@ -447,33 +441,6 @@ function createTripEngine(map, opts) {
         drawLng: 0, drawLat: 0, lastFrame: 0,
         lastLine: 0, arrived: false, arriveCount: 0, nearCount: 0, backCount: 0, backSince: 0, dirVotes: 0, sHist: [], hist: []
     };
-
-    // --- SURGICAL PAN-AND-GLIDE MAP CONTROLS ---
-    let userPanTimer = null;
-    ['dragstart', 'touchstart', 'movestart'].forEach(evt => {
-        map.on(evt, (e) => {
-            if (e.originalEvent && E) {
-                E.follow = false;
-                if (userPanTimer) clearTimeout(userPanTimer);
-            }
-        });
-    });
-
-    ['dragend', 'touchend'].forEach(evt => {
-        map.on(evt, (e) => {
-            if (e.originalEvent && E) {
-                if (userPanTimer) clearTimeout(userPanTimer);
-                userPanTimer = setTimeout(() => {
-                    if (E && !E.follow && E.position()) {
-                        E.follow = true;
-                        const pos = E.position();
-                        map.easeTo({ center: [pos.lng, pos.lat], zoom: 16, duration: 1200 });
-                    }
-                }, 6000);
-            }
-        });
-    });
-    // ------------------------------------------
 
     function drawRoute(coords, attempt) {
         if (!E.running) return;
@@ -813,6 +780,12 @@ window.initDriverActiveMap = function () {
     }
 
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    
+    ['dragstart'].forEach(evt => {
+        map.on(evt, () => {
+            if (D && D.engine) D.engine.follow = false;
+        });
+    });
 
     if (dest) new mapboxgl.Marker({ element: createPinElement() }).setLngLat([dest.lng, dest.lat]).addTo(map);
 
@@ -973,6 +946,12 @@ window.initCustomerMapLive = function () {
         return;
     }
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+    ['dragstart'].forEach(evt => {
+        map.on(evt, () => {
+            if (C && C.engine) C.engine.follow = false;
+        });
+    });
 
     map.on('load', () => { map.resize(); });
 
