@@ -6,11 +6,10 @@
 
 const LS = window.SafeStorage;
 const MPS_TO_MPH = 2.23694;
-const ENGINE_VERSION = 'v69-stable-geo';
+const ENGINE_VERSION = 'v64';
 const HEADING_UP = false;
 
-// Unrestricted Default public Mapbox token
-const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.Ex0EVNUoTyEeWQiH0jqMQ';
+const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
 const $ = (id) => document.getElementById(id);
@@ -98,36 +97,6 @@ function bearingAtS(route, s) {
     return normDeg(toDeg(Math.atan2(b.x - a.x, b.y - a.y)));
 }
 
-function estimateMotion(hist, now) {
-    if (hist.length < 4) return null;
-    let accSum = 0;
-    for (const h of hist) accSum += h.acc;
-    const avgAcc = accSum / hist.length;
-    const win = avgAcc > 40 ? 20000 : 8000;
-    const pts = hist.filter((h) => now - h.t <= win);
-    if (pts.length < 4) return null;
-    const span = (pts[pts.length - 1].t - pts[0].t) / 1000;
-    if (span < (avgAcc > 40 ? 8 : 3)) return null;
-    const p0 = pts[0], n = pts.length;
-    const k = Math.cos(toRad(p0.lat)) * M_PER_DEG;
-    const ts = pts.map((h) => (h.t - p0.t) / 1000);
-    const xs = pts.map((h) => (h.lng - p0.lng) * k);
-    const ys = pts.map((h) => (h.lat - p0.lat) * M_PER_DEG);
-    const mean = (a) => a.reduce((s, v) => s + v, 0) / n;
-    const tm = mean(ts), xm = mean(xs), ym = mean(ys);
-    let sxx = 0, sxt = 0, syt = 0;
-    for (let i = 0; i < n; i++) {
-        const dt = ts[i] - tm;
-        sxx += dt * dt; sxt += dt * (xs[i] - xm); syt += dt * (ys[i] - ym);
-    }
-    if (sxx < 1e-6) return null;
-    const vx = sxt / sxx, vy = syt / sxx;
-    const speed = Math.hypot(vx, vy);
-    const noise = (avgAcc * 0.7) / Math.sqrt(sxx);
-    const moving = speed > Math.max(1.5, noise * 2.5);
-    return { speed: moving ? speed : 0, heading: moving ? normDeg(toDeg(Math.atan2(vx, vy))) : null };
-}
-
 function formatEta(seconds) {
     const mins = Math.max(1, Math.round(seconds / 60));
     if (mins < 60) return mins + ' mins';
@@ -145,18 +114,6 @@ function toast(msg) {
 
 const broadcasting = () => LS.getItem('smd_active_broadcast') === 'true';
 const sessionId = () => window.activeSessionId || LS.getItem('smd_session_id');
-
-function compId() {
-    const u = window.firebase && window.firebase.auth ? window.firebase.auth().currentUser : null;
-    return (u && u.uid) || window.activeCompanyUuid || LS.getItem('smd_comp_uuid') || null;
-}
-function broadcastRef(database, sid, comp) {
-    return comp ? database.ref('companies/' + comp + '/broadcasts/' + sid) : database.ref('broadcasts/' + sid);
-}
-function trackingLink() {
-    const comp = compId();
-    return 'https://www.seemydriver.com/?view=customer' + (comp ? '&comp=' + encodeURIComponent(comp) : '') + '&session=' + sessionId();
-}
 
 function getDest() {
     const lat = parseFloat(LS.getItem('smd_dest_lat')), lng = parseFloat(LS.getItem('smd_dest_lng'));
@@ -206,13 +163,10 @@ window.launchLiveBroadcast = function() {
 
     const sid = sessionId();
     const database = getDb();
-    const comp = authUser.uid;
-    window.activeCompanyUuid = comp;
-    LS.setItem('smd_comp_uuid', comp);
 
     if (database) {
-        broadcastRef(database, sid, comp).set({
-            ownerUid: comp,
+        database.ref('broadcasts/' + sid).set({
+            ownerUid: authUser.uid,
             driverName: driverName,
             driverPhone: driverPhone,
             companyName: companyName,
@@ -222,10 +176,7 @@ window.launchLiveBroadcast = function() {
             speed: 0,
             heading: 0,
             timestamp: Date.now()
-        }).catch((err) => {
-            console.error('Firebase broadcast init failed:', err);
-            if (err && err.code === 'PERMISSION_DENIED') broadcastDenied();
-        });
+        }).catch((err) => {});
     }
 
     window.switchView('active-broadcast');
@@ -234,17 +185,6 @@ window.launchLiveBroadcast = function() {
     }
 };
 
-function broadcastDenied() {
-    LS.removeItem('smd_active_broadcast');
-    LS.removeItem('smd_session_id');
-    LS.removeItem('smd_started_at');
-    window.activeSessionId = undefined;
-    try { window.stopRealTimeTracking(); } catch (e) {}
-    try { teardownDriver(); } catch (e) {}
-    alert('Your broadcast could not start. Your free trial may have ended, or your account has not been verified yet. Please sign out and sign back in.');
-    window.switchView('job-setup-view');
-}
-
 let geocodeTimer = null;
 window.handleAddressInput = async function(value) {
     window.cachedDestLat = null;
@@ -252,19 +192,8 @@ window.handleAddressInput = async function(value) {
     LS.removeItem('smd_dest_lat');
     LS.removeItem('smd_dest_lng');
     
-    let suggestions = document.getElementById('address-suggestions');
-    const inputField = document.getElementById('job-cust-address');
-    
-    if (!suggestions && inputField && inputField.parentNode) {
-        suggestions = document.createElement('div');
-        suggestions.id = 'address-suggestions';
-        inputField.parentNode.style.position = 'relative';
-        inputField.parentNode.appendChild(suggestions);
-    }
-    
+    const suggestions = document.getElementById('address-suggestions');
     if (!suggestions) return;
-
-    suggestions.style.cssText = "position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: #161923; border: 1px solid #262626; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.8); max-height: 220px; overflow-y: auto; z-index: 99999;";
 
     clearTimeout(geocodeTimer);
     const query = value.trim();
@@ -280,7 +209,6 @@ window.handleAddressInput = async function(value) {
             const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&autocomplete=true&types=address,poi&limit=5`);
             const data = await res.json();
             suggestions.innerHTML = '';
-            
             if (!data.features || data.features.length === 0) {
                 suggestions.classList.add('hidden');
                 suggestions.style.display = 'none';
@@ -292,12 +220,10 @@ window.handleAddressInput = async function(value) {
                 const coords = f.center || (f.geometry && f.geometry.coordinates) || [0, 0];
                 const div = document.createElement('div');
                 div.className = "px-4 py-3 text-xs text-neutral-200 hover:bg-neutral-800 hover:text-amber-400 cursor-pointer border-b border-neutral-800/80 transition font-medium";
-                div.style.cssText = "padding: 12px 16px; font-size: 13px; color: #e5e5e5; cursor: pointer; border-bottom: 1px solid #262626; background: #161923;";
                 div.innerText = name;
-                
                 div.onpointerdown = (e) => {
                     e.preventDefault();
-                    if (inputField) inputField.value = name;
+                    document.getElementById('job-cust-address').value = name;
                     window.cachedDestLat = coords[1];
                     window.cachedDestLng = coords[0];
                     LS.setItem('smd_dest_lat', window.cachedDestLat);
@@ -307,7 +233,6 @@ window.handleAddressInput = async function(value) {
                 };
                 suggestions.appendChild(div);
             });
-            
             suggestions.classList.remove('hidden');
             suggestions.style.display = 'block';
         } catch (e) {
@@ -343,57 +268,37 @@ function sendFirebase(out) {
     const database = getDb();
     if (!out || !broadcasting() || !database) return;
     const sid = sessionId();
-    const comp = compId();
-    if (!sid || !comp) return;
+    if (!sid) return;
     const now = Date.now();
     if (now - gps.lastSend < 1500) return;
     gps.lastSend = now;
 
-    broadcastRef(database, sid, comp).update({
+    database.ref('broadcasts/' + sid).update({
         lat: out.lat,
         lng: out.lng,
         speed: out.speedMph,
         heading: out.heading,
         timestamp: now
-    }).catch((err) => {
-        console.error('Firebase update error:', err);
-        const signedIn = window.firebase && window.firebase.auth && window.firebase.auth().currentUser;
-        if (err && err.code === 'PERMISSION_DENIED' && signedIn && now - gps.deniedToastAt > 30000) {
-            gps.deniedToastAt = now;
-            toast('Broadcast paused: subscription inactive');
-        }
-    });
+    }).catch((err) => {});
 }
 
 function setBadge(text, ok) {
     document.querySelectorAll('.smd-gps-badge').forEach((b) => {
-        b.textContent = text + ' · ' + ENGINE_VERSION;
+        b.textContent = text + ' \u00b7 ' + ENGINE_VERSION;
         b.style.color = ok ? '#fbbf24' : '#f87171';
     });
-}
-
-function onGpsError(e) {
-    console.error('GPS error:', e);
-    setBadge('GPS: ' + (e && e.message ? e.message : 'no signal'), false);
-}
-
-async function requestWakeLock() {
-    try {
-        if ('wakeLock' in navigator && gps.running) gps.wake = await navigator.wakeLock.request('screen');
-    } catch (e) {}
 }
 
 function watchGps() {
     if (!navigator.geolocation) return;
     if (gps.handle !== null) { try { navigator.geolocation.clearWatch(gps.handle); } catch (e) {} }
-    gps.handle = navigator.geolocation.watchPosition(ingest, onGpsError, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+    gps.handle = navigator.geolocation.watchPosition(ingest, (e) => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
 }
 
 window.startRealTimeTracking = function () {
     if (gps.running) return;
     gps.running = true;
     watchGps();
-    requestWakeLock();
 };
 
 window.stopRealTimeTracking = function () {
@@ -402,19 +307,8 @@ window.stopRealTimeTracking = function () {
         try { navigator.geolocation.clearWatch(gps.handle); } catch (e) {}
         gps.handle = null;
     }
-    try { if (gps.wake) gps.wake.release(); } catch (e) {}
-    gps.wake = null;
     LS.removeItem('smd_active_broadcast');
 };
-
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
-    if (gps.running) {
-        requestWakeLock();
-        if (!gps.last || Date.now() - gps.last.t > 5000) watchGps();
-    }
-    if (C && C.resync) C.resync();
-});
 
 function createTruckElement() {
     const el = document.createElement('div');
@@ -455,7 +349,7 @@ function createTripEngine(map, opts) {
         refLng: 0, refLat: 0, freeLng: 0, freeLat: 0,
         rBearing: 0, offLng: 0, offLat: 0,
         drawLng: 0, drawLat: 0, lastFrame: 0,
-        lastLine: 0, arrived: false, arriveCount: 0, nearCount: 0, backCount: 0, backSince: 0, dirVotes: 0, sHist: [], hist: []
+        lastLine: 0, arrived: false, arriveCount: 0, nearCount: 0
     };
 
     function drawRoute(coords, attempt) {
@@ -478,17 +372,13 @@ function createTripEngine(map, opts) {
         }
     }
 
-    async function fetchRoute(fromLng, fromLat, headingDeg) {
+    async function fetchRoute(fromLng, fromLat) {
         if (!dest || E.routeLoading || !E.running) return;
         E.routeLoading = true;
-        const base = 'https://router.project-osrm.org/route/v1/driving/' + fromLng + ',' + fromLat + ';' + dest.lng + ',' + dest.lat + '?overview=full&geometries=geojson';
-        const get = async (url) => (await fetch(url)).json();
         try {
-            let data = null;
-            if (headingDeg !== null && headingDeg !== undefined && E.speedMs > 2) {
-                try { data = await get(base + '&bearings=' + Math.round(normDeg(headingDeg)) + ',90;'); } catch (e) { data = null; }
-            }
-            if (!data || data.code !== 'Ok') data = await get(base);
+            const url = 'https://router.project-osrm.org/route/v1/driving/' + fromLng + ',' + fromLat + ';' + dest.lng + ',' + dest.lat + '?overview=full&geometries=geojson';
+            const res = await fetch(url);
+            const data = await res.json();
             if (!E.running) return;
             if (data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry.coordinates.length > 1) {
                 const r = data.routes[0];
@@ -496,15 +386,10 @@ function createTripEngine(map, opts) {
                 E.snapped = false;
                 E.refLng = E.freeLng = E.drawLng;
                 E.refLat = E.freeLat = E.drawLat;
-                E.offCount = 0; E.offSince = 0; E.nearCount = 0; E.backCount = 0; E.dirVotes = 0; E.sHist = []; E.dir = 1;
-                E.sRef = 0; E.rS = 0; E.offLng = 0; E.offLat = 0;
+                E.offCount = 0; E.offSince = 0; E.nearCount = 0; E.sRef = 0; E.rS = 0; E.offLng = 0; E.offLat = 0;
                 drawRoute(r.geometry.coordinates, 0);
-            } else {
-                E.routeRetryAt = performance.now() + 8000;
             }
         } catch (e) {
-            console.error('Route fetch error:', e);
-            E.routeRetryAt = performance.now() + 8000;
         } finally {
             E.routeLoading = false;
         }
@@ -546,7 +431,7 @@ function createTripEngine(map, opts) {
                 if (r.cum[mid] <= s) lo = mid; else hi = mid;
             }
             const p = pointAtS(r, s);
-            src.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[p.lng, p.lat']].concat(r.coords.slice(hi)) } });
+            src.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[p.lng, p.lat]].concat(r.coords.slice(hi)) } });
         } catch (e) {}
     }
 
@@ -588,10 +473,6 @@ function createTripEngine(map, opts) {
             targetBearing = h;
         }
 
-        if (E.speedMs < 1.5) {
-            if (!(E.snapped && E.route) || Math.abs(angleDiff(E.rBearing, targetBearing)) > 100) targetBearing = E.rBearing;
-        }
-
         if (E.pendingBlend) {
             E.offLng = E.drawLng - baseLng;
             E.offLat = E.drawLat - baseLat;
@@ -607,8 +488,7 @@ function createTripEngine(map, opts) {
         E.marker.setLngLat([lng, lat]);
         E.marker.setRotation(E.rBearing);
         updateLine(now);
-        
-        if (E.follow && !map.isEasing()) {
+        if (E.follow) {
             map.setCenter([lng, lat]);
             if (HEADING_UP) map.setBearing(E.rBearing);
         }
@@ -618,21 +498,22 @@ function createTripEngine(map, opts) {
         const now = performance.now();
         if (E.hasFix && fix.acc > 120) return null;
 
-        const hasDeviceSpeed = fix.speedMs !== null && fix.speedMs !== undefined && isFinite(fix.speedMs);
-        E.hist.push({ t: now, lng: fix.lng, lat: fix.lat, acc: Math.max(fix.acc || 0, 5) });
-        while (E.hist.length && now - E.hist[0].t > 25000) E.hist.shift();
-        const est = estimateMotion(E.hist, now);
-        let sp = hasDeviceSpeed ? fix.speedMs : (est ? est.speed : 0);
-        const keep = hasDeviceSpeed ? 0.3 : 0.6;
-        sp = E.hasFix ? E.speedMs * keep + sp * (1 - keep) : sp;
+        let sp = (fix.speedMs !== null && fix.speedMs !== undefined && isFinite(fix.speedMs)) ? fix.speedMs : null;
+        if (sp === null) {
+            const dtSec = (now - E.fixAt) / 1000;
+            sp = (E.hasFix && dtSec > 0.3) ? distM(E.fixLng, E.fixLat, fix.lng, fix.lat) / dtSec : 0;
+        }
+        sp = E.hasFix ? E.speedMs * 0.4 + sp * 0.6 : sp;
         E.speedMs = sp < 0.8 ? 0 : sp;
 
+        const movedFar = !E.hasFix || distM(E.moveLng, E.moveLat, fix.lng, fix.lat) > 8;
         let hd = E.headingDeg;
-        if (hasDeviceSpeed && fix.heading !== null && fix.heading !== undefined && isFinite(fix.heading) && E.speedMs > 3) {
+        if (fix.heading !== null && fix.heading !== undefined && isFinite(fix.heading) && E.speedMs > 2) {
             hd = normDeg(fix.heading);
-        } else if (est && est.heading !== null && E.speedMs > 3) {
-            hd = est.heading;
+        } else if (E.hasFix && movedFar && E.speedMs > 1.5) {
+            hd = bearingBetween(E.moveLng, E.moveLat, fix.lng, fix.lat);
         }
+        if (movedFar) { E.moveLng = fix.lng; E.moveLat = fix.lat; }
         E.headingDeg = hd;
 
         if (!E.hasFix) {
@@ -665,69 +546,44 @@ function createTripEngine(map, opts) {
 
         let onLine = false;
         if (E.route) {
-            const accC = Math.max(fix.acc || 0, 6);
+            const maxOff = Math.max(40, (fix.acc || 0) * 1.5);
             const sn = snapToRoute(E.route, fix.lng, fix.lat, E.snapped ? E.sRef : null, 150, 600);
-            const limit = Math.max(50, accC * 2);
-
-            if (!E.snapped) {
-                if (sn.dist <= Math.max(60, accC * 2.5)) {
-                    E.snapped = true; E.sRef = sn.s; E.rS = sn.s; E.pendingBlend = true;
-                    E.offCount = 0; E.offSince = 0;
+            const limit = E.snapped ? maxOff : maxOff * 0.6;
+            if (sn.dist <= limit) {
+                E.nearCount++;
+                E.offCount = 0; E.offSince = 0;
+                if (E.snapped || E.nearCount >= 2) {
                     onLine = true;
-                } else {
-                    E.offCount++;
-                    if (!E.offSince) E.offSince = now;
+                    const justSnapped = !E.snapped;
+                    const b = bearingAtS(E.route, sn.s);
+                    if (b !== null && E.headingDeg !== null && E.speedMs > 2) {
+                        E.dir = Math.abs(angleDiff(b, E.headingDeg)) > 120 ? -1 : 1;
+                    }
+                    if (justSnapped) {
+                        E.snapped = true; E.sRef = sn.s; E.rS = sn.s; E.pendingBlend = true;
+                    } else if (E.speedMs > 0) {
+                        const r = sn.s - E.sRef;
+                        const acc = Math.max(fix.acc || 0, 6);
+                        const trust = Math.max(25, acc * 2.5);
+                        const alpha = Math.max(0.06, Math.min(0.25, 6 / acc));
+                        E.sRef = clampS(Math.abs(r) > trust ? sn.s : E.sRef + alpha * r);
+                    }
                 }
             } else {
-                onLine = true;
-                if (sn.dist <= limit * 1.5) {
-                    E.sHist.push({ t: now, s: sn.s });
-                    while (E.sHist.length && now - E.sHist[0].t > 10000) E.sHist.shift();
+                E.nearCount = 0;
+                E.offCount++;
+                if (!E.offSince) E.offSince = now;
+                if (E.snapped && E.offCount < 2) {
+                    onLine = true;
+                } else if (E.snapped) {
+                    E.snapped = false;
+                    E.refLng = E.freeLng = E.drawLng; E.refLat = E.freeLat = E.drawLat;
+                    E.offLng = 0; E.offLat = 0;
                 }
-                if (sn.dist <= limit * 1.5 && E.speedMs > 0) {
-                    const r = sn.s - E.sRef;
-                    const trust = Math.max(25, accC * 2.5);
-                    const alpha = Math.max(0.06, Math.min(0.25, 6 / accC)) * (sn.dist <= limit ? 1 : 0.5);
-                    E.sRef = clampS(Math.abs(r) > trust ? sn.s : E.sRef + alpha * r);
+                if (dest && !E.arrived && E.offCount >= 3 && now - E.offSince > 4000 && now - E.lastRerouteAt > 10000) {
+                    E.lastRerouteAt = now;
+                    fetchRoute(fix.lng, fix.lat);
                 }
-                if (sn.dist > limit) {
-                    E.offCount++;
-                    if (!E.offSince) E.offSince = now;
-                } else {
-                    E.offCount = 0; E.offSince = 0;
-                }
-            }
-
-            if (E.snapped) {
-                const b = bearingAtS(E.route, E.sRef);
-                let trend = null;
-                const trendWin = accC > 40 ? 10000 : 6000;
-                const th = E.sHist.filter((q) => now - q.t <= trendWin);
-                if (th.length >= 3 && (th[th.length - 1].t - th[0].t) >= (accC > 40 ? 4000 : 2500)) {
-                    const k = Math.min(2, Math.floor(th.length / 2));
-                    let first = 0, lastS = 0;
-                    for (let i = 0; i < k; i++) { first += th[i].s; lastS += th[th.length - 1 - i].s; }
-                    trend = (lastS - first) / k;
-                }
-                const backThr = 10 + accC * 0.35;
-                const reallyBackwards = trend !== null && trend < -backThr;
-                if (b !== null && E.headingDeg !== null && E.speedMs > 3) {
-                    let want = Math.abs(angleDiff(b, E.headingDeg)) > 120 ? -1 : 1;
-                    if (want < 0 && !reallyBackwards) want = E.dir;
-                    if (want > 0 && E.dir < 0 && reallyBackwards) want = E.dir;
-                    if (want !== E.dir) { if (++E.dirVotes >= 3) { E.dir = want; E.dirVotes = 0; } }
-                    else E.dirVotes = 0;
-                }
-                if (E.dir < 0 && E.speedMs > 3) { if (!E.backSince) E.backSince = now; E.backCount++; }
-                else if (E.dir > 0 || E.speedMs <= 1) { E.backCount = 0; E.backSince = 0; }
-                if (dest && !E.arrived && reallyBackwards && E.backCount >= 4 && now - E.backSince > 4000 && now - E.lastRerouteAt > 12000) {
-                    E.backCount = 0; E.backSince = 0; E.lastRerouteAt = now;
-                    fetchRoute(fix.lng, fix.lat, E.headingDeg);
-                }
-            }
-            if (dest && !E.arrived && E.speedMs > 3 && E.offCount >= 3 && now - E.offSince > 4000 && now - E.lastRerouteAt > 12000) {
-                E.lastRerouteAt = now;
-                fetchRoute(fix.lng, fix.lat, E.headingDeg);
             }
         }
         if (!onLine) {
@@ -778,8 +634,7 @@ window.initDriverActiveMap = function () {
     teardownDriver();
     box.style.width = '100%';
     box.style.height = '100%';
-    
-    window.is3DMode = false;
+    window.is3DMode = true;
 
     const dest = getDest();
     let map;
@@ -788,7 +643,7 @@ window.initDriverActiveMap = function () {
             container: box,
             style: OSM_STYLE,
             center: dest ? [dest.lng, dest.lat] : [-95.3698, 29.7604],
-            zoom: 15, pitch: 0, bearing: -17, antialias: true
+            zoom: 15, pitch: 55, bearing: -17, antialias: true
         });
     } catch (err) {
         D = { map: null, engine: null, timer: null };
@@ -796,24 +651,29 @@ window.initDriverActiveMap = function () {
     }
 
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    
+    // Allow manual user interaction to break follow lock
+    ['dragstart', 'zoomstart', 'touchstart', 'wheel'].forEach(evt => {
+        map.on(evt, () => {
+            if (D && D.engine) D.engine.follow = false;
+        });
+    });
 
     if (dest) new mapboxgl.Marker({ element: createPinElement() }).setLngLat([dest.lng, dest.lat]).addTo(map);
 
-    const engine = createTripEngine(map, { dest: dest, camera: { pitch: 0, bearing: -17 } });
+    const engine = createTripEngine(map, { dest: dest, camera: { pitch: 55, bearing: -17 } });
     D = {
         map: map,
         engine: engine,
         timer: setInterval(() => {
-            if (!gps.last || Date.now() - gps.last.t > 8000) setBadge('GPS: waiting for signal…', false);
+            if (!gps.last || Date.now() - gps.last.t > 8000) setBadge('GPS: waiting for signal\u2026', false);
         }, 2000),
         handleFix(fix) {
             const out = engine.feed(fix);
             if (out) {
                 const spd = $('driver-map-speed');
                 if (spd) spd.textContent = out.speedMph + ' mph';
-                const accTxt = Math.round(fix.acc || 0);
-                if (accTxt > 50) setBadge('GPS weak ±' + accTxt + ' m', false);
-                else setBadge('GPS ±' + accTxt + ' m', true);
+                setBadge('GPS \u00b1' + Math.round(fix.acc || 0) + ' m', true);
             }
             return out;
         }
@@ -839,13 +699,14 @@ window.toggleDriver3D = function () {
 };
 
 window.recenterDriverMap = function () {
-    if (!D || !D.map || !D.engine) { toast('Map is not ready'); return; }
-    D.map.dragPan.enable();
-    D.map.scrollZoom.enable();
-    D.map.touchZoomRotate.enable();
-    D.engine.follow = true;
-    D.map.setZoom(16);
-    toast('Following your truck');
+    if (!D || !D.map || !D.engine) return;
+    D.engine.follow = false; // Release continuous auto-center lock so zoom and 3D stay fully active
+    const pos = D.engine.position();
+    if (pos) {
+        D.map.easeTo({ center: [pos.lng, pos.lat], zoom: 16, duration: 800 });
+    } else {
+        D.map.setZoom(16);
+    }
 };
 
 window.fitDriverMap = function () {
@@ -867,13 +728,13 @@ window.openDriverDirections = function () {
 };
 
 window.copyTrackingLink = async function () {
-    const u = trackingLink();
+    const u = 'https://www.seemydriver.com/?view=customer&session=' + sessionId();
     try { await navigator.clipboard.writeText(u); } catch (e) {}
     toast('Tracking link copied');
 };
 
 window.textTrackingLink = function () {
-    const u = trackingLink();
+    const u = 'https://www.seemydriver.com/?view=customer&session=' + sessionId();
     const phone = (LS.getItem('smd_cust_phone') || '').replace(/[^\d+]/g, '');
     const name = LS.getItem('smd_driver_name') || 'Your driver';
     const a = document.createElement('a');
@@ -888,7 +749,7 @@ window.endBroadcastAndHome = async function () {
     const sid = sessionId();
     const database = getDb();
     if (sid && database) {
-        try { await broadcastRef(database, sid, compId()).update({ ended: true, timestamp: Date.now() }); } catch (e) {}
+        try { await database.ref('broadcasts/' + sid).update({ ended: true, timestamp: Date.now() }); } catch (e) {}
     }
     window.stopRealTimeTracking();
     teardownDriver();
@@ -951,11 +812,17 @@ window.initCustomerMapLive = function () {
 
     let map;
     try {
-        map = new mapboxgl.Map({ container: box, style: OSM_STYLE, center: [-95.3698, 29.7604], zoom: 14, pitch: 0, bearing: -17, antialias: true });
+        map = new mapboxgl.Map({ container: box, style: OSM_STYLE, center: [-95.3698, 29.7604], zoom: 14, pitch: 45, bearing: -17, antialias: true });
     } catch (err) {
         return;
     }
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+    ['dragstart', 'zoomstart', 'touchstart', 'wheel'].forEach(evt => {
+        map.on(evt, () => {
+            if (C && C.engine) C.engine.follow = false;
+        });
+    });
 
     map.on('load', () => { map.resize(); });
 
@@ -1009,7 +876,7 @@ window.initCustomerMapLive = function () {
         }
 
         if (data.timestamp !== me.lastTs) { me.lastTs = data.timestamp; me.lastChange = Date.now(); }
-        if (!me.engine) me.engine = createTripEngine(map, { dest: dest, camera: { pitch: 0, bearing: -17 } });
+        if (!me.engine) me.engine = createTripEngine(map, { dest: dest, camera: { pitch: 45, bearing: -17 } });
 
         const mph = Number(data.speed) || 0;
         me.engine.feed({ lat: lat, lng: lng, speedMs: mph / MPS_TO_MPH, heading: Number(data.heading), acc: 5 });
@@ -1022,7 +889,7 @@ window.initCustomerMapLive = function () {
         }
     }
 
-    me.ref = broadcastRef(database, sid, q.get('comp'));
+    me.ref = database.ref('broadcasts/' + sid);
     me.ref.once('value').then((snap) => {
         const data = snap.val();
         if (data && data.companyName) {
@@ -1044,11 +911,13 @@ window.initCustomerMapLive = function () {
 
 window.recenterCustomerMap = function () {
     if (!C || !C.map || !C.engine) return;
-    C.map.dragPan.enable();
-    C.map.scrollZoom.enable();
-    C.map.touchZoomRotate.enable();
-    C.engine.follow = true;
-    C.map.setZoom(16);
+    C.engine.follow = false; // Release continuous auto-center lock
+    const pos = C.engine.position();
+    if (pos) {
+        C.map.easeTo({ center: [pos.lng, pos.lat], zoom: 16, duration: 800 });
+    } else {
+        C.map.setZoom(16);
+    }
 };
 
 window.fitCustomerMap = function () {
@@ -1063,27 +932,23 @@ window.fitCustomerMap = function () {
     C.map.fitBounds(bounds, { padding: 70, maxZoom: 17, duration: 1000 });
 };
 
-// Global document-level event delegation to survive SPA view switching
-document.addEventListener('input', (e) => {
-    if (e.target && e.target.id === 'job-cust-address') {
-        window.handleAddressInput(e.target.value);
-    }
-});
-
 document.addEventListener('DOMContentLoaded', () => {
     const q = new URLSearchParams(window.location.search);
     const hasSession = q.has('session') || q.has('sid') || q.has('s') || q.get('view') === 'customer';
     
     if (hasSession) {
-        const cv = $('customer-view-view') || $('customer-view');
-        if (cv) {
-            document.querySelectorAll('.app-view').forEach((v) => {
-                if (v !== cv) { v.style.display = 'none'; v.classList.add('hidden'); }
-            });
-            cv.classList.remove('hidden');
-            cv.style.display = 'block';
+        document.querySelectorAll('.app-view').forEach(v => {
+            v.style.display = 'none';
+            v.classList.add('hidden');
+        });
+        const custView = $('customer-view');
+        if (custView) {
+            custView.style.display = 'flex';
+            custView.classList.remove('hidden');
         }
-        setTimeout(() => { if (!C && typeof window.initCustomerMapLive === 'function') window.initCustomerMapLive(); }, 400);
+        if (typeof window.initCustomerMapLive === 'function') {
+            window.initCustomerMapLive();
+        }
         return;
     }
 
