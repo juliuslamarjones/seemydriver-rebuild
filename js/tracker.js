@@ -6,7 +6,7 @@
 
 const LS = window.SafeStorage;
 const MPS_TO_MPH = 2.23694;
-const ENGINE_VERSION = 'v67-stable-geo';
+const ENGINE_VERSION = 'v68-stable-geo';
 const HEADING_UP = false;
 
 // Unrestricted Default public Mapbox token
@@ -1063,7 +1063,15 @@ window.fitCustomerMap = function () {
     C.map.fitBounds(bounds, { padding: 70, maxZoom: 17, duration: 1000 });
 };
 
+// Native DOMContentLoaded event binding to ensure handleAddressInput triggers reliably on mobile
 document.addEventListener('DOMContentLoaded', () => {
+    const addressInput = document.getElementById('job-cust-address');
+    if (addressInput) {
+        addressInput.addEventListener('input', (e) => {
+            window.handleAddressInput(e.target.value);
+        });
+    }
+
     const q = new URLSearchParams(window.location.search);
     const hasSession = q.has('session') || q.has('sid') || q.has('s') || q.get('view') === 'customer';
     

@@ -45,7 +45,7 @@
     </script>
 
     <!-- PWA Manifest Link -->
-    <link rel="manifest" href="/manifest.json?v=66">
+    <link rel="manifest" href="/manifest.json?v=68">
 
     <!-- Explicit Mobile & Apple Touch Icon Overrides -->
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
@@ -305,10 +305,10 @@
                         <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Company / Business Name (Optional)</label>
                         <input type="text" id="job-company-name" placeholder="Leave blank if solo (Optional)" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition">
                     </div>
-                    <!-- DESTINATION ADDRESS WITH ABSOLUTE SUGGESTIONS WRAPPER -->
+                    <!-- DESTINATION ADDRESS WITH ABSOLUTE SUGGESTIONS WRAPPER (No inline oninput, handled natively in tracker.js) -->
                     <div class="flex flex-col gap-1.5 relative" style="position: relative; z-index: 40;">
                         <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Destination Address *</label>
-                        <input type="text" id="job-cust-address" placeholder="Enter street address..." oninput="window.handleAddressInput(this.value)" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition" autocomplete="off">
+                        <input type="text" id="job-cust-address" placeholder="Enter street address..." class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition" autocomplete="off">
                         <div id="address-suggestions" class="hidden absolute top-full left-0 right-0 mt-1.5 bg-[#161923] border border-neutral-800 rounded-xl shadow-2xl max-h-56 overflow-y-auto" style="z-index: 99999; position: absolute;"></div>
                     </div>
                     <button onclick="window.launchLiveBroadcast()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition shadow-[0_0_30px_rgba(251,191,36,0.25)] cursor-pointer flex items-center justify-center gap-2 mt-2">
@@ -399,8 +399,8 @@
         <div class="font-bold text-neutral-400">Developed & Architected by Julius Jones</div>
     </footer>
 
-    <!-- Scripts bumped to v66 to bypass mobile cache -->
-    <script src="js/app.js?v=66"></script>
-    <script src="js/tracker.js?v=66"></script>
+    <!-- Scripts bumped to v68 to bypass mobile cache -->
+    <script src="js/app.js?v=68"></script>
+    <script src="js/tracker.js?v=68"></script>
 </body>
 </html>
