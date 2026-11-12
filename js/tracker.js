@@ -6,9 +6,10 @@
 
 const LS = window.SafeStorage;
 const MPS_TO_MPH = 2.23694;
-const ENGINE_VERSION = 'v65-stable-geo';
+const ENGINE_VERSION = 'v67-stable-geo';
 const HEADING_UP = false;
 
+// Unrestricted Default public Mapbox token
 const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.Ex0EVNUoTyEeWQiH0jqMQ';
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -252,10 +253,18 @@ window.handleAddressInput = async function(value) {
     LS.removeItem('smd_dest_lng');
     
     let suggestions = document.getElementById('address-suggestions');
-    if (!suggestions) {
-        suggestions = document.querySelector('[id*="suggestions"]') || document.querySelector('.address-suggestions');
+    const inputField = document.getElementById('job-cust-address');
+    
+    if (!suggestions && inputField && inputField.parentNode) {
+        suggestions = document.createElement('div');
+        suggestions.id = 'address-suggestions';
+        inputField.parentNode.style.position = 'relative';
+        inputField.parentNode.appendChild(suggestions);
     }
+    
     if (!suggestions) return;
+
+    suggestions.style.cssText = "position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: #161923; border: 1px solid #262626; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.8); max-height: 220px; overflow-y: auto; z-index: 99999;";
 
     clearTimeout(geocodeTimer);
     const query = value.trim();
@@ -271,6 +280,7 @@ window.handleAddressInput = async function(value) {
             const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&autocomplete=true&types=address,poi&limit=5`);
             const data = await res.json();
             suggestions.innerHTML = '';
+            
             if (!data.features || data.features.length === 0) {
                 suggestions.classList.add('hidden');
                 suggestions.style.display = 'none';
@@ -282,10 +292,11 @@ window.handleAddressInput = async function(value) {
                 const coords = f.center || (f.geometry && f.geometry.coordinates) || [0, 0];
                 const div = document.createElement('div');
                 div.className = "px-4 py-3 text-xs text-neutral-200 hover:bg-neutral-800 hover:text-amber-400 cursor-pointer border-b border-neutral-800/80 transition font-medium";
+                div.style.cssText = "padding: 12px 16px; font-size: 13px; color: #e5e5e5; cursor: pointer; border-bottom: 1px solid #262626; background: #161923;";
                 div.innerText = name;
+                
                 div.onpointerdown = (e) => {
                     e.preventDefault();
-                    const inputField = document.getElementById('job-cust-address') || document.querySelector('input[name*="address"]');
                     if (inputField) inputField.value = name;
                     window.cachedDestLat = coords[1];
                     window.cachedDestLng = coords[0];
@@ -296,6 +307,7 @@ window.handleAddressInput = async function(value) {
                 };
                 suggestions.appendChild(div);
             });
+            
             suggestions.classList.remove('hidden');
             suggestions.style.display = 'block';
         } catch (e) {
@@ -355,7 +367,7 @@ function sendFirebase(out) {
 
 function setBadge(text, ok) {
     document.querySelectorAll('.smd-gps-badge').forEach((b) => {
-        b.textContent = text + ' \u00b7 ' + ENGINE_VERSION;
+        b.textContent = text + ' · ' + ENGINE_VERSION;
         b.style.color = ok ? '#fbbf24' : '#f87171';
     });
 }
@@ -792,7 +804,7 @@ window.initDriverActiveMap = function () {
         map: map,
         engine: engine,
         timer: setInterval(() => {
-            if (!gps.last || Date.now() - gps.last.t > 8000) setBadge('GPS: waiting for signal\u2026', false);
+            if (!gps.last || Date.now() - gps.last.t > 8000) setBadge('GPS: waiting for signal…', false);
         }, 2000),
         handleFix(fix) {
             const out = engine.feed(fix);
@@ -800,8 +812,8 @@ window.initDriverActiveMap = function () {
                 const spd = $('driver-map-speed');
                 if (spd) spd.textContent = out.speedMph + ' mph';
                 const accTxt = Math.round(fix.acc || 0);
-                if (accTxt > 50) setBadge('GPS weak \u00b1' + accTxt + ' m', false);
-                else setBadge('GPS \u00b1' + accTxt + ' m', true);
+                if (accTxt > 50) setBadge('GPS weak ±' + accTxt + ' m', false);
+                else setBadge('GPS ±' + accTxt + ' m', true);
             }
             return out;
         }
@@ -900,7 +912,7 @@ function teardownCustomer() {
 
 window.playCustomerAudio = function () {
     if (!window.speechSynthesis) return;
-    const driverName = (document.getElementById('cust-driver-header') ? document.getElementById('cust-driver-header'].textContent : 'Your driver');
+    const driverName = (document.getElementById('cust-driver-header') ? document.getElementById('cust-driver-header').textContent : 'Your driver');
     const companyName = window.activeCompanyName || LS.getItem('smd_company_name') || '';
 
     let text = '';
@@ -985,14 +997,14 @@ window.initCustomerMapLive = function () {
 
         if (data.ended) {
             me.ended = true;
-            if (head) head.textContent = (data.driverName || 'Driver') + ' \u2014 trip ended';
+            if (head) head.textContent = (data.driverName || 'Driver') + ' — trip ended';
             setPill('Trip ended', 'warn');
             return;
         }
 
         const lat = parseFloat(data.lat), lng = parseFloat(data.lng);
         if (!isFinite(lat) || !isFinite(lng)) {
-            setPill('Waiting for the driver\u2019s location\u2026', 'warn');
+            setPill('Waiting for the driver’s location…', 'warn');
             return;
         }
 
@@ -1025,8 +1037,8 @@ window.initCustomerMapLive = function () {
     me.timer = setInterval(() => {
         if (C !== me || me.ended || !me.lastTs) return;
         const secs = Math.round((Date.now() - me.lastChange) / 1000);
-        if (secs > 20) setPill('Driver\u2019s location paused \u00b7 last update ' + (secs >= 90 ? Math.round(secs / 60) + ' min' : secs + ' s') + ' ago', 'warn');
-        else setPill('\u25cf Live', 'ok');
+        if (secs > 20) setPill('Driver’s location paused · last update ' + (secs >= 90 ? Math.round(secs / 60) + ' min' : secs + ' s') + ' ago', 'warn');
+        else setPill('● Live', 'ok');
     }, 2000);
 };
 
