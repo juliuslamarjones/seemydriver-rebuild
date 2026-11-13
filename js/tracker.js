@@ -6,7 +6,7 @@
 
 const LS = window.SafeStorage;
 const MPS_TO_MPH = 2.23694;
-const ENGINE_VERSION = 'v64';
+const ENGINE_VERSION = 'v65-locked';
 const HEADING_UP = false;
 
 const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
@@ -546,44 +546,15 @@ function createTripEngine(map, opts) {
 
         let onLine = false;
         if (E.route) {
-            const maxOff = Math.max(40, (fix.acc || 0) * 1.5);
-            const sn = snapToRoute(E.route, fix.lng, fix.lat, E.snapped ? E.sRef : null, 150, 600);
-            const limit = E.snapped ? maxOff : maxOff * 0.6;
-            if (sn.dist <= limit) {
-                E.nearCount++;
-                E.offCount = 0; E.offSince = 0;
-                if (E.snapped || E.nearCount >= 2) {
-                    onLine = true;
-                    const justSnapped = !E.snapped;
-                    const b = bearingAtS(E.route, sn.s);
-                    if (b !== null && E.headingDeg !== null && E.speedMs > 2) {
-                        E.dir = Math.abs(angleDiff(b, E.headingDeg)) > 120 ? -1 : 1;
-                    }
-                    if (justSnapped) {
-                        E.snapped = true; E.sRef = sn.s; E.rS = sn.s; E.pendingBlend = true;
-                    } else if (E.speedMs > 0) {
-                        const r = sn.s - E.sRef;
-                        const acc = Math.max(fix.acc || 0, 6);
-                        const trust = Math.max(25, acc * 2.5);
-                        const alpha = Math.max(0.06, Math.min(0.25, 6 / acc));
-                        E.sRef = clampS(Math.abs(r) > trust ? sn.s : E.sRef + alpha * r);
-                    }
-                }
-            } else {
-                E.nearCount = 0;
-                E.offCount++;
-                if (!E.offSince) E.offSince = now;
-                if (E.snapped && E.offCount < 2) {
-                    onLine = true;
-                } else if (E.snapped) {
-                    E.snapped = false;
-                    E.refLng = E.freeLng = E.drawLng; E.refLat = E.freeLat = E.drawLat;
-                    E.offLng = 0; E.offLat = 0;
-                }
-                if (dest && !E.arrived && E.offCount >= 3 && now - E.offSince > 4000 && now - E.lastRerouteAt > 10000) {
-                    E.lastRerouteAt = now;
-                    fetchRoute(fix.lng, fix.lat);
-                }
+            const sn = snapToRoute(E.route, fix.lng, fix.lat, E.snapped ? E.sRef : null, 300, 1000);
+            // Force immediate route lock and keep it locked to prevent freezing
+            E.snapped = true;
+            onLine = true;
+            E.sRef = sn.s;
+            E.rS = sn.s;
+            if (E.speedMs > 0) {
+                const r = sn.s - E.sRef;
+                E.sRef = clampS(E.sRef + 0.3 * r);
             }
         }
         if (!onLine) {
