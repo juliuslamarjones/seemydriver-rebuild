@@ -67,7 +67,7 @@ function openLocalFleetModal() {
             <span class="font-black text-amber-400 text-sm flex items-center gap-2">👀 Fleet Command Center</span>
             <button onclick="document.getElementById('smd-fleet-overlay').remove()" class="bg-neutral-900 border border-neutral-800 text-white px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-neutral-800 cursor-pointer">✕ Close Fleet</button>
         </div>
-        <iframe src="/fleet/index.html" class="w-full flex-1 border-none bg-black"></iframe>`;
+        <iframe src="/fleet_portal/index.html" class="w-full flex-1 border-none bg-black"></iframe>`;
     document.body.appendChild(overlay);
 }
 
