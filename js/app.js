@@ -18,11 +18,31 @@ window.installPWA = async function() {
         console.log('PWA install outcome:', outcome);
         deferredPrompt = null;
     } else {
-        alert('To install SeeMyDriver:\n\n1. Tap the menu in your browser.\n2. Select "Install app" or "Add to Home screen".');
+        alert('To install SeeMyDriver on your phone:\n\n1. Tap the three dots (⋮) in the top right corner of Chrome.\n2. Tap "Install app" or "Add to Home screen".\n3. Confirm to add SeeMyDriver straight to your device!');
     }
 };
 
-function ensureInstallView() {}
+function ensureInstallView() {
+    if (document.getElementById('install-view')) return;
+    const main = document.querySelector('main');
+    if (!main) return;
+    const v = document.createElement('div');
+    v.id = 'install-view';
+    v.className = 'app-view w-full max-w-md flex flex-col items-center justify-center p-6 my-auto hidden';
+    v.style.display = 'none';
+    v.innerHTML = `
+        <div class="w-full bg-gradient-to-b from-[#161923] to-[#0f1117] border border-neutral-800 rounded-3xl p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex flex-col gap-6 text-center relative overflow-hidden">
+            <div class="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
+            <div class="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs py-1.5 px-4 rounded-full w-fit mx-auto">🚀 APP REQUIRED</div>
+            <h2 class="text-3xl font-black tracking-tight text-white">Use the app to broadcast</h2>
+            <p class="text-sm text-neutral-400 leading-relaxed"><b class="text-white">You can't broadcast from this web page.</b> SeeMyDriver only works as an installed app on your phone. Install it, open it from your home screen, then create your account or sign in there.</p>
+            <button onclick="window.installPWA()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.3)] cursor-pointer">Install App 📱</button>
+            <p class="text-[11px] text-neutral-500 leading-relaxed">If nothing happens, tap the ⋮ menu in Chrome, then "Install app" or "Add to Home screen".</p>
+            <button id="install-signout-btn" onclick="window.handleSignOut()" class="text-xs text-neutral-400 hover:text-amber-400 font-bold transition cursor-pointer">Sign Out 🚪</button>
+        </div>`;
+    main.appendChild(v);
+}
+
 function addAuthCrossLinks() {
     const pairs = [
         ['#signin-view button[onclick="window.handleSignIn()"]', 'smd-link-to-register', 'New here?', 'Create an account', 'register-view'],
@@ -44,10 +64,24 @@ function addAuthCrossLinks() {
         btn.insertAdjacentElement('afterend', p);
     });
 }
-function addBrowserNotice() {}
+
+function addBrowserNotice() {
+    if (!browserMustInstall()) return;
+    ['signin-view', 'register-view'].forEach((viewId) => {
+        const card = document.querySelector('#' + viewId + ' > div');
+        const noticeId = 'smd-browser-notice-' + viewId;
+        if (!card || document.getElementById(noticeId)) return;
+        const box = document.createElement('div');
+        box.id = noticeId;
+        box.className = 'flex flex-col gap-3 bg-amber-400/10 border border-amber-400/30 text-amber-200 text-xs sm:text-sm rounded-2xl p-4 leading-relaxed';
+        box.innerHTML = '<div><b>⚠️ SeeMyDriver runs as an installed app, not in the browser.</b> Install the app first, then sign in from the app on your phone. You can sign in here, but you will not be able to broadcast from this page.</div>' +
+            '<button type="button" onclick="window.installPWA()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-2.5 rounded-xl cursor-pointer">Install the App 📱</button>';
+        card.insertBefore(box, card.lastElementChild);
+    });
+}
 
 // ==========================================================
-// FLEET COMMAND LOCAL OVERLAY GATEWAY (NATIVE EMBEDDED MAP)
+// FLEET COMMAND LOCAL OVERLAY GATEWAY
 // ==========================================================
 window.checkFleetAccessAndSwitch = async function(event) {
     if (event) event.preventDefault();
@@ -88,100 +122,12 @@ function openLocalFleetModal() {
     overlay.id = 'smd-fleet-overlay';
     overlay.className = 'fixed inset-0 bg-black z-50 flex flex-col w-full h-full';
     overlay.innerHTML = `
-        <div class="bg-[#12141c] border-b border-neutral-800 px-6 py-4 flex items-center justify-between shrink-0">
+        <div class="bg-[#12141c] border-b border-neutral-800 px-4 py-3 flex items-center justify-between shrink-0">
             <span class="font-black text-amber-400 text-sm flex items-center gap-2">👀 Fleet Command Center</span>
-            <button onclick="document.getElementById('smd-fleet-overlay').remove()" class="bg-neutral-900 border border-neutral-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-neutral-800 cursor-pointer transition">✕ Close Fleet</button>
+            <button onclick="document.getElementById('smd-fleet-overlay').remove()" class="bg-neutral-900 border border-neutral-800 text-white px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-neutral-800 cursor-pointer">✕ Close Fleet</button>
         </div>
-        <div class="flex-1 flex flex-col md:flex-row w-full h-full overflow-hidden bg-black">
-            <div class="w-full md:w-80 bg-[#0d0f17] border-r border-neutral-800/80 p-4 flex flex-col gap-4 overflow-y-auto shrink-0">
-                <h3 class="text-xs font-bold uppercase tracking-wider text-neutral-400">Active Fleet Units</h3>
-                <div id="fleet-units-list" class="flex flex-col gap-2.5">
-                    <div class="p-3 bg-neutral-900/90 border border-neutral-800 rounded-2xl text-xs text-neutral-400 text-center py-8">Scanning active broadcasts...</div>
-                </div>
-            </div>
-            <div id="fleet-native-map" class="flex-1 w-full h-full bg-neutral-900 relative"></div>
-        </div>`;
+        <iframe src="/fleet/index.html" class="w-full flex-1 border-none bg-black"></iframe>`;
     document.body.appendChild(overlay);
-
-    setTimeout(() => {
-        const mapContainer = document.getElementById('fleet-native-map');
-        if (!mapContainer || typeof mapboxgl === 'undefined') return;
-
-        const OSM_STYLE = {
-            version: 8,
-            sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OpenStreetMap' } },
-            layers: [{ id: 'osm-raster', type: 'raster', source: 'osm' }]
-        };
-
-        const fleetMap = new mapboxgl.Map({
-            container: mapContainer,
-            style: OSM_STYLE,
-            center: [-95.3698, 29.7604],
-            zoom: 13
-        });
-        fleetMap.addControl(new mapboxgl.NavigationControl(), 'top-right');
-
-        const db = window.firebase && window.firebase.database ? window.firebase.database() : null;
-        if (db) {
-            const activeMarkers = {};
-            const listEl = document.getElementById('fleet-units-list');
-
-            const handleBroadcastData = (allBroadcasts) => {
-                listEl.innerHTML = '';
-                const keys = Object.keys(allBroadcasts || {});
-
-                if (keys.length === 0) {
-                    listEl.innerHTML = '<div class="p-3 bg-neutral-900/90 border border-neutral-800 rounded-2xl text-xs text-neutral-400 text-center py-8">No active drivers broadcasting right now.</div>';
-                    return;
-                }
-
-                keys.forEach((sid) => {
-                    const b = allBroadcasts[sid];
-                    if (!b || b.ended || !b.lat || !b.lng) return;
-
-                    const card = document.createElement('div');
-                    card.className = 'p-3.5 bg-neutral-900/90 hover:bg-neutral-800/80 border border-neutral-800 rounded-2xl flex flex-col gap-1.5 cursor-pointer transition';
-                    card.innerHTML = `
-                        <div class="flex items-center justify-between">
-                            <span class="font-bold text-white text-xs">${b.driverName || 'Driver'}</span>
-                            <span class="text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono font-bold">● LIVE</span>
-                        </div>
-                        <span class="text-[11px] text-neutral-400 truncate">Dest: ${b.destAddress || 'Active Route'}</span>
-                        <div class="flex items-center justify-between text-[10px] text-amber-400 font-mono pt-1">
-                            <span>Speed: ${b.speed || 0} mph</span>
-                            <span>${b.companyName || 'Solo Operator'}</span>
-                        </div>`;
-                    card.onclick = () => {
-                        fleetMap.flyTo({ center: [b.lng, b.lat], zoom: 16, duration: 1000 });
-                    };
-                    listEl.appendChild(card);
-
-                    if (activeMarkers[sid]) {
-                        activeMarkers[sid].setLngLat([b.lng, b.lat]);
-                    } else {
-                        const el = document.createElement('div');
-                        el.innerHTML = '🚚';
-                        el.style.cssText = 'font-size:26px;filter:drop-shadow(0px 4px 8px rgba(0,0,0,0.8));';
-                        const marker = new mapboxgl.Marker({ element: el }).setLngLat([b.lng, b.lat]).addTo(fleetMap);
-                        activeMarkers[sid] = marker;
-                    }
-                });
-            };
-
-            db.ref('broadcasts').on('value', (snap) => {
-                let data = snap.val() || {};
-                db.ref('companies').once('value').then((compSnap) => {
-                    const comps = compSnap.val() || {};
-                    Object.keys(comps).forEach((compId) => {
-                        if (comps[compId] && comps[compId].broadcasts) {
-                            Object.assign(data, comps[compId].broadcasts);
-                        }
-                    });
-                    handleBroadcastData(data);
-                });
-            });
-        }
-    }, 200);
 }
 
 function showFleetPaywallModal() {
@@ -220,6 +166,12 @@ window.switchView = function (viewId) {
     });
     
     let targetId = viewId === 'landing' ? 'landing-view' : (viewId.includes('-view') ? viewId : viewId + '-view');
+
+    if (!BROWSER_ACCOUNT_SCREENS_ALLOWED && browserMustInstall() && (targetId === 'signin-view' || targetId === 'register-view')) {
+        targetId = 'install-view';
+    }
+
+    ensureInstallView();
     const target = document.getElementById(targetId);
 
     const signOutBtn = document.getElementById('install-signout-btn');
@@ -239,6 +191,7 @@ window.switchView = function (viewId) {
     if (target) {
         target.classList.remove('hidden');
         target.style.display = 'block';
+        
         if (targetId === 'landing-view' && typeof window.initLandingPreviewMap === 'function') {
             setTimeout(window.initLandingPreviewMap, 150);
         } else if (targetId === 'active-broadcast-view' && typeof window.initDriverActiveMap === 'function') {
@@ -249,19 +202,31 @@ window.switchView = function (viewId) {
     }
 };
 
-window.smdInApp = function() { return true; };
-function browserMustInstall() { return false; }
+window.smdInApp = function() {
+    const isLocalApp = window.location.protocol === 'capacitor:' || window.location.protocol === 'file:' || window.Capacitor?.isNativePlatform();
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    return isStandalone || isLocalApp;
+};
+
+const BROWSER_ACCOUNT_SCREENS_ALLOWED = true;
+
+function browserMustInstall() {
+    return false; // Disabled browser install wall for laptop debugging
+}
 
 window.handleSignOut = function () {
     if (localStorage.getItem('smd_active_broadcast') === 'true') {
         alert('Please end your active broadcast before signing out.');
         return;
     }
+    
     localStorage.removeItem('smd_active_broadcast');
     localStorage.removeItem('smd_session_id');
     localStorage.removeItem('seemydriver_logged_in');
+    
     try { sessionStorage.clear(); } catch(e) {}
     try { window.firebase.auth().signOut(); } catch(e) {}
+
     window.switchView('landing-view');
 };
 
@@ -278,28 +243,41 @@ async function getEntitlement(user) {
         if (!res.ok) return null;
         const data = await res.json();
         return typeof data.validUntil === 'number' ? data.validUntil : null;
-    } catch (err) { return null; }
+    } catch (err) {
+        return null;
+    }
 }
 
 async function checkAndEnforceSubscription(user, successCallback) {
     const validUntil = await getEntitlement(user);
-    if (validUntil === null || validUntil > Date.now()) {
+
+    if (validUntil === null) {
         successCallback();
         return;
     }
+
+    if (validUntil > Date.now()) {
+        successCallback();
+        return;
+    }
+
     alert('Your 30-day free trial has ended. Redirecting to subscription checkout...');
     localStorage.removeItem('seemydriver_logged_in');
     try { await window.firebase.auth().signOut(); } catch (e) {}
-    window.location.href = STRIPE_PAYMENT_LINK + '?client_reference_id=' + encodeURIComponent(user.uid);
+    window.location.href = STRIPE_PAYMENT_LINK
+        + '?client_reference_id=' + encodeURIComponent(user.uid)
+        + '&prefilled_email=' + encodeURIComponent(user.email || '');
 }
 
 window.handleSignIn = function () {
     const email = document.getElementById('signin-email') ? document.getElementById('signin-email').value.trim() : '';
     const password = document.getElementById('signin-password') ? document.getElementById('signin-password').value.trim() : '';
+    
     if (!email || !password) {
         alert('Please enter both an email address and a password.');
         return;
     }
+
     const auth = window.firebase && window.firebase.auth ? window.firebase.auth() : null;
     if (auth) {
         auth.signInWithEmailAndPassword(email, password)
@@ -309,17 +287,23 @@ window.handleSignIn = function () {
                     window.switchView('job-setup-view');
                 });
             })
-            .catch((error) => { alert('Sign-in failed: ' + error.message); });
+            .catch((error) => {
+                alert('Sign-in failed: ' + error.message);
+            });
+    } else {
+        alert('Firebase Auth is not initialized.');
     }
 };
 
 window.handleRegister = function () {
     const email = document.getElementById('reg-email') ? document.getElementById('reg-email').value.trim() : '';
     const password = document.getElementById('reg-password') ? document.getElementById('reg-password').value.trim() : '';
+    
     if (!email || !password) {
         alert('Please enter both an email address and a password.');
         return;
     }
+
     const auth = window.firebase && window.firebase.auth ? window.firebase.auth() : null;
     if (auth) {
         auth.createUserWithEmailAndPassword(email, password)
@@ -338,7 +322,9 @@ window.handleRegister = function () {
                 localStorage.setItem('seemydriver_logged_in', 'true');
                 window.switchView('job-setup-view');
             })
-            .catch((error) => { alert('Registration failed: ' + error.message); });
+            .catch((error) => {
+                alert('Registration failed: ' + error.message);
+            });
     } else {
         localStorage.setItem('seemydriver_logged_in', 'true');
         window.switchView('job-setup-view');
@@ -353,15 +339,22 @@ window.endBroadcastAndHome = function () {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+    ensureInstallView();
+    addAuthCrossLinks();
+    addBrowserNotice();
+
     const q = new URLSearchParams(window.location.search);
     const view = q.get('view');
+    
     const trackingSession = q.get('sid') || q.get('session');
     if (trackingSession && !q.has('sid')) {
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.set('sid', trackingSession);
         window.history.replaceState({}, '', newUrl);
     }
+    
     const isLoggedIn = localStorage.getItem('seemydriver_logged_in') === 'true';
+    
     if (view === 'customer' || trackingSession) {
         window.switchView('customer-view-view');
     } else if (view === 'signin') {
