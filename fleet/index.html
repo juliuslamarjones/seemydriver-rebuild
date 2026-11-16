@@ -4,18 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fleet Command Center - SeeMyDriver</title>
-    <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Mapbox GL JS -->
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
     <script>
         const part1 = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJh';
         const part2 = 'IjoiY210ZjVxNXdjMGFmajJ5b2NoOWhvdHdhbiJ9.Ex0EVNUOtYeEwQHiOHjqMQ';
         window.MAPBOX_TOKEN = part1 + part2;
-
         const firebaseConfig = { apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI", authDomain: "seemydriver-prod.firebaseapp.com", databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com", projectId: "seemydriver-prod", storageBucket: "seemydriver-prod.firebasestorage.app", messagingSenderId: "16366013329", appId: "1:16366013329:web:7e993e6ee37f940a04a064"};
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     </script>
