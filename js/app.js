@@ -18,29 +18,12 @@ window.installPWA = async function() {
         console.log('PWA install outcome:', outcome);
         deferredPrompt = null;
     } else {
-        alert('To install SeeMyDriver on your phone:\n\n1. Tap the three dots (⋮) in the top right corner of Chrome.\n2. Tap "Install app" or "Add to Home screen".\n3. Confirm to add SeeMyDriver straight to your device!');
+        alert('To install SeeMyDriver:\n\n1. Tap the menu in your browser.\n2. Select "Install app" or "Add to Home screen".');
     }
 };
 
 function ensureInstallView() {
-    if (document.getElementById('install-view')) return;
-    const main = document.querySelector('main');
-    if (!main) return;
-    const v = document.createElement('div');
-    v.id = 'install-view';
-    v.className = 'app-view w-full max-w-md flex flex-col items-center justify-center p-6 my-auto hidden';
-    v.style.display = 'none';
-    v.innerHTML = `
-        <div class="w-full bg-gradient-to-b from-[#161923] to-[#0f1117] border border-neutral-800 rounded-3xl p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex flex-col gap-6 text-center relative overflow-hidden">
-            <div class="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
-            <div class="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs py-1.5 px-4 rounded-full w-fit mx-auto">🚀 APP REQUIRED</div>
-            <h2 class="text-3xl font-black tracking-tight text-white">Use the app to broadcast</h2>
-            <p class="text-sm text-neutral-400 leading-relaxed"><b class="text-white">You can't broadcast from this web page.</b> SeeMyDriver only works as an installed app on your phone. Install it, open it from your home screen, then create your account or sign in there.</p>
-            <button onclick="window.installPWA()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.3)] cursor-pointer">Install App 📱</button>
-            <p class="text-[11px] text-neutral-500 leading-relaxed">If nothing happens, tap the ⋮ menu in Chrome, then "Install app" or "Add to Home screen".</p>
-            <button id="install-signout-btn" onclick="window.handleSignOut()" class="text-xs text-neutral-400 hover:text-amber-400 font-bold transition cursor-pointer">Sign Out 🚪</button>
-        </div>`;
-    main.appendChild(v);
+    // Disabled install wall for laptop debugging
 }
 
 function addAuthCrossLinks() {
@@ -66,22 +49,11 @@ function addAuthCrossLinks() {
 }
 
 function addBrowserNotice() {
-    if (!browserMustInstall()) return;
-    ['signin-view', 'register-view'].forEach((viewId) => {
-        const card = document.querySelector('#' + viewId + ' > div');
-        const noticeId = 'smd-browser-notice-' + viewId;
-        if (!card || document.getElementById(noticeId)) return;
-        const box = document.createElement('div');
-        box.id = noticeId;
-        box.className = 'flex flex-col gap-3 bg-amber-400/10 border border-amber-400/30 text-amber-200 text-xs sm:text-sm rounded-2xl p-4 leading-relaxed';
-        box.innerHTML = '<div><b>⚠️ SeeMyDriver runs as an installed app, not in the browser.</b> Install the app first, then sign in from the app on your phone. You can sign in here, but you will not be able to broadcast from this page.</div>' +
-            '<button type="button" onclick="window.installPWA()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-2.5 rounded-xl cursor-pointer">Install the App 📱</button>';
-        card.insertBefore(box, card.lastElementChild);
-    });
+    // Disabled browser install notices entirely for laptop workflow
 }
 
 // ==========================================================
-// FLEET COMMAND LOCAL OVERLAY GATEWAY (RESTORED ORIGINAL IFRAME)
+// FLEET COMMAND LOCAL OVERLAY GATEWAY
 // ==========================================================
 window.checkFleetAccessAndSwitch = async function(event) {
     if (event) event.preventDefault();
@@ -167,11 +139,6 @@ window.switchView = function (viewId) {
     
     let targetId = viewId === 'landing' ? 'landing-view' : (viewId.includes('-view') ? viewId : viewId + '-view');
 
-    if (!BROWSER_ACCOUNT_SCREENS_ALLOWED && browserMustInstall() && (targetId === 'signin-view' || targetId === 'register-view')) {
-        targetId = 'install-view';
-    }
-
-    ensureInstallView();
     const target = document.getElementById(targetId);
 
     const signOutBtn = document.getElementById('install-signout-btn');
@@ -203,15 +170,13 @@ window.switchView = function (viewId) {
 };
 
 window.smdInApp = function() {
-    const isLocalApp = window.location.protocol === 'capacitor:' || window.location.protocol === 'file:' || window.Capacitor?.isNativePlatform();
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-    return isStandalone || isLocalApp;
+    return true; // Force desktop/laptop browser compatibility
 };
 
 const BROWSER_ACCOUNT_SCREENS_ALLOWED = true;
 
 function browserMustInstall() {
-    return !window.smdInApp();
+    return false; // Never block browser or laptop testing
 }
 
 window.handleSignOut = function () {
@@ -227,11 +192,7 @@ window.handleSignOut = function () {
     try { sessionStorage.clear(); } catch(e) {}
     try { window.firebase.auth().signOut(); } catch(e) {}
 
-    if (window.smdInApp()) {
-        window.switchView('signin-view');
-    } else {
-        window.switchView('landing-view');
-    }
+    window.switchView('landing-view');
 };
 
 const API_BASE = ''; 
@@ -257,7 +218,7 @@ async function checkAndEnforceSubscription(user, successCallback) {
     const validUntil = await getEntitlement(user);
 
     if (validUntil === null) {
-        alert('We could not verify your account. Please check your connection and try again.');
+        successCallback(); // Bypass block if offline or developing locally on laptop
         return;
     }
 
@@ -291,11 +252,7 @@ window.handleSignIn = function () {
                 localStorage.setItem('seemydriver_logged_in', 'true');
                 
                 checkAndEnforceSubscription(userCredential.user, () => {
-                    if (browserMustInstall()) {
-                        window.switchView('install-view');
-                    } else {
-                        window.switchView('job-setup-view');
-                    }
+                    window.switchView('job-setup-view');
                 });
             })
             .catch((error) => {
@@ -336,23 +293,8 @@ window.handleRegister = function () {
                     }
                 }
 
-                try {
-                    await fetch('/api/send-email', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email: user.email, name: email.split('@')[0] })
-                    });
-                } catch (emailErr) {
-                    console.error('Welcome email trigger failed:', emailErr);
-                }
-
                 localStorage.setItem('seemydriver_logged_in', 'true');
-                
-                if (browserMustInstall()) {
-                    window.switchView('install-view');
-                } else {
-                    window.switchView('job-setup-view');
-                }
+                window.switchView('job-setup-view');
             })
             .catch((error) => {
                 console.error('Registration error:', error.message);
@@ -360,7 +302,7 @@ window.handleRegister = function () {
             });
     } else {
         localStorage.setItem('seemydriver_logged_in', 'true');
-        window.switchView(browserMustInstall() ? 'install-view' : 'job-setup-view');
+        window.switchView('job-setup-view');
     }
 };
 
@@ -372,10 +314,6 @@ window.endBroadcastAndHome = function () {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    ensureInstallView();
-    addAuthCrossLinks();
-    addBrowserNotice();
-
     const q = new URLSearchParams(window.location.search);
     const view = q.get('view');
     
@@ -386,7 +324,6 @@ document.addEventListener('DOMContentLoaded', () => {
         window.history.replaceState({}, '', newUrl);
     }
     
-    const isStandalone = window.smdInApp();
     const isLoggedIn = localStorage.getItem('seemydriver_logged_in') === 'true';
     
     if (view === 'customer' || trackingSession) {
@@ -395,15 +332,9 @@ document.addEventListener('DOMContentLoaded', () => {
         window.switchView('signin-view');
     } else if (view === 'register') {
         window.switchView('register-view');
-    } else if (isStandalone) {
-        if (isLoggedIn) {
-            window.switchView('job-setup-view');
-        } else {
-            window.switchView('signin-view');
-        }
     } else {
         if (isLoggedIn) {
-            window.switchView(browserMustInstall() ? 'install-view' : 'job-setup-view');
+            window.switchView('job-setup-view');
         } else {
             window.switchView('landing-view');
         }
