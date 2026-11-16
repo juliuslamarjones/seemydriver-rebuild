@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fleet Command Center - SeeMyDriver</title>
+    <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Mapbox GL JS -->
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
     <script>
@@ -57,7 +59,7 @@
             listEl.innerHTML = '';
             const keys = Object.keys(data);
             if (keys.length === 0) {
-                listEl.innerHTML = '<div class="p-3 bg-neutral-900 border border-neutral-800 rounded-xl text-xs text-neutral-400 text-center py-8">No active drivers broadcasting.</div>';
+                listEl.innerHTML = '<div class="p-3 bg-neutral-900 border border-neutral-800 rounded-xl text-xs text-neutral-400 text-center py-8">No active drivers broadcasting. Start a Solo broadcast first!</div>';
                 return;
             }
             keys.forEach((sid) => {
