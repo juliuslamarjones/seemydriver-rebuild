@@ -580,7 +580,7 @@ function createTripEngine(map, opts) {
                 if (r.cum[mid] <= s) lo = mid; else hi = mid;
             }
             const p = pointAtS(r, s);
-            src.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[p.lng, p.lat']].concat(r.coords.slice(hi)) } });
+            src.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[p.lng, p.lat]].concat(r.coords.slice(hi)) } });
         } catch (e) {}
     }
 
