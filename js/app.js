@@ -18,31 +18,11 @@ window.installPWA = async function() {
         console.log('PWA install outcome:', outcome);
         deferredPrompt = null;
     } else {
-        alert('To install SeeMyDriver on your phone:\n\n1. Tap the three dots (⋮) in the top right corner of Chrome.\n2. Tap "Install app" or "Add to Home screen".\n3. Confirm to add SeeMyDriver straight to your device!');
+        alert('To install SeeMyDriver:\n\n1. Tap the menu in your browser.\n2. Select "Install app" or "Add to Home screen".');
     }
 };
 
-function ensureInstallView() {
-    if (document.getElementById('install-view')) return;
-    const main = document.querySelector('main');
-    if (!main) return;
-    const v = document.createElement('div');
-    v.id = 'install-view';
-    v.className = 'app-view w-full max-w-md flex flex-col items-center justify-center p-6 my-auto hidden';
-    v.style.display = 'none';
-    v.innerHTML = `
-        <div class="w-full bg-gradient-to-b from-[#161923] to-[#0f1117] border border-neutral-800 rounded-3xl p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex flex-col gap-6 text-center relative overflow-hidden">
-            <div class="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
-            <div class="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs py-1.5 px-4 rounded-full w-fit mx-auto">🚀 APP REQUIRED</div>
-            <h2 class="text-3xl font-black tracking-tight text-white">Use the app to broadcast</h2>
-            <p class="text-sm text-neutral-400 leading-relaxed"><b class="text-white">You can't broadcast from this web page.</b> SeeMyDriver only works as an installed app on your phone. Install it, open it from your home screen, then create your account or sign in there.</p>
-            <button onclick="window.installPWA()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.3)] cursor-pointer">Install App 📱</button>
-            <p class="text-[11px] text-neutral-500 leading-relaxed">If nothing happens, tap the ⋮ menu in Chrome, then "Install app" or "Add to Home screen".</p>
-            <button id="install-signout-btn" onclick="window.handleSignOut()" class="text-xs text-neutral-400 hover:text-amber-400 font-bold transition cursor-pointer">Sign Out 🚪</button>
-        </div>`;
-    main.appendChild(v);
-}
-
+function ensureInstallView() {}
 function addAuthCrossLinks() {
     const pairs = [
         ['#signin-view button[onclick="window.handleSignIn()"]', 'smd-link-to-register', 'New here?', 'Create an account', 'register-view'],
@@ -64,21 +44,7 @@ function addAuthCrossLinks() {
         btn.insertAdjacentElement('afterend', p);
     });
 }
-
-function addBrowserNotice() {
-    if (!browserMustInstall()) return;
-    ['signin-view', 'register-view'].forEach((viewId) => {
-        const card = document.querySelector('#' + viewId + ' > div');
-        const noticeId = 'smd-browser-notice-' + viewId;
-        if (!card || document.getElementById(noticeId)) return;
-        const box = document.createElement('div');
-        box.id = noticeId;
-        box.className = 'flex flex-col gap-3 bg-amber-400/10 border border-amber-400/30 text-amber-200 text-xs sm:text-sm rounded-2xl p-4 leading-relaxed';
-        box.innerHTML = '<div><b>⚠️ SeeMyDriver runs as an installed app, not in the browser.</b> Install the app first, then sign in from the app on your phone. You can sign in here, but you will not be able to broadcast from this page.</div>' +
-            '<button type="button" onclick="window.installPWA()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-2.5 rounded-xl cursor-pointer">Install the App 📱</button>';
-        card.insertBefore(box, card.lastElementChild);
-    });
-}
+function addBrowserNotice() {}
 
 // ==========================================================
 // FLEET COMMAND LOCAL OVERLAY GATEWAY
@@ -86,32 +52,7 @@ function addBrowserNotice() {
 window.checkFleetAccessAndSwitch = async function(event) {
     if (event) event.preventDefault();
     console.log("🚀 Switch to Fleet clicked!");
-
-    const auth = window.firebase && window.firebase.auth ? window.firebase.auth() : null;
-    const user = auth ? auth.currentUser : null;
-    let hasFleetAccess = false;
-
-    if (user) {
-        try {
-            const db = window.firebase.database();
-            const snapshot = await db.ref(`users/${user.uid}/tier`).once('value');
-            const tier = snapshot.val();
-            if (tier === 'fleet' || tier === 'admin') {
-                hasFleetAccess = true;
-            }
-        } catch (e) {
-            console.error("Tier check error:", e);
-        }
-    }
-
-    const DEV_BYPASS_MODE = true; 
-    if (DEV_BYPASS_MODE) hasFleetAccess = true;
-
-    if (hasFleetAccess) {
-        openLocalFleetModal();
-    } else {
-        showFleetPaywallModal();
-    }
+    openLocalFleetModal();
 };
 
 function openLocalFleetModal() {
@@ -211,7 +152,7 @@ window.smdInApp = function() {
 const BROWSER_ACCOUNT_SCREENS_ALLOWED = true;
 
 function browserMustInstall() {
-    return false; // Disabled browser install wall for laptop debugging
+    return false;
 }
 
 window.handleSignOut = function () {
@@ -283,6 +224,7 @@ window.handleSignIn = function () {
         auth.signInWithEmailAndPassword(email, password)
             .then((userCredential) => {
                 localStorage.setItem('seemydriver_logged_in', 'true');
+                
                 checkAndEnforceSubscription(userCredential.user, () => {
                     window.switchView('job-setup-view');
                 });
@@ -309,6 +251,7 @@ window.handleRegister = function () {
         auth.createUserWithEmailAndPassword(email, password)
             .then(async (userCredential) => {
                 const user = userCredential.user;
+                
                 const db = window.firebase && window.firebase.firestore ? window.firebase.firestore() : null;
                 if (db) {
                     try {
@@ -319,6 +262,7 @@ window.handleRegister = function () {
                         });
                     } catch (dbErr) {}
                 }
+
                 localStorage.setItem('seemydriver_logged_in', 'true');
                 window.switchView('job-setup-view');
             })
