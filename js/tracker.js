@@ -297,7 +297,8 @@ window.handleAddressInput = function (value) {
     geocodeTimer = setTimeout(async () => {
         try {
             const token = window.MAPBOX_TOKEN || MAPBOX_TOKEN;
-            const url = 'https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(query) + '.json?access_token=' + token + '&autocomplete=true&types=address,poi&limit=5';
+            const activeToken = token || 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+            const url = 'https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(query) + '.json?access_token=' + activeToken + '&autocomplete=true&types=address,poi&limit=5';
             const res = await fetch(url);
             let data = null;
             try { data = await res.json(); } catch (e) { data = null; }
