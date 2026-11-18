@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#090a0f">
+    <meta name="color-scheme" content="dark">
+    <title>SeeMyDriver - Live Telemetry Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS & JS for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <style>
+        .truck-marker-container { transition: transform 0.3s ease-out; }
+    </style>
+    <script>
+        const SafeStorage = {
+            getItem(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
+            setItem(key, value) { try { localStorage.setItem(key, value); } catch (e) {} },
+            removeItem(key) { try { localStorage.removeItem(key); } catch (e) {} }
+        };
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAft3ZCE8DEmjsf4FLIQDgdYIQL1woIJOI",
+            authDomain: "seemydriver-prod.firebaseapp.com",
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",
+            projectId: "seemydriver-prod",
+            storageBucket: "seemydriver-prod.firebasestorage.app",
+            messagingSenderId: "16366013329",
+            appId: "1:16366013329:web:7e993e6ee37f940a04a064"
+        };
+
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+        const db = firebase.database();
+        try { db.goOnline(); } catch (e) {}
+
+        let wakeLock = null, silentAudioContext = null, silentAudioNode = null;
+        let map = null, driverMarker = null, destMarker = null, routeLine = null;
+        let driverMap = null, driverMapMarker = null, driverDestMarker = null, driverRouteLine = null;
+        let driverCachedRouteCoords = null, custCachedRouteCoords = null;
+        let activeSessionId = null;
+        let activeListenerRef = null;
+
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try { if (wakeLock === null && document.visibilityState === 'visible') wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
+            }
+        }
+        async function releaseWakeLock() {
+            if (wakeLock !== null) { try { await wakeLock.release(); } catch (err) {} wakeLock = null; }
+        }
+        function startSilentAudio() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                if (!silentAudioContext || silentAudioContext.state === 'closed') silentAudioContext = new AudioContext();
+                if (silentAudioContext.state === 'suspended') silentAudioContext.resume();
+                if (!silentAudioNode) {
+                    const buffer = silentAudioContext.createBuffer(1, silentAudioContext.sampleRate * 2, silentAudioContext.sampleRate);
+                    const source = silentAudioContext.createBufferSource();
+                    source.buffer = buffer; source.loop = true;
+                    const gainNode = silentAudioContext.createGain();
+                    gainNode.gain.value = 0.00001;
+                    source.connect(gainNode); gainNode.connect(silentAudioContext.destination);
+                    source.start(0); silentAudioNode = source;
+                }
+            } catch (err) {}
+        }
+        function stopSilentAudio() {
+            try {
+                if (silentAudioNode) { try { silentAudioNode.stop(); } catch (e) {} silentAudioNode.disconnect(); silentAudioNode = null; }
+                if (silentAudioContext && silentAudioContext.state !== 'closed') { silentAudioContext.close(); silentAudioContext = null; }
+            } catch (err) {}
+        }
+
+        function switchView(viewId) {
+            const views = ['job-setup-view', 'active-broadcast-view', 'customer-view-view', 'signin-view'];
+            views.forEach(v => { const el = document.getElementById(v); if (el) el.classList.add('hidden'); });
+            const target = document.getElementById(viewId + '-view');
+            if (target) target.classList.remove('hidden');
+
+            if (viewId === 'active-broadcast') setTimeout(() => { initDriverActiveMap(); if (driverMap) driverMap.invalidateSize(); }, 200);
+            if (viewId === 'customer-view') setTimeout(() => { initCustomerMapLive(); if (map) map.invalidateSize(); }, 200);
+        }
+
+        // ---------- SELF-HEALING TRACKER ENGINE ----------
+        const GEO = {
+          kind: null,
+          watcherId: null,
+          lastFix: null,
+          lastWatchFixAt: 0,
+          lastPushAt: 0,
+          dirty: false,
+          watchdog: null,
+          restarting: false,
+          failCount: 0,
+          nextHealAt: 0,
+          warnedPermission: false,
+          STALE_MS: 25000,
+          PUSH_MIN_MS: 2000,
+          MAX_ACCURACY_M: 150
+        };
+
+        const _capPlugins = {};
+        function capPlugin(name) {
+          const C = window.Capacitor;
+          if (!C || !C.isNativePlatform || !C.isNativePlatform()) return undefined;
+          return _capPlugins[name] || (_capPlugins[name] = C.registerPlugin(name));
+        }
+        const CapGeo = () => capPlugin('Geolocation');
+        const CapBg  = () => capPlugin('BackgroundGeolocation');
+        const isBroadcasting = () => SafeStorage.getItem('smd_active_broadcast') === 'true';
+
+        function onFix(lat, lng, speed, accuracy, source) {
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+          if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
+          if (lat === 0 && lng === 0) return;
+          if (source === 'watch') { GEO.lastWatchFixAt = Date.now(); GEO.failCount = 0; }
+          if (Number.isFinite(accuracy) && accuracy > GEO.MAX_ACCURACY_M) return;
+          GEO.lastFix = { lat, lng, speed: Number.isFinite(speed) && speed > 0 ? speed : 0, accuracy };
+          GEO.dirty = true;
+          flushPosition(false);
+        }
+
+        function flushPosition(force) {
+          const f = GEO.lastFix;
+          if (!f || !isBroadcasting()) return;
+          const sid = activeSessionId || SafeStorage.getItem('smd_active_session_id');
+          if (!sid) return;
+          const now = Date.now();
+          if (!force && now - GEO.lastPushAt < GEO.PUSH_MIN_MS) return;
+          GEO.lastPushAt = now;
+          GEO.dirty = false;
+          db.ref('broadcasts/' + sid).update({
+            lat: f.lat,
+            lng: f.lng,
+            speed: Math.round(f.speed * 2.23694),
+            timestamp: firebase.database.ServerValue.TIMESTAMP
+          }).catch(e => { GEO.dirty = true; console.warn('Firebase write failed:', e); });
+        }
+
+        function getPositionOnce(timeoutMs) {
+          const geo = CapGeo();
+          if (geo) return geo.getCurrentPosition({ enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 });
+          return new Promise((res, rej) =>
+            navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 }));
+        }
+
+        async function pollOnce() {
+          try {
+            const p = await getPositionOnce(8000);
+            onFix(p.coords.latitude, p.coords.longitude, p.coords.speed, p.coords.accuracy, 'poll');
+          } catch (e) { console.warn('GPS poll failed:', e); }
+        }
+
+        async function getFirstFix() {
+          const geo = CapGeo();
+          if (geo) {
+            try {
+              const perm = await geo.requestPermissions();
+              if (perm.location !== 'granted' && perm.location !== 'prompt') {
+                return null;
+              }
+            } catch (e) {
+              console.warn("Permission request failed:", e);
+            }
+          }
+
+          for (let i = 0; i < 3; i++) {
+            try {
+              const p = await getPositionOnce(10000);
+              const c = p.coords;
+              if (Number.isFinite(c.latitude) && Number.isFinite(c.longitude)) return { lat: c.latitude, lng: c.longitude };
+            } catch (e) { console.warn('First fix attempt failed:', e); }
+          }
+          return null;
+        }
+
+        async function stopWatcher() {
+          const id = GEO.watcherId, kind = GEO.kind;
+          GEO.watcherId = null; GEO.kind = null;
+          if (id === null || id === undefined) return;
+          try {
+            if (kind === 'bg') await CapBg().removeWatcher({ id });
+            else if (kind === 'native') await CapGeo().clearWatch({ id });
+            else if (kind === 'web') navigator.geolocation.clearWatch(id);
+          } catch (e) { console.warn('stopWatcher:', e); }
+        }
+
+        async function startWatcher() {
+          await stopWatcher();
+          const bg = CapBg(), geo = CapGeo();
+
+          if (bg) {
+            try {
+              GEO.watcherId = await bg.addWatcher(
+                {
+                  backgroundTitle: 'SeeMyDriver is broadcasting',
+                  backgroundMessage: 'Sharing your live location with your customer.',
+                  requestPermissions: true,
+                  stale: false,
+                  distanceFilter: 0
+                },
+                (loc, err) => {
+                  if (err) {
+                    console.warn('BG watcher error:', err);
+                    if (err.code === 'NOT_AUTHORIZED' && !GEO.warnedPermission) {
+                      GEO.warnedPermission = true;
+                      alert('SeeMyDriver needs Location set to "Allow all the time" to keep broadcasting.');
+                      try { bg.openSettings(); } catch (e) {}
+                    }
+                    return;
+                  }
+                  if (loc) onFix(loc.latitude, loc.longitude, loc.speed, loc.accuracy, 'watch');
+                }
+              );
+              GEO.kind = 'bg';
+              return;
+            } catch (e) { console.warn('BG watcher failed, trying @capacitor/geolocation:', e); }
+          }
+
+          if (geo) {
+            try {
+              const perm = await geo.requestPermissions();
+              if (perm.location === 'granted') {
+                GEO.watcherId = await geo.watchPosition(
+                  { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+                  (pos, err) => {
+                    if (err) { console.warn('Native watch error:', err); return; }
+                    if (pos?.coords) onFix(pos.coords.latitude, pos.coords.longitude, pos.coords.speed, pos.coords.accuracy, 'watch');
+                  }
+                );
+                GEO.kind = 'native';
+                return;
+              }
+            } catch (e) { console.warn('Native geolocation failed, trying web API:', e); }
+          }
+
+          if (navigator.geolocation) {
+            GEO.watcherId = navigator.geolocation.watchPosition(
+              (p) => onFix(p.coords.latitude, p.coords.longitude, p.coords.speed, p.coords.accuracy, 'watch'),
+              (e) => console.warn('Web GPS error:', e),
+              { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+            GEO.kind = 'web';
+          }
+        }
+
+        async function healTracking(reason) {
+          if (GEO.restarting) return;
+          GEO.restarting = true;
+          try {
+            GEO.failCount++;
+            console.warn('Healing GPS watcher, reason:', reason, 'attempt', GEO.failCount);
+            try { db.goOnline(); } catch (e) {}
+            await requestWakeLock();
+            startSilentAudio();
+            pollOnce();
+            await startWatcher();
+            GEO.nextHealAt = Date.now() + Math.min(60000, 5000 * 2 ** Math.min(GEO.failCount, 4));
+          } finally { GEO.restarting = false; }
+        }
+
+        async function watchdogTick() {
+          if (!isBroadcasting()) return;
+          if (GEO.dirty) flushPosition(false);
+          if (Date.now() - GEO.lastWatchFixAt < GEO.STALE_MS) return;
+          pollOnce();
+          if (Date.now() >= GEO.nextHealAt) await healTracking('stale');
+        }
+
+        function startWatchdog() {
+          stopWatchdog();
+          GEO.lastWatchFixAt = Date.now();
+          GEO.nextHealAt = 0;
+          GEO.watchdog = setInterval(watchdogTick, 5000);
+        }
+        function stopWatchdog() {
+          if (GEO.watchdog) { clearInterval(GEO.watchdog); GEO.watchdog = null; }
+        }
+
+        async function startRealTimeTracking() {
+          await requestWakeLock();
+          startSilentAudio();
+          startWatchdog();
+          await startWatcher();
+        }
+
+        async function stopRealTimeTracking() {
+          stopWatchdog();
+          await stopWatcher();
+          GEO.lastFix = null; GEO.dirty = false;
+          await releaseWakeLock();
+          stopSilentAudio();
+          SafeStorage.removeItem('smd_active_broadcast');
+        }
+
+        function onResumeLike() {
+          if (!isBroadcasting()) return;
+          try { db.goOnline(); } catch (e) {}
+          requestWakeLock();
+          startSilentAudio();
+          if (Date.now() - GEO.lastWatchFixAt > 10000) healTracking('resume');
+        }
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onResumeLike(); });
+        window.addEventListener('online', onResumeLike);
+        try { window.Capacitor?.Plugins?.App?.addListener('resume', onResumeLike); } catch (e) {}
+
+        db.ref('.info/connected').on('value', (s) => { if (s.val() === true) flushPosition(true); });
+
+        async function launchLiveBroadcast() {
+            const custName = document.getElementById('job-cust-name').value.trim();
+            const custAddress = document.getElementById('job-cust-address').value.trim();
+            const driverName = document.getElementById('job-driver-name').value.trim();
+            const driverPhone = document.getElementById('job-driver-phone').value.trim();
+
+            if (!driverName) { alert('Please enter the driver name.'); return; }
+            if (!custAddress) { alert('Please enter a destination address.'); return; }
+
+            let destLat = null, destLng = null;
+
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(custAddress)}&limit=1`, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await res.json();
+                if (data && data.length > 0) {
+                    destLat = parseFloat(data[0].lat);
+                    destLng = parseFloat(data[0].lon);
+                }
+            } catch(e) {}
+
+            if (!destLat || !destLng) {
+                alert('Could not resolve coordinates for that address. Please check the address and try again.');
+                return;
+            }
+
+            const first = await getFirstFix();
+            if (!first) {
+              alert('Could not get a live GPS fix. Make sure Location is on, then try again.');
+              return;
+            }
+
+            activeSessionId = 'session_' + Math.random().toString(36).substring(2, 11);
+            SafeStorage.setItem('smd_active_broadcast', 'true');
+            SafeStorage.setItem('smd_active_session_id', activeSessionId);
+            SafeStorage.setItem('smd_cust_address', custAddress);
+
+            try {
+              await db.ref('broadcasts/' + activeSessionId).set({
+                driverName, driverPhone, custName: custName || 'Client', custAddress,
+                destLat, destLng,
+                lat: first.lat, lng: first.lng, speed: 0,
+                timestamp: firebase.database.ServerValue.TIMESTAMP
+              });
+            } catch (e) {
+              SafeStorage.removeItem('smd_active_broadcast');
+              alert('Could not reach the server. Check your connection and try again.');
+              return;
+            }
+            await startRealTimeTracking();
+            const trackingUrl = `https://seemydriver.com/?s=${activeSessionId}`;
+            document.getElementById('tracking-link-output').value = trackingUrl;
+            switchView('active-broadcast');
+        }
+
+        function copyTrackingLink() {
+            navigator.clipboard.writeText(document.getElementById('tracking-link-output').value);
+            alert('Link copied!');
+        }
+        function textTrackingLink() {
+            window.location.href = `sms:${document.getElementById('job-driver-phone').value || ''}?body=${encodeURIComponent(document.getElementById('tracking-link-output').value)}`;
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 3958.8, dLat = (lat2 - lat1) * Math.PI / 180, dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2)**2;
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+        }
+
+        function getClosestPointOnPolyline(lat, lng, coords) {
+            if (!coords || !coords.length) return [lat, lng];
+            let minDist = Infinity, bestPoint = [lat, lng];
+            for (let i = 0; i < coords.length - 1; i++) {
+                const proj = getClosestPointOnSegment([lat, lng], coords[i], coords[i+1]);
+                const dist = calculateDistance(lat, lng, proj[0], proj[1]);
+                if (dist < minDist) { minDist = dist; bestPoint = proj; }
+            }
+            return bestPoint;
+        }
+
+        function getClosestPointOnSegment(p, a, b) {
+            const AB = { x: b[1] - a[1], y: b[0] - a[0] }, AP = { x: p[1] - a[1], y: p[0] - a[0] };
+            const abLenSq = AB.x**2 + AB.y**2;
+            if (abLenSq === 0) return a;
+            let t = Math.max(0, Math.min(1, (AP.x * AB.x + AP.y * AB.y) / abLenSq));
+            return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+        }
+
+        const markerAnimIds = new WeakMap();
+        function smoothMoveMarker(marker, targetLat, targetLng) {
+            if (!marker) return;
+            const prev = markerAnimIds.get(marker);
+            if (prev) cancelAnimationFrame(prev);
+            const start = marker.getLatLng(), startTime = performance.now(), duration = 1500;
+            function animate(now) {
+                const p = Math.min((now - startTime) / duration, 1);
+                marker.setLatLng([start.lat + (targetLat - start.lat) * p, start.lng + (targetLng - start.lng) * p]);
+                if (p < 1) markerAnimIds.set(marker, requestAnimationFrame(animate));
+            }
+            markerAnimIds.set(marker, requestAnimationFrame(animate));
+        }
+
+        window.fitDriverMap = function() {
+            if (driverMapMarker && driverDestMarker) {
+                const group = new L.featureGroup([driverMapMarker, driverDestMarker]);
+                driverMap.fitBounds(group.getBounds().pad(0.2));
+            } else if (driverMapMarker) {
+                driverMap.setView(driverMapMarker.getLatLng(), 15);
+            }
+        };
+        window.recenterDriverMap = function() {
+            if (driverMapMarker) driverMap.setView(driverMapMarker.getLatLng(), 15);
+        };
+        window.openDriverDirections = function() {
+            const destAddr = SafeStorage.getItem('smd_cust_address');
+            if (destAddr) {
+                window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destAddr)}`, '_blank');
+            } else {
+                alert('No destination address found for directions.');
+            }
+        };
+
+        window.fitCustomerMap = function() {
+            if (driverMarker && destMarker && map) {
+                const group = new L.featureGroup([driverMarker, destMarker]);
+                map.fitBounds(group.getBounds().pad(0.2));
+            } else if (driverMarker && map) {
+                map.setView(driverMarker.getLatLng(), 16);
+            }
+        };
+        window.recenterCustomerMap = function() {
+            if (driverMarker && map) {
+                map.setView(driverMarker.getLatLng(), 16);
+            }
+        };
+
+        async function initDriverActiveMap() {
+            activeSessionId = activeSessionId || SafeStorage.getItem('smd_active_session_id');
+            if (!activeSessionId) return;
+
+            if (activeListenerRef) {
+                activeListenerRef.off();
+            }
+
+            activeListenerRef = db.ref('broadcasts/' + activeSessionId);
+            activeListenerRef.on('value', async (snap) => {
+                const data = snap.val();
+                if (!data || !data.lat || !data.lng || !data.destLat || !data.destLng) return;
+                
+                let lat = data.lat, lng = data.lng;
+                const speed = data.speed || 0;
+                const speedEl = document.getElementById('driver-map-speed');
+                if (speedEl) speedEl.innerText = speed + ' mph';
+
+                const trackingUrl = `https://seemydriver.com/?s=${activeSessionId}`;
+                const linkInput = document.getElementById('tracking-link-output');
+                if (linkInput && !linkInput.value) linkInput.value = trackingUrl;
+
+                let destLat = data.destLat, destLng = data.destLng;
+
+                if (!driverCachedRouteCoords) {
+                    try {
+                        const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${lng},${lat};${destLng},${destLat}?overview=full&geometries=geojson`);
+                        const j = await r.json();
+                        driverCachedRouteCoords = j.routes?.[0]?.geometry?.coordinates.map(c => [c[1], c[0]]) || [[lat, lng], [destLat, destLng]];
+                    } catch (err) {
+                        driverCachedRouteCoords = [[lat, lng], [destLat, destLng]];
+                    }
+                }
+                const snapped = getClosestPointOnPolyline(lat, lng, driverCachedRouteCoords);
+                lat = snapped[0]; lng = snapped[1];
+
+                const truckIcon = L.divIcon({ className: 'custom-truck-marker', html: `<div style="font-size: 28px;">🚚</div>`, iconSize: [0, 0], iconAnchor: [0, 0] });
+                const pinIcon = L.divIcon({ className: 'custom-pin-marker', html: `<div style="font-size: 30px;">📍</div>`, iconSize: [0, 0], iconAnchor: [0, 0] });
+
+                if (!driverMap) {
+                    driverMap = L.map('driver-map-container', {zoomControl: false}).setView([lat, lng], 15);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(driverMap);
+                    driverMapMarker = L.marker([lat, lng], {icon: truckIcon}).addTo(driverMap);
+                    driverDestMarker = L.marker([destLat, destLng], {icon: pinIcon}).addTo(driverMap);
+                    driverRouteLine = L.polyline(driverCachedRouteCoords, {color: '#3b82f6', weight: 5}).addTo(driverMap);
+                    driverMap.fitBounds(L.featureGroup([driverMapMarker, driverDestMarker]).getBounds().pad(0.2));
+                } else {
+                    smoothMoveMarker(driverMapMarker, lat, lng);
+                    if (driverRouteLine) driverRouteLine.setLatLngs(driverCachedRouteCoords);
+                    if (driverDestMarker) driverDestMarker.setLatLng([destLat, destLng]);
+                }
+            });
+        }
+
+        async function initCustomerMapLive() {
+            const urlParams = new URLSearchParams(window.location.search);
+            let sessionId = urlParams.get('s') || urlParams.get('session');
+            if (!sessionId && window.location.search.includes('session_')) {
+                sessionId = 'session_' + window.location.search.split('session_')[1].split('&')[0];
+            }
+            if (!sessionId) return;
+
+            db.ref('broadcasts/' + sessionId).on('value', async (snap) => {
+                const data = snap.val();
+                if (!data || !data.lat) return;
+                document.getElementById('cust-driver-name').innerText = data.driverName || 'Driver';
+                document.getElementById('cust-destination').innerText = data.custAddress || 'Destination';
+                const speed = data.speed || 0;
+                document.getElementById('cust-speed').innerText = speed + ' mph';
+
+                let lat = data.lat, lng = data.lng, destLat = data.destLat, destLng = data.destLng;
+                const dist = calculateDistance(lat, lng, destLat, destLng);
+                document.getElementById('cust-distance').innerText = dist.toFixed(1) + ' mi';
+                document.getElementById('cust-eta').innerText = Math.round((dist / (speed > 10 ? speed : 30)) * 60) + ' mins';
+
+                if (!custCachedRouteCoords) {
+                    try {
+                        const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${lng},${lat};${destLng},${destLat}?overview=full&geometries=geojson`);
+                        const j = await r.json();
+                        custCachedRouteCoords = j.routes?.[0]?.geometry?.coordinates.map(c => [c[1], c[0]]) || [[lat, lng], [destLat, destLng]];
+                    } catch (err) { custCachedRouteCoords = [[lat, lng], [destLat, destLng]]; }
+                }
+
+                const truckIcon = L.divIcon({ className: 'custom-truck-marker', html: `<div style="font-size: 28px;">🚚</div>`, iconSize: [0, 0], iconAnchor: [0, 0] });
+                const pinIcon = L.divIcon({ className: 'custom-pin-marker', html: `<div style="font-size: 30px;">📍</div>`, iconSize: [0, 0], iconAnchor: [0, 0] });
+
+                if (!map) {
+                    map = L.map('customer-map-container', {zoomControl: false}).setView([lat, lng], 16);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                    driverMarker = L.marker([lat, lng], {icon: truckIcon}).addTo(map);
+                    destMarker = L.marker([destLat, destLng], {icon: pinIcon}).addTo(map);
+                    routeLine = L.polyline(custCachedRouteCoords, {color: '#3b82f6', weight: 5}).addTo(map);
+                    map.fitBounds(L.featureGroup([driverMarker, destMarker]).getBounds().pad(0.2));
+                } else {
+                    smoothMoveMarker(driverMarker, lat, lng);
+                    if (routeLine) routeLine.setLatLngs(custCachedRouteCoords);
+                }
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('s') || urlParams.has('session') || window.location.search.includes('session_')) {
+                switchView('customer-view');
+            } else if (SafeStorage.getItem('smd_active_broadcast') === 'true' && SafeStorage.getItem('smd_active_session_id')) {
+                activeSessionId = SafeStorage.getItem('smd_active_session_id');
+                switchView('active-broadcast');
+                startRealTimeTracking();
+            } else if (SafeStorage.getItem('smd_is_logged_in') === 'true') {
+                switchView('job-setup');
+            } else {
+                switchView('signin');
+            }
+        });
+    </script>
+</head>
+<body class="bg-[#090a0f] text-neutral-100 min-h-screen flex flex-col justify-between selection:bg-amber-400 selection:text-black">
+
+    <header class="w-full max-w-4xl mx-auto px-4 py-3.5 flex items-center justify-between border-b border-neutral-900 bg-[#090a0f]/85 backdrop-blur-md sticky top-0 z-50">
+        <div class="flex items-center gap-2">
+            <span class="text-[28px] font-black tracking-tight text-white cursor-pointer flex items-center gap-2" onclick="switchView('signin')">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center text-black text-xl font-black">👀</div>
+                <span>See<span class="text-amber-400">My</span>Driver</span>
+            </span>
+        </div>
+    </header>
+
+    <main class="w-full max-w-md mx-auto px-4 py-6 flex-1 flex flex-col items-center justify-center">
+        <!-- SIGN IN VIEW -->
+        <div id="signin-view" class="w-full flex flex-col gap-3 hidden">
+            <h2 class="text-3xl font-black text-white text-center">Welcome Back 👋</h2>
+            <div class="bg-[#12141c] border border-neutral-800 p-5 rounded-3xl flex flex-col gap-3 shadow-xl">
+                <input type="email" id="signin-email" placeholder="Email" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white">
+                <input type="password" id="signin-password" placeholder="Password" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white">
+                <button onclick="switchView('job-setup'); SafeStorage.setItem('smd_is_logged_in', 'true');" class="w-full bg-amber-400 text-black font-black text-xs py-3.5 rounded-xl shadow-md">Sign In →</button>
+            </div>
+        </div>
+        <!-- JOB SETUP VIEW -->
+        <div id="job-setup-view" class="w-full flex flex-col gap-3 hidden">
+            <h2 class="text-2xl font-black text-white text-center">Customer & Destination</h2>
+            <div class="bg-[#12141c] border border-neutral-800 p-5 rounded-3xl flex flex-col gap-3 shadow-xl">
+                <input type="text" id="job-driver-name" placeholder="Driver Name" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white">
+                <input type="tel" id="job-driver-phone" placeholder="Driver Phone" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white">
+                <input type="text" id="job-cust-name" placeholder="Client Name" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white">
+                <div>
+                    <input type="text" id="job-cust-address" placeholder="Destination Address (e.g. 1300 Baker St Houston)" autocomplete="street-address" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white">
+                </div>
+                <button onclick="launchLiveBroadcast()" class="w-full bg-amber-400 text-black font-black text-xs py-3.5 rounded-xl shadow-md mt-1">Start Cloud Broadcast 🚀</button>
+            </div>
+        </div>
+        <!-- ACTIVE BROADCAST VIEW -->
+        <div id="active-broadcast-view" class="w-full flex flex-col gap-3 hidden">
+            <div class="bg-[#12141c] border border-neutral-800 p-4 rounded-3xl flex flex-col gap-3 shadow-xl">
+                <div class="w-full bg-[#161923] rounded-2xl overflow-hidden relative h-56 border border-neutral-800">
+                    <div id="driver-map-container" style="width:100%; height:100%;"></div>
+                    <div class="absolute bottom-2 left-2 z-[1000] bg-black/80 px-2.5 py-1 rounded-lg text-[10px] font-bold text-amber-400">
+                        Speed: <span id="driver-map-speed" class="text-white">0 mph</span>
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="fitDriverMap()" class="bg-[#161923] border border-neutral-800 text-white text-[11px] font-bold py-2.5 rounded-xl shadow">📍 Fit Both</button>
+                    <button onclick="recenterDriverMap()" class="bg-[#161923] border border-neutral-800 text-white text-[11px] font-bold py-2.5 rounded-xl shadow">🎯 Recenter</button>
+                    <button onclick="openDriverDirections()" class="bg-amber-400 text-black text-[11px] font-black py-2.5 rounded-xl shadow-md">🗺️ Directions</button>
+                </div>
+                <input type="text" id="tracking-link-output" readonly class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3 py-2 text-xs text-amber-400 font-mono">
+                <div class="flex gap-2">
+                    <button onclick="copyTrackingLink()" class="flex-1 bg-[#161923] text-white font-bold text-xs py-2.5 rounded-xl border border-neutral-800">Copy Link</button>
+                    <button onclick="textTrackingLink()" class="flex-1 bg-emerald-500 text-black font-bold text-xs py-2.5 rounded-xl">💬 Text SMS</button>
+                </div>
+                <button onclick="endBroadcastAndHome()" class="w-full bg-neutral-800 text-neutral-300 font-bold text-xs py-2.5 rounded-xl">← End Broadcast</button>
+            </div>
+        </div>
+        <!-- CUSTOMER VIEW -->
+        <div id="customer-view-view" class="w-full flex flex-col gap-3 hidden">
+            <div class="bg-amber-500/20 border border-amber-400/40 p-3.5 rounded-2xl flex justify-between items-center">
+                <div><div class="text-[9px] font-bold text-amber-400 uppercase">ETA</div><div id="cust-eta" class="text-lg font-black text-white">--</div></div>
+                <div class="text-right"><div class="text-[9px] font-bold text-neutral-400 uppercase">Distance</div><div id="cust-distance" class="text-xs font-black text-white">--</div></div>
+            </div>
+            <div class="bg-[#12141c] border border-neutral-800 rounded-3xl overflow-hidden relative h-72 shadow-xl">
+                <div id="customer-map-container" style="width:100%; height:100%;"></div>
+                <div class="absolute bottom-3 left-3 z-[1000] bg-black/80 px-2.5 py-1 rounded-lg text-xs font-bold text-amber-400">
+                    Speed: <span id="cust-speed" class="text-white">0 mph</span>
+                </div>
+            </div>
+            <!-- CUSTOMER MAP CONTROL BUTTONS -->
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="fitCustomerMap()" class="bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-white text-[11px] font-bold py-2.5 rounded-xl transition cursor-pointer text-center shadow">
+                    📍 Fit Both
+                </button>
+                <button onclick="recenterCustomerMap()" class="bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-white text-[11px] font-bold py-2.5 rounded-xl transition cursor-pointer text-center shadow">
+                    🎯 Recenter
+                </button>
+            </div>
+            <div class="bg-[#12141c] border border-neutral-800 p-4 rounded-3xl flex justify-between items-center">
+                <div><span class="text-[9px] font-bold text-neutral-400 block uppercase">Driver</span><span id="cust-driver-name" class="text-xs font-black text-white">--</span></div>
+                <div class="text-right"><span class="text-[9px] font-bold text-neutral-400 block uppercase">Destination</span><span id="cust-destination" class="text-xs font-bold text-amber-400 truncate max-w-[180px] block">--</span></div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="w-full max-w-4xl mx-auto px-4 py-3 text-center border-t border-neutral-900 text-neutral-500 text-[10px]">
+        © 2026 SeeMyDriver. All rights reserved.
+    </footer>
+</body>
+</html>

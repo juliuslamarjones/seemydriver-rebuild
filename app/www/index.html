@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>    
+    <meta charset="UTF-8">    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">    
+    <meta name="theme-color" content="#090a0f">    
+    <meta name="color-scheme" content="dark">    
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">    
+    <link rel="manifest" href="manifest.json">    
+    <title>SeeMyDriver - Real-Time GPS Telemetry</title>    
+    <!-- Tailwind CSS -->    
+    <script src="https://cdn.tailwindcss.com"></script>    
+    <!-- Leaflet CSS & JS for Map -->    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>    
+    <!-- Firebase SDKs -->    
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>    
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>    
+    <style>        
+        @keyframes wave-hand {            
+            0% { transform: rotate(0deg); }            
+            20% { transform: rotate(14deg); }            
+            40% { transform: rotate(-8deg); }            
+            60% { transform: rotate(14deg); }            
+            80% { transform: rotate(-4deg); }            
+            100% { transform: rotate(0deg); }        
+        }        
+        .animate-wave { display: inline-block; animation: wave-hand 2s infinite; transform-origin: 70% 70%; }        
+        .truck-marker-container { transition: transform 0.3s ease-out; }    
+    </style>    
+    <script>        
+        const SafeStorage = {            
+            getItem(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },            
+            setItem(key, value) { try { localStorage.setItem(key, value); } catch (e) {} },            
+            removeItem(key) { try { localStorage.removeItem(key); } catch (e) {} }        
+        };
+        const firebaseConfig = {            
+            apiKey: "AIzaSyAft3ZCE8DEmjsf4FLIQDgdYIQL1woIJOI",            
+            authDomain: "seemydriver-prod.firebaseapp.com",            
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",            
+            projectId: "seemydriver-prod",            
+            storageBucket: "seemydriver-prod.firebasestorage.app",            
+            messagingSenderId: "16366013329",            
+            appId: "1:16366013329:web:7e993e6ee37f940a04a064"        };
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }        
+        const db = firebase.database();        
+        try { db.goOnline(); } catch (e) {}
+        let activeSessionId = SafeStorage.getItem('smd_session_id') || ('session_' + Math.random().toString(36).substring(2, 11));        
+        SafeStorage.setItem('smd_session_id', activeSessionId);    
+    </script>    
+</head>
+<body class="bg-[#090a0f] text-neutral-100 min-h-screen flex flex-col justify-between selection:bg-amber-400 selection:text-black">
+    <!-- BATTERY OPTIMIZATION MODAL -->    
+    <div id="battery-opt-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4" style="display: none;">        
+        <div class="w-full max-w-md bg-[#12141c] border-2 border-amber-400 p-6 rounded-3xl text-left flex flex-col gap-4 shadow-2xl relative">            
+            <div class="flex items-center gap-3">                
+                <div class="w-12 h-12 rounded-2xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-400 text-2xl font-black shrink-0">⚡</div>                
+                <div>                    
+                    <h3 class="text-lg font-black text-white leading-tight">Battery Optimization Exemption</h3>                    
+                    <p class="text-[11px] text-amber-400 font-bold uppercase tracking-wider">Required for Uninterrupted GPS</p>                
+                </div>            
+            </div>            
+            <p class="text-xs text-neutral-300 leading-relaxed">                OEM skins (<strong class="text-white">Samsung One UI, Xiaomi MIUI, Motorola</strong>) aggressively terminate background processes. Please set your battery to 'Unrestricted'.            </p>            <div class="flex flex-col gap-2 mt-1">                
+                <button onclick="openBatterySettings()" class="w-full bg-[#161923] hover:bg-[#1e2230] border border-amber-400/40 text-amber-400 font-bold text-xs py-3 rounded-xl transition shadow-md text-center cursor-pointer">Open Battery Settings ⚙️️</button>                
+                <button onclick="confirmBatteryExempted()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer">I've Set to Unrestricted — Launch Broadcast 🚀</button>                
+                <button onclick="closeBatteryModal()" class="w-full text-neutral-400 hover:text-white font-bold text-xs py-2 transition text-center cursor-pointer">Cancel</button>            
+            </div>        
+        </div>    
+    </div>
+
+    <!-- Header -->    
+    <header class="w-full max-w-4xl mx-auto px-4 py-3.5 flex items-center justify-between border-b border-neutral-900 bg-[#090a0f]/85 backdrop-blur-md sticky top-0 z-50">        
+        <div class="flex items-center gap-2">            
+            <span class="text-[28px] font-black tracking-tight text-white cursor-pointer flex items-center gap-2" onclick="window.switchView('landing', true)">                
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center text-black text-xl font-black">👀</div>                
+                <span>See<span class="text-amber-400">My</span>Driver</span>            </span>        
+        </div>        
+        <div id="header-nav-actions" class="flex items-center gap-2">            
+            <button onclick="window.switchView('signin')" class="text-xs text-neutral-300 hover:text-white font-bold px-3 py-1.5 cursor-pointer">Sign In</button>            
+            <button onclick="window.switchView('register')" class="bg-amber-400 hover:bg-amber-300 text-black text-xs px-4 py-2 rounded-xl font-black cursor-pointer shadow-lg transition-all">Get Started Free</button>        
+        </div>    
+    </header>
+
+    <main class="w-full max-w-2xl mx-auto px-4 py-6 flex-1 flex flex-col items-center justify-center">                
+        <!-- ACTIVE BROADCAST BANNER -->        
+        <div id="active-broadcast-banner" class="w-full bg-amber-400/10 border border-amber-400/40 p-3.5 rounded-2xl mb-4 flex items-center justify-between shadow-xl backdrop-blur-sm" style="display: none;">            
+            <div class="flex items-center gap-2.5 text-left cursor-pointer flex-1" onclick="window.switchView('active-broadcast')">                
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0"></span>                
+                <div>                    
+                    <div class="text-xs font-black text-amber-400">Active Broadcast Running (Locked)</div>                    
+                    <div class="text-[10px] text-neutral-400">Tap here to view your live driver navigation map & link.</div>                
+                </div>            
+            </div>            
+            <div class="flex items-center gap-2 shrink-0">                
+                <button onclick="window.switchView('active-broadcast')" class="bg-amber-400 hover:bg-amber-300 text-black font-black text-xs px-3 py-2 rounded-xl transition cursor-pointer shadow-md">Return</button>                
+                <button onclick="window.endBroadcastAndHome()" class="bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-neutral-300 hover:text-white font-bold text-xs px-2.5 py-2 rounded-xl transition cursor-pointer">End</button>            
+            </div>        
+        </div>
+        
+        <!-- LANDING VIEW -->        
+        <div id="landing-view" class="w-full flex-col items-center text-center gap-6" style="display: none;">            
+            <div class="w-full bg-gradient-to-r from-amber-500/20 via-amber-400/10 to-amber-500/20 text-amber-300 font-bold text-xs py-3 px-4 rounded-2xl shadow-lg border border-amber-400/30 backdrop-blur-md">                
+                <span>🔥 100% Free Solo Driver Plan — No Credit Card Required! 🔥</span>            
+            </div>            
+            <div class="inline-flex items-center gap-2 bg-[#12141c] border border-neutral-800 px-3.5 py-1.5 rounded-full shadow-inner mt-1">                
+                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>                
+                <span class="text-[10px] font-bold text-neutral-300 uppercase tracking-wider">Real-Time GPS Telemetry Ready</span>            </div>            
+            <h1 class="text-4xl sm:text-6xl font-black tracking-tight text-white leading-tight">                
+                Stop asking <span class="text-amber-400">"Where are you?"</span>            </h1>            
+            <p class="text-sm sm:text-base text-neutral-400 leading-relaxed max-w-lg">                
+                Stream your exact live location straight from your mobile device browser to your clients in real time via Firebase cloud sync.            </p>
+
+            <div class="w-full flex flex-col sm:flex-row gap-3 mt-1">                
+                <button onclick="window.switchView('job-setup')" class="flex-1 bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-4 px-6 rounded-2xl transition shadow-lg text-center cursor-pointer">Driver Go Online 🚀</button>                
+                <button onclick="window.switchView('fleet-dashboard')" class="flex-1 bg-[#12141c] hover:bg-[#1e2230] border border-amber-400/40 text-amber-400 font-bold text-xs py-4 px-6 rounded-2xl transition shadow-md text-center cursor-pointer">Fleet Command 🏢</button>            
+            </div>
+
+            <div class="w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3 shadow-xl relative overflow-hidden mt-2">                
+                <div class="absolute top-0 right-0 bg-amber-400 text-black font-black text-[9px] px-3 py-1 rounded-bl-xl uppercase tracking-wider">Android APK</div>                
+                <div class="flex items-center gap-2 text-xs font-bold text-amber-400">                    
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>                    
+                    <span>100% Safe & Guaranteed Secure</span>                
+                </div>                
+                <p class="text-xs text-neutral-300 leading-relaxed">                    
+                    Download our direct Android APK for uninterrupted background telemetry. Because it's installed directly rather than through app stores, Google Play Protect may show a standard unrecognized app warning. <strong class="text-white">This is 100% safe and will not harm your device.</strong> Simply tap <strong class="text-amber-400">"More details"</strong> and then <strong class="text-amber-400">"Install anyway"</strong> to proceed.                
+                </p>                
+                <a href="/seemydriver.apk" download class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer block mt-1">Download Android APK 📥</a>            
+            </div>
+
+            <div class="w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3 shadow-xl relative overflow-hidden">                
+                <div class="absolute top-0 right-0 bg-neutral-800 text-neutral-300 font-black text-[9px] px-3 py-1 rounded-bl-xl uppercase tracking-wider">iOS Web App</div>                
+                <div class="flex items-center gap-2 text-xs font-bold text-sky-400">                    
+                    <span class="text-base leading-none">🍎</span>                    
+                    <span class="text-white font-black text-sm">Apple / iOS Users</span>                
+                </div>                
+                <p class="text-xs text-neutral-300 leading-relaxed">                    
+                    Apple devices stream seamlessly through Safari. For app-like stability and background GPS lock when your screen is locked, open this page in Safari, tap the <strong class="text-white">Share</strong> button, and select <strong class="text-amber-400">"Add to Home Screen"</strong>. Launch it directly from your home screen for optimal performance!                </p>            </div>
+
+            <div class="w-full bg-gradient-to-b from-[#12141c] to-[#161923] border-2 border-amber-400/50 p-6 rounded-3xl text-left flex flex-col gap-3 shadow-xl relative overflow-hidden">                
+                <div class="absolute top-0 right-0 bg-amber-400 text-black font-black text-[9px] px-3 py-1 rounded-bl-xl uppercase tracking-wider">Enterprise Tier</div>                
+                <h3 class="text-xl font-black text-white flex items-center gap-2">                    
+                    <span>🏢 Fleet Dispatch - $49/mo</span>                </h3>                
+                <p class="text-xs text-neutral-300 leading-relaxed">                    
+                    Running multiple vehicles? Upgrade to our professional Fleet tier to manage multi-driver dispatch, team tracking dashboards, and centralized client routing.                </p>                
+                <button onclick="window.switchView('plans')" class="w-full bg-[#161923] hover:bg-[#1e2230] border border-amber-400/40 text-amber-400 font-bold text-xs py-3 rounded-xl transition shadow-md text-center cursor-pointer mt-1">Explore Fleet Plans →</button>                
+                <button onclick="window.switchView('fleet-dashboard')" class="w-full bg-[#161923] hover:bg-[#1e2230] border border-amber-400/40 text-amber-400 font-bold text-xs py-3 rounded-xl transition shadow-md text-center cursor-pointer mt-2">Open Fleet Command Dashboard 🏢</button>            </div>        
+        </div>
+
+        <!-- PLANS VIEW -->        
+        <div id="plans-view" class="w-full flex-col items-center text-center gap-4" style="display: none;">            
+            <div class="w-full flex items-center justify-between mb-1">                
+                <button onclick="window.switchView('landing')" class="text-xs text-neutral-400 hover:text-white flex items-center gap-1 bg-[#12141c] border border-neutral-800 px-3 py-1.5 rounded-xl cursor-pointer">← Back</button>            </div>            
+            <h2 class="text-3xl font-black tracking-tight text-white">Choose Your <span class="text-amber-400">Plan</span></h2>            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-xl text-left">                
+                <div id="solo-plan-card" onclick="window.setRegTier('solo')" class="w-full bg-[#12141c] border-2 border-amber-400 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer">                    
+                    <h3 class="text-xl font-black text-white">Solo Driver - Free</h3>                    
+                    <p class="text-xs text-neutral-400">Instant cloud telemetry & live client tracking.</p>                    
+                    <button onclick="window.selectAndRegister('solo')" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3 rounded-xl transition mt-2 cursor-pointer">Select Solo Free</button>                </div>                
+                <div id="fleet-plan-card" onclick="window.setRegTier('fleet')" class="w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer">                    
+                    <h3 class="text-xl font-black text-white">Fleet Enterprise - $49/mo</h3>                    
+                    <p class="text-xs text-neutral-400">Multi-driver dispatch and custom telemetry stream.</p>                    
+                    <button onclick="window.selectAndRegister('fleet')" class="w-full bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-amber-400 font-bold text-xs py-3 rounded-xl transition mt-2 cursor-pointer">Select Fleet $49/mo</button>                </div>            </div>        
+        </div>
+
+        <!-- JOB SETUP VIEW (STEP 1) -->        
+        <div id="job-setup-view" class="w-full flex-col items-center text-center gap-3" style="display: none;">            
+            <div class="w-full max-w-sm mx-auto mt-2">                
+                <div class="inline-flex items-center gap-1.5 bg-amber-400/10 border border-amber-400/30 text-amber-400 font-black text-[11px] px-3 py-1 rounded-full mb-2 uppercase tracking-wide">                    
+                    <span>📍 Step 1 of 2: Enter Job Details</span>                </div>                
+                <h2 class="text-2xl font-black tracking-tight text-white mb-3">Customer & <span class="text-amber-400">Destination</span></h2>                
+                <div class="w-full bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-3.5 shadow-xl">                    
+                    <div>                        
+                        <label class="block text-[11px] font-bold text-neutral-300 mb-1">Driver Name (Shows on Customer Map)</label>                        
+                        <input type="text" id="job-driver-name" placeholder="Driver Name" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">                    </div>                    
+                    <div>                        
+                        <label class="block text-[11px] font-bold text-neutral-300 mb-1">Driver Phone (For Customer Call Button)</label>                        
+                        <input type="tel" id="job-driver-phone" placeholder="(555) 000-0000" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">                    </div>                    
+                    <div>                        
+                        <label class="block text-[11px] font-bold text-neutral-300 mb-1">Client Name</label>                        
+                        <input type="text" id="job-cust-name" placeholder="John Smith" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">                    </div>                    
+                    <div>                        
+                        <div class="flex items-center justify-between mb-1">                            
+                            <label class="block text-[11px] font-bold text-neutral-300">Destination Address *</label>                        </div>                        
+                        <div class="relative">                            
+                            <input type="text" id="job-cust-address" placeholder="Enter street address..." oninput="window.handleAddressInput(this.value)" autocomplete="off" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">                            
+                            <div id="address-suggestions" class="absolute left-0 right-0 top-full mt-1 bg-[#161923] border border-neutral-800 rounded-xl shadow-2xl z-50 hidden max-h-48 overflow-y-auto"></div>                        </div>                    </div>                    
+                    <button onclick="window.launchLiveBroadcast()" class="w-full bg-amber-400 hover:bg-amber-300 active:scale-95 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer mt-1">Start Cloud Broadcast 🚀</button>                </div>            </div>        
+        </div>
+
+        <!-- ACTIVE BROADCAST VIEW -->        
+        <div id="active-broadcast-view" class="w-full flex-col items-center text-center gap-3" style="display: none;">            
+            <div class="inline-flex items-center gap-1.5 bg-emerald-400/10 border border-emerald-400/30 text-emerald-400 font-black text-[11px] px-3 py-1 rounded-full uppercase tracking-wide">                
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>                
+                <span>🚀 Step 2 of 2: Share Link & Keep This Page Open</span>            </div>            
+            <h2 class="text-2xl font-black tracking-tight text-white">Live Telemetry & <span class="text-amber-400">Driver Navigation</span></h2>            
+            <div class="w-full bg-[#12141c] border border-neutral-800 p-5 rounded-3xl text-left flex flex-col gap-3.5 shadow-xl max-w-md mx-auto">                                
+                <div class="w-full bg-[#161923] border border-neutral-800 rounded-2xl overflow-hidden shadow-inner relative" style="height: 240px;">                    
+                    <div id="driver-map-container" style="width: 100%; height: 240px; position: absolute; inset: 0;"></div>                    
+                    <div class="absolute bottom-2 left-2 z-[1000] bg-black/80 backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-neutral-800 text-[11px] font-bold text-amber-400">                        
+                        Speed: <span id="driver-map-speed" class="text-white">0 mph</span>                    </div>                </div>
+                <div class="grid grid-cols-3 gap-2">                    
+                    <button onclick="window.fitDriverMap()" class="bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-white text-[11px] font-bold py-2.5 rounded-xl transition shadow cursor-pointer">📍 Fit Both</button>                    
+                    <button onclick="window.recenterDriverMap()" class="bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-white text-[11px] font-bold py-2.5 rounded-xl transition shadow cursor-pointer">🎯 Recenter</button>                    
+                    <button onclick="window.openDriverDirections()" class="bg-amber-400 hover:bg-amber-300 text-black text-[11px] font-black py-2.5 rounded-xl transition shadow-md cursor-pointer">🗺️ Directions</button>                </div>                
+                <div>                    
+                    <label class="block text-[11px] font-bold text-neutral-400 mb-1">Client Tracking Link</label>                    
+                    <input type="text" id="tracking-link-output" readonly class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-amber-400 font-mono focus:outline-none" />                </div>                
+                <div class="flex gap-2">                    
+                    <button onclick="window.copyTrackingLink()" class="flex-1 bg-[#161923] hover:bg-[#1e2230] border border-neutral-800 text-white font-bold text-xs py-3 rounded-xl transition cursor-pointer">Copy Link</button>                    
+                    <button onclick="window.textTrackingLink()" class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs py-3 rounded-xl transition text-center cursor-pointer">💬 Text SMS</button>                </div>                
+                <button onclick="window.endBroadcastAndHome()" class="w-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold text-xs py-3 rounded-xl transition cursor-pointer">← End Broadcast & New Job</button>            </div>        
+        </div>
+
+        <!-- PREMIUM CUSTOMER VIEW -->        
+        <div id="customer-view-view" class="w-full flex-col gap-4 max-w-md mx-auto relative" style="display: none;">                        
+            <div class="absolute -top-10 left-1/2 -translate-x-1/2 w-[300px] h-[150px] bg-amber-500/10 blur-[80px] pointer-events-none rounded-full"></div>
+            <div class="bg-neutral-900/70 border border-neutral-800/80 p-5 rounded-3xl backdrop-blur-xl text-center shadow-xl z-10">                
+                <p class="text-sm text-neutral-400 font-semibold tracking-wider uppercase">Thank you for being a valued customer</p>                
+                <h2 id="cust-driver-name" class="text-[26px] font-black text-white mt-1">Driver</h2>            </div>
+            <div class="grid grid-cols-2 gap-3 z-10">                
+                <div class="bg-neutral-900/60 border border-neutral-800/80 p-3.5 rounded-2xl backdrop-blur-xl">                    
+                    <span class="text-[9px] font-bold text-amber-400 uppercase tracking-widest block">Estimated ETA</span>                    
+                    <span id="cust-eta" class="text-lg font-black text-white mt-0.5 block">Calculating...</span>                </div>                
+                <div class="bg-neutral-900/60 border border-neutral-800/80 p-3.5 rounded-2xl backdrop-blur-xl">                    
+                    <span class="text-[9px] font-bold text-white uppercase tracking-widest block">Distance Away</span>                    
+                    <span id="cust-distance" class="text-sm font-black text-white mt-1 block">--</span>                </div>            </div>
+            <div class="bg-neutral-900/60 border border-neutral-800/80 rounded-3xl overflow-hidden relative shadow-2xl backdrop-blur-xl z-10" style="height: 288px;">                
+                <div id="customer-map-container" style="width: 100%; height: 288px; position: absolute; inset: 0;"></div>                
+                <div class="absolute bottom-3 left-3 z-[1000] bg-neutral-950/80 border border-neutral-800 px-3 py-1.5 rounded-xl backdrop-blur-md flex items-center gap-2 shadow-lg">                    
+                    <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>                    
+                    <span class="text-xs font-black tracking-wider text-neutral-200">Speed: <span id="cust-speed" class="text-white">0 mph</span></span>                </div>            </div>
+            <div class="grid grid-cols-2 gap-2 z-10">                
+                <button onclick="window.fitCustomerMap()" class="bg-neutral-900/80 hover:bg-neutral-800 border border-neutral-800 text-white text-[11px] font-bold py-2.5 rounded-2xl transition cursor-pointer text-center shadow backdrop-blur-xl">📍 Fit Both</button>                
+                <button onclick="window.recenterCustomerMap()" class="bg-neutral-900/80 hover:bg-neutral-800 border border-neutral-800 text-white text-[11px] font-bold py-2.5 rounded-2xl transition cursor-pointer text-center shadow backdrop-blur-xl">🎯 Recenter</button>            </div>
+            <div class="bg-neutral-900/60 border border-neutral-800/80 px-4 py-3 rounded-2xl flex items-center gap-3 backdrop-blur-xl z-10">                
+                <div class="w-8 h-8 rounded-xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 shrink-0 text-sm">📍</div>                
+                <div class="overflow-hidden">                    
+                    <span class="text-[9px] font-bold text-neutral-400 uppercase tracking-wider block">Destination Address</span>                    
+                    <span id="cust-destination" class="text-xs font-bold text-neutral-200 truncate block">--</span>                </div>            </div>
+            <div class="grid grid-cols-2 gap-3 z-10 pt-1">                
+                <a id="cust-call-btn" href="#" class="bg-neutral-900/80 hover:bg-neutral-800 border border-neutral-800 text-white font-black text-xs py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 backdrop-blur-xl">                    
+                    <span>📞 Call Driver</span>                </a>                
+                <a id="cust-msg-btn" href="#" class="bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-400/20 active:scale-95">                    
+                    <span>💬 Message</span>                </a>            </div>        
+        </div>
+
+        <!-- FLEET COMMAND DASHBOARD VIEW -->        
+        <div id="fleet-dashboard-view" class="w-full flex-col gap-4 max-w-4xl mx-auto relative text-left" style="display: none;">                        
+            <div class="flex items-center justify-between bg-[#12141c] border border-neutral-800 p-4 rounded-2xl shadow-xl backdrop-blur-md">                
+                <div class="flex items-center gap-3">                    
+                    <button onclick="window.switchView('landing', true)" class="text-xs text-neutral-400 hover:text-white bg-[#161923] border border-neutral-800 px-3 py-2 rounded-xl cursor-pointer">← Home</button>                    
+                    <div>                        
+                        <h2 class="text-lg font-black text-white flex items-center gap-2">                            
+                            <span>🏢 Fleet Command Center</span>                            
+                            <span class="text-[10px] bg-amber-400 text-black px-2 py-0.5 rounded-md uppercase font-black">Enterprise Active</span>                        </h2>                        
+                        <p class="text-[11px] text-neutral-400">Live multi-driver telemetry & dispatch routing.</p>                    </div>                </div>                
+                <div class="flex items-center gap-2">                    
+                    <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-xl font-bold flex items-center gap-2">                        
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>                        
+                        <span>Fleet Radar Active</span>                    </div>                </div>            </div>
+            
+            <div class="bg-[#12141c] border border-neutral-800 p-4 rounded-3xl flex flex-col sm:flex-row gap-2.5 shadow-xl items-center">
+                <input type="text" id="new-driver-name-input" placeholder="Enter new driver name (e.g. Billy)..." class="flex-grow bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">
+                <button onclick="window.generateDriverInvite()" class="w-full sm:w-auto bg-[#161923] hover:bg-[#1e2230] border border-amber-400/40 text-amber-400 font-bold text-xs py-3 px-5 rounded-xl transition cursor-pointer whitespace-nowrap">Generate Driver Link 🔗</button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">                
+                <div class="bg-[#12141c] border border-neutral-800 p-4 rounded-3xl flex flex-col gap-3 shadow-xl h-[400px] overflow-y-auto" id="fleet-roster-list">                    
+                    <div class="flex items-center justify-between pb-2 border-b border-neutral-800">                        
+                        <span class="text-xs font-black text-white uppercase tracking-wider">Active Fleet Roster</span>                        
+                        <span class="text-[10px] text-amber-400 font-bold">Waiting for Units...</span>                    </div>                    
+                    <div class="text-xs text-neutral-500 p-2 text-center">Launch a solo broadcast on your phone or another tab to see units light up here!</div>                </div>
+                <div class="md:col-span-2 flex flex-col gap-4">                                        
+                    <div class="bg-[#12141c] border border-neutral-800 rounded-3xl overflow-hidden relative shadow-xl" style="height: 320px;">                        
+                        <div id="fleet-master-map-container" style="width: 100%; height: 320px; position: absolute; inset: 0;"></div>
+                        <div class="absolute bottom-3 right-3 z-[1000] flex items-center gap-1.5 bg-neutral-950/80 border border-neutral-800 p-1.5 rounded-2xl backdrop-blur-md shadow-lg">
+                            <button onclick="window.fitFleetMap()" class="bg-[#161923] hover:bg-[#1e2230] text-neutral-200 text-[11px] font-bold px-3 py-1.5 rounded-xl transition cursor-pointer">Fit All 📍</button>
+                            <button onclick="window.fleetMasterMap.zoomIn()" class="w-8 h-8 bg-[#161923] hover:bg-[#1e2230] text-white font-black text-sm rounded-xl flex items-center justify-center transition cursor-pointer">+</button>
+                            <button onclick="window.fleetMasterMap.zoomOut()" class="w-8 h-8 bg-[#161923] hover:bg-[#1e2230] text-white font-black text-sm rounded-xl flex items-center justify-center transition cursor-pointer">-</button>
+                        </div>
+                    </div>
+                    <div class="bg-[#12141c] border border-neutral-800 p-4 rounded-3xl flex flex-col gap-2.5 shadow-xl">                        
+                        <div class="relative">                            
+                            <input type="text" id="fleet-dispatch-input" placeholder="Enter client address for instant dispatch..." oninput="window.handleFleetAddressInput(this.value)" autocomplete="off" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">                            
+                            <div id="fleet-address-suggestions" class="absolute left-0 right-0 top-full mt-1 bg-[#161923] border border-neutral-800 rounded-xl shadow-2xl z-50 hidden max-h-48 overflow-y-auto"></div>                        </div>                        
+                        <button onclick="window.handleFleetDispatch()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3.5 rounded-xl transition shadow cursor-pointer">Dispatch Job 🚀</button>                    </div>
+                </div>
+            </div>        
+        </div>
+
+        <!-- SIGN IN VIEW -->        
+        <div id="signin-view" class="w-full flex-col items-center text-center gap-2" style="display: flex;">            
+            <div class="flex flex-col items-center gap-1.5 my-4">                
+                <h2 class="font-black text-white tracking-tight flex items-center gap-3">                    
+                    <span class="text-[36px]">Welcome Back</span>                    
+                    <span class="animate-wave text-[38px]">👋</span>                </h2>                
+                <p class="text-sm text-neutral-400">Sign in to manage your live driver telemetry.</p>            </div>            
+            <div class="w-full max-w-md bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-4 shadow-xl">                
+                <div>                    
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Email Address</label>                    
+                    <input type="email" id="signin-email" placeholder="name@company.com" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">                </div>                
+                <div>                    
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Password</label>                    
+                    <div class="relative">
+                        <input type="password" id="signin-password" placeholder="••••••••" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition pr-10">                
+                        <button type="button" onclick="window.togglePasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white text-sm cursor-pointer focus:outline-none">👁️</button>
+                    </div>
+                </div>                
+                <button type="button" onclick="window.handleSignIn()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer">Sign In →</button>            </div>        
+        </div>
+
+        <!-- REGISTER VIEW -->        
+        <div id="register-view" class="w-full flex-col items-center text-center gap-2" style="display: none;">            
+            <div class="flex flex-col items-center gap-1.5 my-4">                
+                <h2 class="font-black text-white tracking-tight flex items-center gap-3 leading-none">                    
+                    <span class="text-[36px]">Get Started</span>                    
+                    <span class="animate-wave text-[38px]">👋</span>                </h2>                
+                <p class="text-sm text-neutral-400 mt-1">Create your account to start broadcasting.</p>            </div>            
+            <div class="w-full max-w-md bg-[#12141c] border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-4 shadow-xl">                
+                <div>                    
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Email Address</label>                    
+                    <input type="email" id="reg-email" placeholder="name@company.com" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">                </div>                
+                <div>                    
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Password</label>                    
+                    <input type="password" id="password-input" placeholder="••••••••" class="w-full bg-[#161923] border border-neutral-800 rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-amber-400 transition">                </div>                
+                <button onclick="window.handleRegister()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3.5 rounded-xl transition shadow-md text-center cursor-pointer">Create Account →</button>            </div>        
+        </div>
+
+    </main>
+
+    <!-- Modular Scripts -->
+    <script src="js/tracker.js"></script>
+    <script src="js/app.js"></script>
+
+    <footer class="w-full max-w-4xl mx-auto px-4 py-3 text-center border-t border-neutral-900 text-neutral-500 text-[10px]">        © 2026 SeeMyDriver. All rights reserved. Secure Cloud GPS Telemetry.    </footer>
+</body>
+</html>

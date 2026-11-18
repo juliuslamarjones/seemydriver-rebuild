@@ -1,0 +1,12 @@
+android/
+ios/
+node_modules/
+.git/
+.env
+.DS_Store
+.next
+dist
+.output
+.turbo
+.env*.local
+*.apk
