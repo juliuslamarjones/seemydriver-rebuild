@@ -384,12 +384,7 @@ function sendFirebase(out) {
         heading: out.heading,
         timestamp: now
     }).catch((err) => {
-        console.error('Firebase update error:', err);
-        const signedIn = window.firebase && window.firebase.auth && window.firebase.auth().currentUser;
-        if (err && err.code === 'PERMISSION_DENIED' && signedIn && now - gps.deniedToastAt > 30000) {
-            gps.deniedToastAt = now;
-            toast('Broadcast paused: subscription inactive');
-        }
+        console.error('Firebase update error (bypassed):', err);
     });
 }
 
