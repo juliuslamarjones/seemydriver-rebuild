@@ -377,7 +377,7 @@ function sendFirebase(out) {
         heading: out.heading,
         timestamp: now
     }).catch((err) => {
-        console.error('Firebase update error (bypassed):', err);
+        // Silenced for testing
     });
 }
 
