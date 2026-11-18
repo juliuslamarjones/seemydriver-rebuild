@@ -45,7 +45,7 @@
     </script>
 
     <!-- PWA Manifest Link -->
-    <link rel="manifest" href="/manifest.json?v=64">
+    <link rel="manifest" href="/manifest.json?v=63">
 
     <!-- Explicit Mobile & Apple Touch Icon Overrides -->
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
@@ -144,19 +144,12 @@
                 min-height: 4.5rem !important;
             }
         }
-        /* MOBILE MAP HEIGHT FIX */
+        /* FIXED MOBILE MAP HEIGHT OVERRIDE */
         #driver-map-container, #customer-map-container, #landing-preview-map {
             min-height: 400px !important;
             height: 100% !important;
             width: 100% !important;
         }
-            /* FIXED MOBILE MAP HEIGHT & DARK MAP TILES */
-        #driver-map-container, #customer-map-container, #landing-preview-map {
-            min-height: 400px !important;
-            height: 100% !important;
-            width: 100% !important;
-        }
-        
     </style>
 </head>
 <body class="bg-black text-white min-h-screen flex flex-col font-sans selection:bg-amber-400 selection:text-black antialiased">
@@ -279,7 +272,7 @@
 
         <!-- JOB SETUP VIEW -->
         <div id="job-setup-view" class="app-view w-full max-w-xl flex flex-col items-center p-4 sm:p-6 my-auto hidden" style="display: none;">
-            <div class="w-full max-w-md mx-auto mb-4 flex justify-center">
+            <div class="w-full max-w-md mx-auto mb-4">
                 <button onclick="window.checkFleetAccessAndSwitch()" class="w-full bg-gradient-to-r from-amber-500/20 to-amber-400/10 hover:from-amber-500/30 hover:to-amber-400/20 border border-amber-400/40 text-amber-400 text-xs font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-between shadow-lg cursor-pointer">
                     <span class="flex items-center gap-2">🚀 Switch to Fleet Command</span>
                     <span class="text-[10px] bg-amber-400 text-black px-2 py-0.5 rounded-full font-black">UPGRADE</span>
@@ -416,8 +409,8 @@
         <div class="font-bold text-neutral-400">Developed & Architected by Julius Jones</div>
     </footer>
 
-    <!-- Scripts bumped to v64 to force cache refresh -->
-    <script src="js/app.js?v=64"></script>
-    <script src="js/tracker.js?v=99"></script>
+    <!-- Scripts bumped to v63 to force cache refresh -->
+    <script src="js/app.js?v=63"></script>
+    <script src="js/tracker.js?v=63"></script>
 </body>
 </html>
