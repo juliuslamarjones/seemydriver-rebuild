@@ -10,7 +10,7 @@ const ENGINE_VERSION = 'v71';
 const HEADING_UP = false;
 
 // Mapbox token configuration - reads safely from window.MAPBOX_TOKEN set in index.html
-const MAPBOX_TOKEN = window.MAPBOX_TOKEN || '';
+const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
 const $ = (id) => document.getElementById(id);
