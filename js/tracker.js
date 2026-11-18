@@ -10,7 +10,7 @@ const ENGINE_VERSION = 'v71';
 const HEADING_UP = false;
 
 // Mapbox token configuration - reads safely from window.MAPBOX_TOKEN set in index.html
-const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+const MAPBOX_TOKEN = window.MAPBOX_TOKEN || '';
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
 const $ = (id) => document.getElementById(id);
@@ -224,7 +224,8 @@ window.launchLiveBroadcast = function() {
             heading: 0,
             timestamp: Date.now()
         }).catch((err) => {
-            console.error('Firebase broadcast init warning (bypassed):', err);
+            console.error('Firebase broadcast init failed:', err);
+            if (err && err.code === 'PERMISSION_DENIED') broadcastDenied();
         });
     }
 
@@ -235,7 +236,14 @@ window.launchLiveBroadcast = function() {
 };
 
 function broadcastDenied() {
-    console.warn('Broadcast permission check bypassed for testing.');
+    LS.removeItem('smd_active_broadcast');
+    LS.removeItem('smd_session_id');
+    LS.removeItem('smd_started_at');
+    window.activeSessionId = undefined;
+    try { window.stopRealTimeTracking(); } catch (e) {}
+    try { teardownDriver(); } catch (e) {}
+    alert('Your broadcast could not start. Your free trial may have ended, or your account has not been verified yet. Please sign out and sign back in.');
+    window.switchView('job-setup-view');
 }
 
 let geocodeTimer = null;
@@ -289,8 +297,7 @@ window.handleAddressInput = function (value) {
     geocodeTimer = setTimeout(async () => {
         try {
             const token = window.MAPBOX_TOKEN || MAPBOX_TOKEN;
-            const activeToken = token || 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
-            const url = 'https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(query) + '.json?access_token=' + activeToken + '&autocomplete=true&types=address,poi&limit=5';
+            const url = 'https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(query) + '.json?access_token=' + token + '&autocomplete=true&types=address,poi&limit=5';
             const res = await fetch(url);
             let data = null;
             try { data = await res.json(); } catch (e) { data = null; }
@@ -377,7 +384,12 @@ function sendFirebase(out) {
         heading: out.heading,
         timestamp: now
     }).catch((err) => {
-        // Silenced for testing
+        console.error('Firebase update error:', err);
+        const signedIn = window.firebase && window.firebase.auth && window.firebase.auth().currentUser;
+        if (err && err.code === 'PERMISSION_DENIED' && signedIn && now - gps.deniedToastAt > 30000) {
+            gps.deniedToastAt = now;
+            toast('Broadcast paused: subscription inactive');
+        }
     });
 }
 
