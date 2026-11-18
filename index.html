@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SeeMyDriver - Fleet Command Center</title>
+    <title>SeeMyDriver - Solo & Fleet Command</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
@@ -12,25 +12,56 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 </head>
 <body class="bg-black text-white h-screen w-screen overflow-hidden flex flex-col font-sans antialiased">
-    <header class="w-full border-b border-neutral-900 bg-black/80 backdrop-blur-md px-4 py-3.5 flex items-center justify-between shrink-0 h-[65px]">
+    <!-- TOP HEADER -->
+    <header class="w-full border-b border-neutral-900 bg-black/80 backdrop-blur-md px-4 py-3.5 flex items-center justify-between shrink-0 h-[65px] z-50">
         <div class="flex items-center gap-3">
             <div class="w-10 h-10 bg-amber-400 rounded-xl flex items-center justify-center font-black text-black text-xl shadow-[0_0_20px_rgba(251,191,36,0.3)]">👀</div>
             <div class="flex flex-col">
                 <span class="font-black text-base text-white">SeeMy<span class="text-amber-400">Driver</span></span>
-                <span class="text-[10px] font-mono text-neutral-400">Fleet Command Center v76</span>
+                <span id="view-title-label" class="text-[10px] font-mono text-neutral-400">Solo Broadcast Mode</span>
             </div>
         </div>
         <div class="flex items-center gap-3">
-            <div id="firebase-status" class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5 shadow-inner">
+            <div id="firebase-status" class="hidden md:flex bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold px-3 py-1 rounded-full items-center gap-1.5 shadow-inner">
                 <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> Secure SDK Live
             </div>
-            <a href="/" class="bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800 text-xs font-bold px-3.5 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5">
-                ✕ Close Fleet
-            </a>
+            <button id="btn-toggle-view" onclick="window.toggleAppView()" class="bg-amber-400 hover:bg-amber-300 text-black font-black text-xs px-4 py-2 rounded-xl transition cursor-pointer shadow-lg">
+                🚀 Switch to Fleet Command
+            </button>
         </div>
     </header>
 
-    <main class="flex-1 flex flex-col md:flex-row w-full h-[calc(100vh-65px)] overflow-hidden">`n        <div class="w-full md:flex-1 h-[400px] md:h-full relative bg-neutral-950 flex flex-col min-w-0 order-first md:order-last">
+    <!-- VIEW 1: SOLO LANDING / BROADCAST CONFIG -->
+    <div id="view-solo" class="flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto bg-[#08090d]">
+        <div class="w-full max-w-md bg-[#12141c] border border-neutral-800 rounded-3xl p-6 flex flex-col gap-4 shadow-2xl">
+            <div class="text-center mb-1">
+                <h1 class="text-lg font-black text-white">Driver Broadcast Sign-In</h1>
+                <p class="text-xs text-neutral-400 mt-0.5">Start your solo live tracking session instantly.</p>
+            </div>
+            
+            <div class="flex flex-col gap-3">
+                <div>
+                    <label class="text-[11px] text-neutral-400 font-medium block mb-1">Your Driver Name</label>
+                    <input type="text" id="solo-driver-name" value="Sonny" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-400 transition" />
+                </div>
+                <div>
+                    <label class="text-[11px] text-neutral-400 font-medium block mb-1">Your Phone Number</label>
+                    <input type="text" id="solo-driver-phone" value="8329025417" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-400 transition" />
+                </div>
+                <div>
+                    <label class="text-[11px] text-neutral-400 font-medium block mb-1">Destination Address</label>
+                    <input type="text" id="solo-destination" value="3455 FM 1960 Rd West, Houston, TX" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-400 transition" />
+                </div>
+            </div>
+
+            <button type="button" onclick="window.startSoloBroadcast()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-3.5 rounded-xl transition shadow-lg cursor-pointer flex items-center justify-center gap-2 mt-2">
+                🟢 Go Live & Broadcast Location
+            </button>
+        </div>
+    </div>
+
+    <!-- VIEW 2: FLEET COMMAND CENTER (Hidden by default) -->
+    <main id="view-fleet" class="flex-1 flex flex-col md:flex-row w-full h-[calc(100vh-65px)] overflow-hidden hidden">
         <aside class="w-full md:w-[420px] bg-[#0c0d12] border-r border-neutral-900 flex flex-col h-full shrink-0 overflow-y-visible p-4 gap-4 relative z-30">
             <div class="bg-[#12141c] border border-neutral-800 rounded-2xl p-4 flex flex-col gap-3 shadow-lg shrink-0 relative">
                 <div class="flex items-center justify-between">
@@ -91,7 +122,8 @@
             </div>
         </aside>
 
-        <div class="flex-1 h-full relative bg-neutral-950 flex flex-col min-w-0">
+        <!-- MAP CONTAINER WITH EXPLICIT MOBILE HEIGHT -->
+        <div class="w-full md:flex-1 h-[400px] md:h-full relative bg-neutral-950 flex flex-col min-w-0 order-first md:order-last">
             <div id="fleet-map-container" class="w-full h-full absolute inset-0"></div>
             <div class="absolute top-4 left-4 z-10 bg-black/85 border border-neutral-800 rounded-xl px-3.5 py-2 font-mono text-xs font-bold text-amber-400 backdrop-blur-md shadow-2xl flex items-center gap-2 pointer-events-none">
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
@@ -120,75 +152,78 @@
         const FULL_MAPBOX_TOKEN = "pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg";
         mapboxgl.accessToken = FULL_MAPBOX_TOKEN;
 
-        let fleetMap = new mapboxgl.Map({
-            container: "fleet-map-container",
-            style: {
-                version: 8,
-                sources: { "osm": { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256 } },
-                layers: [{ id: "osm-raster", type: "raster", source: "osm" }]
-            },
-            center: [-95.2821, 30.0024],
-            zoom: 13,
-            pitch: 45,
-            bearing: -10,
-            antialias: true
-        });
-        fleetMap.addControl(new mapboxgl.NavigationControl(), "top-right");
-
+        let fleetMap = null;
         let activeMarkers = {};
         let selectedCoords = { lat: 30.0024, lng: -95.2821 };
         const companyUuid = "default_fleet";
+        let isFleetView = false;
 
-        const destInput = document.getElementById("input-destination");
-        const suggestionsBox = document.getElementById("geocoder-suggestions");
-        let debounceTimer;
+        window.toggleAppView = function() {
+            isFleetView = !isFleetView;
+            const soloView = document.getElementById("view-solo");
+            const fleetView = document.getElementById("view-fleet");
+            const toggleBtn = document.getElementById("btn-toggle-view");
+            const titleLabel = document.getElementById("view-title-label");
 
-        destInput.addEventListener("input", (e) => {
-            const query = e.target.value.trim();
-            clearTimeout(debounceTimer);
-            if (query.length < 3) {
-                suggestionsBox.classList.add("hidden");
-                return;
-            }
+            if (isFleetView) {
+                soloView.classList.add("hidden");
+                fleetView.classList.remove("hidden");
+                toggleBtn.textContent = "✕ Close Fleet";
+                toggleBtn.className = "bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800 font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer shadow-lg";
+                titleLabel.textContent = "Fleet Command Center v76";
 
-            debounceTimer = setTimeout(async () => {
-                try {
-                    const geocodeUrl = "https://api.mapbox.com/geocoding/v5/mapbox.places/" + encodeURIComponent(query) + ".json?access_token=" + FULL_MAPBOX_TOKEN + "&autocomplete=true&limit=5";
-                    const res = await fetch(geocodeUrl);
-                    const data = await res.json();
-                    
-                    suggestionsBox.innerHTML = "";
-                    if (data && data.features && data.features.length > 0) {
-                        data.features.forEach(feature => {
-                            const item = document.createElement("div");
-                            item.className = "px-3 py-2.5 text-xs text-neutral-200 hover:bg-neutral-800 hover:text-amber-400 cursor-pointer border-b border-neutral-900/50 truncate";
-                            item.textContent = feature.place_name;
-                            item.onclick = () => {
-                                destInput.value = feature.place_name;
-                                selectedCoords = {
-                                    lng: parseFloat(feature.center[0]),
-                                    lat: parseFloat(feature.center[1])
-                                };
-                                suggestionsBox.classList.add("hidden");
-                                fleetMap.flyTo({ center: [selectedCoords.lng, selectedCoords.lat], zoom: 15, pitch: 45, duration: 1000 });
-                            };
-                            suggestionsBox.appendChild(item);
+                if (!fleetMap) {
+                    setTimeout(() => {
+                        fleetMap = new mapboxgl.Map({
+                            container: "fleet-map-container",
+                            style: {
+                                version: 8,
+                                sources: { "osm": { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256 } },
+                                layers: [{ id: "osm-raster", type: "raster", source: "osm" }]
+                            },
+                            center: [-95.2821, 30.0024],
+                            zoom: 13,
+                            pitch: 45,
+                            bearing: -10,
+                            antialias: true
                         });
-                        suggestionsBox.classList.remove("hidden");
-                    } else {
-                        suggestionsBox.classList.add("hidden");
-                    }
-                } catch (err) {
-                    console.error("Geocoder error:", err);
+                        fleetMap.addControl(new mapboxgl.NavigationControl(), "top-right");
+                        fleetMap.resize();
+                    }, 100);
+                } else {
+                    setTimeout(() => { fleetMap.resize(); }, 100);
                 }
-            }, 300);
-        });
-
-        document.addEventListener("click", (e) => {
-            if (!destInput.contains(e.target) && !suggestionsBox.contains(e.target)) {
-                suggestionsBox.classList.add("hidden");
+            } else {
+                fleetView.classList.add("hidden");
+                soloView.classList.remove("hidden");
+                toggleBtn.textContent = "🚀 Switch to Fleet Command";
+                toggleBtn.className = "bg-amber-400 hover:bg-amber-300 text-black font-black text-xs px-4 py-2 rounded-xl transition cursor-pointer shadow-lg";
+                titleLabel.textContent = "Solo Broadcast Mode";
             }
-        });
+        };
+
+        window.startSoloBroadcast = async function() {
+            const driverName = (document.getElementById("solo-driver-name").value || "Driver").trim();
+            const destAddress = document.getElementById("solo-destination").value || "Destination";
+            const sessionId = "driver_" + driverName.toLowerCase().replace(/[^a-z0-9]/g, "_");
+
+            const sessionData = {
+                driverName,
+                destAddress,
+                lat: selectedCoords.lat,
+                lng: selectedCoords.lng,
+                speed: 0,
+                heading: 0,
+                timestamp: Date.now()
+            };
+
+            try {
+                await db.ref("broadcasts/" + sessionId).set(sessionData);
+                alert("🟢 Solo broadcast live for " + driverName + "!");
+            } catch (err) {
+                alert("Broadcast write failed: " + err.message);
+            }
+        };
 
         function createTruckSvgMarker() {
             const el = document.createElement("div");
@@ -203,25 +238,23 @@
             return el;
         }
 
-        // DIRECT RENDER HELPER (Bypasses Firebase listener wait state)
         function renderTruckDirectly(sessionId, sessionData) {
             const lat = parseFloat(sessionData.lat);
             const lng = parseFloat(sessionData.lng);
             if (isNaN(lat) || isNaN(lng)) return;
 
-            if (activeMarkers[sessionId]) {
-                activeMarkers[sessionId].marker.setLngLat([lng, lat]);
-            } else {
-                const el = createTruckSvgMarker();
-                const marker = new mapboxgl.Marker(el).setLngLat([lng, lat]).addTo(fleetMap);
-                activeMarkers[sessionId] = { marker };
-                console.log("🚚 [DIRECT RENDER] Truck marker rendered instantly for:", sessionId);
+            if (fleetMap) {
+                if (activeMarkers[sessionId]) {
+                    activeMarkers[sessionId].marker.setLngLat([lng, lat]);
+                } else {
+                    const el = createTruckSvgMarker();
+                    const marker = new mapboxgl.Marker(el).setLngLat([lng, lat]).addTo(fleetMap);
+                    activeMarkers[sessionId] = { marker };
+                }
             }
 
-            // Update roster card
             const rosterContainer = document.getElementById("fleet-roster-container");
             if (rosterContainer) {
-                // Remove existing card for this session if any
                 const existingCard = document.getElementById("card_" + sessionId);
                 if (existingCard) existingCard.remove();
 
@@ -240,89 +273,44 @@
 
         window.handleDeployTruckOnly = async function() {
             const driverName = (document.getElementById("input-driver-name").value || "Driver").trim();
-            const destAddress = destInput.value || "Destination";
+            const destAddress = (document.getElementById("input-destination").value || "Destination").trim();
             const sessionId = "driver_" + driverName.toLowerCase().replace(/[^a-z0-9]/g, "_");
 
             const sessionData = {
                 driverName,
                 destAddress,
-                lat: parseFloat(selectedCoords.lat),
-                lng: parseFloat(selectedCoords.lng),
+                lat: selectedCoords.lat,
+                lng: selectedCoords.lng,
                 speed: 0,
                 heading: 0,
                 timestamp: Date.now()
             };
 
-            console.log("🚀 Attempting write & direct render for:", sessionId, sessionData);
-            
-            // Render immediately on map
             renderTruckDirectly(sessionId, sessionData);
 
             try {
                 await db.ref("broadcasts/" + sessionId).set(sessionData);
-                console.log("✅ Successfully wrote to Firebase RTDB!");
             } catch (err) {
-                console.error("❌ Firebase write FAILED:", err);
+                console.error("Firebase write error:", err);
             }
 
-            fleetMap.flyTo({ center: [selectedCoords.lng, selectedCoords.lat], zoom: 15, pitch: 45, duration: 1500 });
+            if (fleetMap) {
+                fleetMap.flyTo({ center: [selectedCoords.lng, selectedCoords.lat], zoom: 15, pitch: 45, duration: 1500 });
+            }
         };
 
         window.handleDeployAndTextDriver = async function() {
-            const driverName = (document.getElementById("input-driver-name").value || "Driver").trim();
+            window.handleDeployTruckOnly();
             const driverPhone = document.getElementById("input-driver-phone").value || "";
-            const destAddress = destInput.value || "Destination";
+            const destAddress = document.getElementById("input-destination").value || "";
             const clientPhone = document.getElementById("input-customer-phone").value || "";
+            const driverName = document.getElementById("input-driver-name").value || "Driver";
             const sessionId = "driver_" + driverName.toLowerCase().replace(/[^a-z0-9]/g, "_");
 
-            const sessionData = {
-                driverName,
-                destAddress,
-                lat: parseFloat(selectedCoords.lat),
-                lng: parseFloat(selectedCoords.lng),
-                speed: 0,
-                heading: 0,
-                timestamp: Date.now()
-            };
-
-            renderTruckDirectly(sessionId, sessionData);
-
-            try {
-                await db.ref("broadcasts/" + sessionId).set(sessionData);
-            } catch (err) {
-                console.error("❌ Firebase write error:", err);
-            }
-
-            fleetMap.flyTo({ center: [selectedCoords.lng, selectedCoords.lat], zoom: 15, pitch: 45, duration: 1500 });
-
-            const driverBroadcastUrl = window.location.origin + "/fleet/driver-broadcast.html?comp=" + companyUuid + "&session=" + sessionId + "&driver=" + encodeURIComponent(driverName) + "&dest=" + encodeURIComponent(destAddress) + "&lat=" + selectedCoords.lat + "&lng=" + selectedCoords.lng + "&phone=" + encodeURIComponent(clientPhone);
+            const driverBroadcastUrl = window.location.origin + "/fleet/driver-broadcast.html?comp=" + companyUuid + "&session=" + sessionId;
             const smsBody = encodeURIComponent("SeeMyDriver Dispatch: Your destination is " + destAddress + ". Open your driver broadcast console here: " + driverBroadcastUrl);
             window.open("sms:" + driverPhone + "?body=" + smsBody);
         };
-
-        document.getElementById("btn-fit-all").addEventListener("click", () => {
-            const keys = Object.keys(activeMarkers);
-            if (keys.length === 0) return;
-            const bounds = new mapboxgl.LngLatBounds();
-            keys.forEach(k => bounds.extend(activeMarkers[k].marker.getLngLat()));
-            fleetMap.fitBounds(bounds, { padding: 80, maxZoom: 16, duration: 1000 });
-        });
-
-        document.getElementById("btn-reset-view").addEventListener("click", () => {
-            fleetMap.flyTo({ center: [-95.2821, 30.0024], zoom: 13, pitch: 45, bearing: -10, duration: 1000 });
-        });
-
-        document.getElementById("btn-purge-all").addEventListener("click", async () => {
-            if (confirm("Are you sure you want to purge all active sessions?")) {
-                await db.ref("broadcasts").remove();
-                Object.keys(activeMarkers).forEach(k => {
-                    activeMarkers[k].marker.remove();
-                });
-                activeMarkers = {};
-                document.getElementById("fleet-roster-container").innerHTML = "";
-                document.getElementById("active-count").textContent = "0 Active";
-            }
-        });
 
         window.terminateSession = async function(sessionId) {
             await db.ref("broadcasts/" + sessionId).remove();
