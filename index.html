@@ -16,19 +16,87 @@
         window.MAPBOX_TOKEN = atob('cGsuZXlKMUlpQm9jU0ZvWkhsdmJuWnBjSFZqWlhNaUxDSmhiR2NpT2lKS1pXNWhiV1V0YVhKbGNpSXNJbTVoYldVbE9pSjJZWE5qY21WdVpXUXNJbUYwYVc5dWN5SXNJbkpsY0NJNklpSk5aV1JsY205cFpDSTZJbk4wYVhSMFpXUXNJbWx1Ym5SaGNtUnpJanBiSWwwPS4gd3E4RUFOcDh2b29aeTNnRTJvNEtyZw==');
     </script>
 
-    <!-- Tailwind CSS CDN -->
+    <!-- Embedded SafeStorage & Firebase Init -->
+    <script>
+        window.SafeStorage = {
+            getItem(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
+            setItem(key, val) { try { localStorage.setItem(key, val); } catch (e) {} },
+            removeItem(key) { try { localStorage.removeItem(key); } catch (e) {} },
+            clear() { try { localStorage.clear(); } catch (e) {} }
+        };
+        const firebaseConfig = { apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI", authDomain: "seemydriver-prod.firebaseapp.com", databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com", projectId: "seemydriver-prod", storageBucket: "seemydriver-prod.firebasestorage.app", messagingSenderId: "16366013329", appId: "1:16366013329:web:7e993e6ee37f940a04a064"};
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+        window.db = firebase.database();
+    </script>
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+
     <link rel="stylesheet" href="css/style.css">
+    <style>
+        .mapboxgl-popup-content { background: #12141c !important; color: #fff !important; border-radius: 12px; border: 1px solid #262626; }
+        .pro-vehicle-marker { background: transparent !important; border: none !important; }
+        .mapboxgl-ctrl-top-right { z-index: 9999 !important; pointer-events: auto !important; }
+        .mapboxgl-ctrl-group { background: #000000 !important; border: 1px solid #262626 !important; border-radius: 12px !important; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important; pointer-events: auto !important; }
+        .mapboxgl-ctrl-group button { background-color: #000000 !important; cursor: pointer !important; pointer-events: auto !important; touch-action: manipulation !important; -webkit-tap-highlight-color: transparent; }
+        .mapboxgl-ctrl-group button + button { border-top: 1px solid #262626 !important; }
+        .mapboxgl-ctrl-icon { filter: brightness(0) saturate(100%) invert(84%) sepia(49%) saturate(543%) hue-rotate(358deg) brightness(102%) contrast(102%) !important; }
+        #driver-3d-btn { touch-action: manipulation !important; -webkit-tap-highlight-color: transparent; pointer-events: auto !important; }
+        #brand-logo, .brand-logo { width: 4rem !important; height: 4rem !important; min-width: 4rem !important; min-height: 4rem !important; }
+        @media (min-width: 640px) { #brand-logo, .brand-logo { width: 4.5rem !important; height: 4.5rem !important; min-width: 4.5rem !important; min-height: 4.5rem !important; } }
+        #driver-map-container, #customer-map-container, #landing-preview-map { min-height: 400px !important; height: 100% !important; width: 100% !important; }
+    </style>
 </head>
-<body class="bg-black text-white min-h-screen flex flex-col font-sans">
+<body class="bg-black text-white min-h-screen flex flex-col font-sans selection:bg-amber-400 selection:text-black antialiased">
+
+    <header class="w-full border-b border-neutral-900 bg-black/80 backdrop-blur-md sticky top-0 z-50 px-3 sm:px-8 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3 cursor-pointer" onclick="window.switchView('landing', true)">
+            <div id="brand-logo" class="w-16 h-16 sm:w-20 sm:h-20 bg-amber-400 rounded-2xl flex items-center justify-center shadow-[0_0_25px_rgba(251,191,36,0.5)] shrink-0 overflow-hidden">
+                <span class="text-black font-black text-2xl sm:text-3xl">👀</span>
+            </div>
+            <span id="brand-name" class="font-black tracking-tight text-3xl sm:text-4xl text-white">See<span class="text-amber-400">MyDriver</span></span>
+        </div>
+        <div id="header-nav-actions" class="flex items-center gap-2 shrink-0"></div>
+    </header>
+
     <main class="flex-1 flex flex-col items-center justify-start w-full relative">
-        <div class="p-8 text-center">
-            <h1 class="text-3xl font-black text-amber-400">SeeMyDriver Live</h1>
-            <p class="text-neutral-400 mt-2">Initializing telemetry...</p>
+        <div id="landing-view" class="app-view w-full max-w-5xl flex flex-col items-center text-center gap-10 py-4 sm:py-8 px-3 sm:px-4">
+            <h1 class="text-4xl sm:text-7xl font-black tracking-tight text-white leading-[1.08] max-w-3xl">
+                Stop asking <span class="text-amber-400">"Where are you?"</span>
+            </h1>
+            <button onclick="window.switchView('job-setup-view')" class="bg-amber-400 text-black font-black py-4 px-6 rounded-2xl cursor-pointer">Get Started Free →</button>
+        </div>
+
+        <div id="job-setup-view" class="app-view w-full max-w-xl flex flex-col items-center p-4 sm:p-6 my-auto" style="display: none;">
+            <div class="w-full bg-[#12141c] border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col gap-6 text-left">
+                <div class="flex flex-col gap-4">
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Driver Name</label>
+                        <input type="text" id="job-driver-name" placeholder="Driver Name" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400">
+                    </div>
+                    <div class="flex flex-col gap-1.5 relative">
+                        <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Destination Address *</label>
+                        <input type="text" id="job-cust-address" placeholder="Enter street address..." oninput="window.handleAddressInput(this.value)" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400" autocomplete="off">
+                        <div id="address-suggestions" class="hidden absolute top-full left-0 right-0 mt-1.5 bg-[#161923] border border-neutral-800 rounded-xl shadow-2xl max-h-56 overflow-y-auto z-50"></div>
+                    </div>
+                    <button onclick="window.launchLiveBroadcast()" class="w-full bg-amber-400 text-black font-black text-sm py-4 rounded-2xl cursor-pointer">Start Cloud Broadcast 🚀</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="active-broadcast-view" class="app-view w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4" style="display: none;">
+            <div class="w-full max-w-4xl h-[450px] bg-neutral-900 border border-neutral-800 rounded-3xl relative shadow-2xl flex flex-col overflow-hidden">
+                <div id="driver-map-container" class="w-full h-full rounded-3xl overflow-hidden z-10"></div>
+            </div>
         </div>
     </main>
+
     <script src="js/app.js"></script>
     <script src="js/tracker.js"></script>
 </body>
