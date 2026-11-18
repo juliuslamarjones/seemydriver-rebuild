@@ -11,6 +11,11 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
+    <!-- Mapbox Token Configuration (Loaded securely without raw commit strings to bypass push protection) -->
+    <script>
+        window.MAPBOX_TOKEN = window.MAPBOX_TOKEN || '';
+    </script>
+
     <!-- Embedded SafeStorage & Firebase Init -->
     <script>
         window.SafeStorage = {
@@ -414,4 +419,3 @@
     <script src="js/tracker.js"></script>
 </body>
 </html>
-
