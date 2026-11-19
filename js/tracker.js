@@ -843,7 +843,7 @@ window.initDriverActiveMap = function () {
         map: map,
         engine: engine,
         timer: setInterval(() => {
-            if (!gps.last || Date.now() - gps.last.t > 8000) setBadge('GPS: waiting for signalâ€¦', false);
+            if (!gps.last || Date.now() - gps.last.t > 8000) setBadge('GPS: waiting for signal…', false);
         }, 2000),
         handleFix(fix) {
             const out = engine.feed(fix);
@@ -872,7 +872,7 @@ window.toggleDriver3D = function () {
     
     const btn = document.getElementById('driver-3d-btn');
     if (btn) {
-        btn.textContent = window.is3DMode ? 'ðŸŒ 3D: ON' : 'ðŸŒ 3D: OFF';
+        btn.textContent = window.is3DMode ? '🌐 3D: ON' : '🌐 3D: OFF';
     }
     toast(window.is3DMode ? '3D View Enabled' : '2D Top-Down Enabled');
 };
@@ -1049,7 +1049,7 @@ window.initCustomerMapLive = function () {
 
         const lat = parseFloat(data.lat), lng = parseFloat(data.lng);
         if (!isFinite(lat) || !isFinite(lng)) {
-            setPill('Waiting for the driverâ€™s locationâ€¦', 'warn');
+            setPill('Waiting for the driverâ€™s location…', 'warn');
             return;
         }
 
@@ -1138,3 +1138,112 @@ document.addEventListener('DOMContentLoaded', () => {
 setInterval(() => { try { if (window.driverMap && typeof window.driverMap.resize === 'function') window.driverMap.resize(); if (typeof map !== 'undefined' && map && typeof map.resize === 'function') map.resize(); } catch (e) {} }, 600);
 
 setInterval(function(){ try { if (window.driverMap && window.driverMap.resize) window.driverMap.resize(); if (typeof map !== 'undefined' && map && map.resize) map.resize(); } catch(e){} }, 600);
+
+(function() {
+    const TOKEN = window.MAPBOX_TOKEN || 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+    if (window.mapboxgl) mapboxgl.accessToken = TOKEN;
+
+    let liveLng = null;
+    let liveLat = null;
+    let hasLiveFix = false;
+
+    function syncLiveGps() {
+        if (window.currentCoords && typeof window.currentCoords.lng === 'number' && typeof window.currentCoords.lat === 'number') {
+            liveLng = window.currentCoords.lng;
+            liveLat = window.currentCoords.lat;
+            hasLiveFix = true;
+        }
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    liveLng = pos.coords.longitude;
+                    liveLat = pos.coords.latitude;
+                    hasLiveFix = true;
+                    window.currentCoords = { lat: liveLat, lng: liveLng };
+                    if (window._soloMap && window._soloTruckMarker) {
+                        window._soloTruckMarker.setLngLat([liveLng, liveLat]);
+                        window._soloMap.setCenter([liveLng, liveLat]);
+                    }
+                },
+                function() {},
+                { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+            );
+        }
+    }
+
+    function ensureSoloMapAndTruck() {
+        const container = document.getElementById('driver-map-container');
+        if (!container || !window.mapboxgl) return;
+        container.style.minHeight = '420px';
+        container.style.height = '450px';
+        container.style.width = '100%';
+
+        syncLiveGps();
+        const centerPt = hasLiveFix ? [liveLng, liveLat] : [0, 0];
+
+        if (!window._soloMap && typeof mapboxgl.Map === 'function') {
+            window._soloMap = new mapboxgl.Map({
+                container: 'driver-map-container',
+                style: {
+                    version: 8,
+                    sources: {
+                        osm: {
+                            type: 'raster',
+                            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                            tileSize: 256
+                        }
+                    },
+                    layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+                },
+                center: centerPt,
+                zoom: hasLiveFix ? 15 : 2
+            });
+
+            const el = document.createElement('div');
+            el.innerHTML = '<div style="width:36px;height:36px;border-radius:9999px;background:#fbbf24;color:#000;display:flex;align-items:center;justify-content:center;font-weight:900;border:2px solid #000;box-shadow:0 4px 12px rgba(0,0,0,.7);">🚚</div>';
+            window._soloTruckMarker = new mapboxgl.Marker(el).setLngLat(centerPt).addTo(window._soloMap);
+        } else if (window._soloMap) {
+            window._soloMap.resize();
+            if (hasLiveFix && window._soloTruckMarker) {
+                window._soloTruckMarker.setLngLat([liveLng, liveLat]);
+            }
+        }
+    }
+
+    window.endSoloBroadcast = function() {
+        try { if (typeof window.stopRealTimeTracking === 'function') window.stopRealTimeTracking(); } catch (e) {}
+        try {
+            localStorage.removeItem('smd_active_broadcast');
+            localStorage.removeItem('smd_session_id');
+            localStorage.removeItem('smd_started_at');
+        } catch (e) {}
+        window.activeSessionId = null;
+        if (typeof window.switchView === 'function') {
+            window.switchView('job-setup-view', true);
+        } else {
+            const b = document.getElementById('active-broadcast-view');
+            const s = document.getElementById('job-setup-view');
+            if (b) b.style.display = 'none';
+            if (s) s.style.display = 'flex';
+        }
+    };
+
+    document.addEventListener('click', function(ev) {
+        const btn = ev.target.closest('button');
+        if (!btn) return;
+        const label = (btn.textContent || '').toLowerCase();
+        if (label.includes('end broadcast')) {
+            ev.preventDefault();
+            window.endSoloBroadcast();
+        } else if (label.includes('start cloud broadcast')) {
+            setTimeout(ensureSoloMapAndTruck, 250);
+            setTimeout(ensureSoloMapAndTruck, 900);
+        }
+    }, true);
+
+    setInterval(function() {
+        const activeView = document.getElementById('active-broadcast-view');
+        const isVisible = activeView && getComputedStyle(activeView).display !== 'none';
+        if (isVisible) ensureSoloMapAndTruck();
+    }, 800);
+})();
