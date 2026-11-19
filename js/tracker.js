@@ -198,7 +198,14 @@ function plugin(name) {
 }
 
 function setStatus(text, ok) {
-    document.querySelectorAll('.smd-gps-badge').forEach((el) => { el.textContent = text; el.style.color = ok ? '#fbbf24' : '#f87171'; });
+    document.querySelectorAll('.smd-gps-badge, #active-broadcast-view div').forEach((el) => {
+        if (!el.classList.contains('smd-gps-badge')) {
+            const raw = (el.textContent || '').trim();
+            if (!/^GPS[:\s\u00B1]/i.test(raw) || el.children.length > 0) return;
+        }
+        el.textContent = text;
+        el.style.color = ok ? '#fbbf24' : '#f87171';
+    });
 }
 
 const fromWeb = (p) => ({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, speed: p.coords.speed, heading: p.coords.heading, t: p.timestamp || Date.now() });
@@ -1178,7 +1185,7 @@ window.initCustomerMapLive = function () {
         const cached = (window.__smdGps && window.__smdGps.last && isFinite(window.__smdGps.last.lat) && isFinite(window.__smdGps.last.lng))
             ? window.__smdGps.last : null;
 
-        const startCenter = cached ? [cached.lng, cached.lat] : (dest ? [dest.lng, dest.lat] : [0, 0]);
+        const startCenter = cached ? [cached.lng, cached.lat] : (dest ? [dest.lng, dest.lat] : [-95.3698, 29.7604]);
         const startZoom = cached ? 15 : (dest ? 12 : 2);
 
         const map = new mapboxgl.Map({
@@ -1258,8 +1265,13 @@ window.initCustomerMapLive = function () {
         let watchId = null;
         if (navigator.geolocation) {
             try {
-                navigator.geolocation.getCurrentPosition(handlePos, handleErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 });
-                watchId = navigator.geolocation.watchPosition(handlePos, handleErr, { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 });
+                navigator.geolocation.getCurrentPosition(handlePos, (err) => {
+                    handleErr(err);
+                    try {
+                        navigator.geolocation.getCurrentPosition(handlePos, handleErr, { enableHighAccuracy: false, maximumAge: 15000, timeout: 10000 });
+                    } catch (e2) {}
+                }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 8000 });
+                watchId = navigator.geolocation.watchPosition(handlePos, handleErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
             } catch (e) {}
         }
 
