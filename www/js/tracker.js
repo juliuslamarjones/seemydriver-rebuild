@@ -1430,3 +1430,77 @@ window.initCustomerMapLive = function () {
         setTimeout(() => { try { map.resize(); } catch (e) {} }, 250);
     };
 })();
+/* --- Persistent GPS Accuracy Badge & Signal Threshold Handler --- */
+(function () {
+    let hasLiveLock = false;
+    let lastAccMeters = null;
+
+    function formatAccuracyBadge(accMeters, isError) {
+        if (isError === 'denied') return 'GPS: permission denied';
+        if (typeof accMeters === 'number' && isFinite(accMeters) && accMeters > 0) {
+            const rounded = Math.round(accMeters);
+            if (isError === 'transient') {
+                return 'GPS \u00B1' + rounded + ' m (stale)';
+            }
+            if (rounded > 300) {
+                return 'GPS \u00B1' + rounded + ' m (weak)';
+            }
+            return 'GPS \u00B1' + rounded + ' m';
+        }
+        return 'GPS: searching\u2026';
+    }
+
+    function paintBadges(text, good) {
+        document.querySelectorAll('.smd-gps-badge').forEach((el) => {
+            el.textContent = text;
+            el.style.color = good ? '#fbbf24' : '#f87171';
+        });
+    }
+
+    const origInitMap = window.initDriverActiveMap;
+    if (typeof origInitMap === 'function') {
+        window.initDriverActiveMap = function () {
+            hasLiveLock = false;
+            lastAccMeters = null;
+            const out = origInitMap.apply(this, arguments);
+
+            if (navigator.geolocation) {
+                const syncBadge = function (pos) {
+                    if (!pos || !pos.coords) return;
+                    const acc = (typeof pos.coords.accuracy === 'number' && isFinite(pos.coords.accuracy))
+                        ? pos.coords.accuracy : 50;
+                    hasLiveLock = true;
+                    lastAccMeters = acc;
+                    paintBadges(formatAccuracyBadge(acc, null), acc <= 300);
+                };
+
+                const syncErr = function (err) {
+                    if (err && err.code === 1) {
+                        paintBadges(formatAccuracyBadge(null, 'denied'), false);
+                        return;
+                    }
+                    if (hasLiveLock && lastAccMeters !== null) {
+                        paintBadges(formatAccuracyBadge(lastAccMeters, 'transient'), false);
+                    } else {
+                        paintBadges(formatAccuracyBadge(null, null), false);
+                    }
+                };
+
+                try {
+                    navigator.geolocation.getCurrentPosition(syncBadge, syncErr, {
+                        enableHighAccuracy: true,
+                        maximumAge: 0,
+                        timeout: 12000
+                    });
+                    navigator.geolocation.watchPosition(syncBadge, syncErr, {
+                        enableHighAccuracy: true,
+                        maximumAge: 2000,
+                        timeout: 15000
+                    });
+                } catch (e) {}
+            }
+
+            return out;
+        };
+    }
+})();
