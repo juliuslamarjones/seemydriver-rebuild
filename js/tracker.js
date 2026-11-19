@@ -1488,7 +1488,8 @@ window.initCustomerMapLive = function () {
                 lastRouteFetch = Date.now();
                 queryOsrm(lat, lng, dLat, dLng).then((coords) => {
                     if (coords && coords.length) drawRoute(map, coords);
+                });
+            }
         });
     };
-})();
 })();
