@@ -5,7 +5,7 @@
 (function () {
 'use strict';
 
-const LS = window.SafeStorage;
+const LS = window.SafeStorage || window.localStorage;
 const $ = (id) => document.getElementById(id);
 const MPS_TO_MPH = 2.23694;
 const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -112,7 +112,7 @@ window.handleAddressInput = async function(value) {
     geocodeTimer = setTimeout(async () => {
         try {
             // Mapbox forward geocoding: exact house numbers; results biased toward where the driver is
-            const prox = (gps.last && isFinite(gps.last.lat)) ? '&proximity=' + gps.last.lng + ',' + gps.last.lat : '';
+            const prox = (typeof gps !== 'undefined' && gps.last && isFinite(gps.last.lat)) ? '&proximity=' + gps.last.lng + ',' + gps.last.lat : '&proximity=-95.3698,29.7604';
             const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&autocomplete=true&types=address,poi&limit=5${prox}`);
             const data = await res.json();
             suggestions.innerHTML = '';
