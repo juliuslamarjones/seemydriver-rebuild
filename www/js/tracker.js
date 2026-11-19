@@ -1492,3 +1492,5 @@ window.initCustomerMapLive = function () {
             }
         });
 })();
+    };
+})();
