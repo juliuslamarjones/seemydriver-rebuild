@@ -1,4 +1,4 @@
-﻿// ==========================================================
+// ==========================================================
 // SEEMYDRIVER - 3D GPS ENGINE (route-snapped, glide-smoothed)
 // ==========================================================
 (function () {
@@ -1136,3 +1136,5 @@ document.addEventListener('DOMContentLoaded', () => {
 })();
 
 setInterval(() => { try { if (window.driverMap && typeof window.driverMap.resize === 'function') window.driverMap.resize(); if (typeof map !== 'undefined' && map && typeof map.resize === 'function') map.resize(); } catch (e) {} }, 600);
+
+setInterval(function(){ try { if (window.driverMap && window.driverMap.resize) window.driverMap.resize(); if (typeof map !== 'undefined' && map && map.resize) map.resize(); } catch(e){} }, 600);
