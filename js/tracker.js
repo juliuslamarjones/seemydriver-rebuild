@@ -1164,3 +1164,259 @@ window.initCustomerMapLive = function () {
         }
     }, 1200);
 })();
+/* --- Mapbox GL JS Bridge (SVG Truck, Route Polyline, 3D Toggle & Live GPS) --- */
+(function () {
+    const MAPBOX_STYLE = 'mapbox://styles/mapbox/streets-v12';
+    let mbDriver = null;
+    let mbCust = null;
+
+    function svgTruckEl(bearing, labelText) {
+        const deg = (Number(bearing) || 0) + (typeof TRUCK_ICON_OFFSET_DEG === 'number' ? TRUCK_ICON_OFFSET_DEG : 0);
+        const wrap = document.createElement('div');
+        wrap.className = 'pro-vehicle-marker';
+        wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:none;';
+        if (labelText) {
+            const lbl = document.createElement('div');
+            lbl.textContent = String(labelText).toUpperCase();
+            lbl.style.cssText = 'font-size:10px;font-weight:900;color:#fff;background:rgba(0,0,0,.78);padding:2px 6px;border-radius:6px;margin-bottom:2px;white-space:nowrap;letter-spacing:.06em;border:1px solid rgba(251,191,36,.45);';
+            wrap.appendChild(lbl);
+        }
+        const rot = document.createElement('div');
+        rot.style.cssText = 'transform: rotate(' + deg.toFixed(1) + 'deg); transform-origin: 50% 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0px 6px 10px rgba(0,0,0,0.75));';
+        rot.innerHTML = '<svg viewBox="0 0 24 36" width="30" height="45" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1.5" y="9" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/><rect x="19" y="9" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/><rect x="1.5" y="25" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/><rect x="19" y="25" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/><rect x="4" y="12" width="16" height="21" rx="2.5" fill="#0b0f19" stroke="#374151" stroke-width="1.5"/><rect x="4" y="21" width="16" height="3.5" fill="#f59e0b"/><line x1="4" y1="22.75" x2="20" y2="22.75" stroke="#ffffff" stroke-width="0.75" opacity="0.8"/><path d="M6 12H18V5.5C18 3.84315 16.6569 2.5 15 2.5H9C7.34315 2.5 6 3.84315 6 5.5V12Z" fill="#111827" stroke="#4b5563" stroke-width="1.5"/><path d="M7.5 8H16.5L15.5 4.5H8.5L7.5 8Z" fill="#38bdf8" fill-opacity="0.9" stroke="#bae6fd" stroke-width="0.5"/><line x1="9" y1="6" x2="15" y2="6" stroke="#ffffff" stroke-width="0.75" opacity="0.6"/><circle cx="7" cy="3.5" r="1.1" fill="#fbbf24"/><circle cx="17" cy="3.5" r="1.1" fill="#fbbf24"/><circle cx="7" cy="3.5" r="0.5" fill="#ffffff"/><circle cx="17" cy="3.5" r="0.5" fill="#ffffff"/></svg>';
+        wrap.appendChild(rot);
+        return { wrap: wrap, rot: rot };
+    }
+
+    async function fetchOsrmLine(lat1, lng1, lat2, lng2) {
+        try {
+            const url = 'https://router.project-osrm.org/route/v1/driving/' + lng1 + ',' + lat1 + ';' + lng2 + ',' + lat2 + '?overview=full&geometries=geojson';
+            const res = await fetch(url);
+            const j = await res.json();
+            if (j && j.code === 'Ok' && j.routes && j.routes[0] && j.routes[0].geometry && Array.isArray(j.routes[0].geometry.coordinates)) {
+                return { coords: j.routes[0].geometry.coordinates, dur: j.routes[0].duration, dist: j.routes[0].distance };
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    function setRouteSource(map, coords) {
+        if (!map || !map.isStyleLoaded()) return;
+        const geojson = {
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: coords || [] }
+        };
+        if (map.getSource('smd-route-src')) {
+            map.getSource('smd-route-src').setData(geojson);
+        } else {
+            map.addSource('smd-route-src', { type: 'geojson', data: geojson });
+            map.addLayer({
+                id: 'smd-route-line',
+                type: 'line',
+                source: 'smd-route-src',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#2563eb', 'line-width': 6, 'line-opacity': 0.92 }
+            });
+        }
+    }
+
+    function apply3D(map, enabled) {
+        if (!map) return;
+        try { map.easeTo({ pitch: enabled ? 52 : 0, duration: 400 }); } catch (e) {}
+        const btn = document.getElementById('driver-3d-btn');
+        if (btn) btn.textContent = enabled ? '\uD83C\uDF10 3D: ON' : '\uD83C\uDF10 3D: OFF';
+    }
+
+    window.toggleDriver3D = function () {
+        if (!mbDriver || !mbDriver.map) return;
+        mbDriver.is3D = !mbDriver.is3D;
+        apply3D(mbDriver.map, mbDriver.is3D);
+    };
+
+    window.initDriverActiveMap = function () {
+        if (typeof mapboxgl === 'undefined') return;
+        const box = document.getElementById('driver-map-container');
+        if (!box) return;
+        mapboxgl.accessToken = window.MAPBOX_TOKEN || MAPBOX_TOKEN;
+
+        if (mbDriver && mbDriver.off) { try { mbDriver.off(); } catch (e) {} }
+        if (mbDriver && mbDriver.map) { try { mbDriver.map.remove(); } catch (e) {} }
+
+        const dest = (typeof getDest === 'function') ? getDest() : null;
+        const seedFix = (window.__smdGps && window.__smdGps.last && isFinite(window.__smdGps.last.lat)) ? window.__smdGps.last : null;
+        const initCenter = seedFix ? [seedFix.lng, seedFix.lat] : (dest ? [dest.lng, dest.lat] : [0, 0]);
+        const initZoom = seedFix ? 15 : (dest ? 12 : 2);
+
+        const map = new mapboxgl.Map({
+            container: box,
+            style: MAPBOX_STYLE,
+            center: initCenter,
+            zoom: initZoom,
+            pitch: 52
+        });
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+        let destMarker = null;
+        if (dest) {
+            const pin = document.createElement('div');
+            pin.textContent = '\uD83D\uDCCD';
+            pin.style.fontSize = '26px';
+            destMarker = new mapboxgl.Marker({ element: pin }).setLngLat([dest.lng, dest.lat]).addTo(map);
+        }
+
+        const driverName = (window.SafeStorage && window.SafeStorage.getItem('smd_driver_name')) || 'Driver';
+        const truckObj = svgTruckEl(0, driverName);
+        let truckMarker = null;
+        let lastRouteAt = 0;
+        let pendingCoords = null;
+
+        map.on('load', function () {
+            try { map.resize(); } catch (e) {}
+            if (pendingCoords) {
+                setRouteSource(map, pendingCoords);
+                pendingCoords = null;
+            }
+        });
+
+        function updateFix(fix) {
+            if (!fix || !isFinite(fix.lat) || !isFinite(fix.lng)) return;
+            const deg = (Number(fix.heading) || 0) + (typeof TRUCK_ICON_OFFSET_DEG === 'number' ? TRUCK_ICON_OFFSET_DEG : 0);
+            truckObj.rot.style.transform = 'rotate(' + deg.toFixed(1) + 'deg)';
+            if (!truckMarker) {
+                truckMarker = new mapboxgl.Marker({ element: truckObj.wrap }).setLngLat([fix.lng, fix.lat]).addTo(map);
+                map.easeTo({ center: [fix.lng, fix.lat], zoom: 15, duration: 500 });
+            } else {
+                truckMarker.setLngLat([fix.lng, fix.lat]);
+                if (!mbDriver || mbDriver.follow !== false) {
+                    map.panTo([fix.lng, fix.lat], { duration: 400 });
+                }
+            }
+            const spdEl = document.getElementById('driver-map-speed');
+            if (spdEl && typeof fix.speedMph === 'number') spdEl.textContent = fix.speedMph + ' mph';
+
+            const dNow = (typeof getDest === 'function') ? getDest() : null;
+            if (dNow && Date.now() - lastRouteAt > 4000) {
+                lastRouteAt = Date.now();
+                fetchOsrmLine(fix.lat, fix.lng, dNow.lat, dNow.lng).then(function (r) {
+                    if (!r || !r.coords || !r.coords.length) return;
+                    if (map.isStyleLoaded()) setRouteSource(map, r.coords);
+                    else pendingCoords = r.coords;
+                });
+            }
+        }
+
+        let offSub = null;
+        if (typeof subscribe === 'function') {
+            offSub = subscribe(updateFix, true);
+        }
+        if (seedFix) updateFix(seedFix);
+
+        mbDriver = { map: map, off: offSub, follow: true, is3D: true, getPos: function () { return truckMarker ? truckMarker.getLngLat() : null; } };
+        [150, 500, 1200].forEach(function (ms) {
+            setTimeout(function () { try { map.resize(); } catch (e) {} }, ms);
+        });
+    };
+
+    window.recenterDriverMap = function () {
+        if (!mbDriver || !mbDriver.map || !mbDriver.getPos) return;
+        const ll = mbDriver.getPos();
+        if (!ll) return;
+        mbDriver.follow = true;
+        mbDriver.map.easeTo({ center: [ll.lng, ll.lat], zoom: Math.max(mbDriver.map.getZoom(), 15), duration: 400 });
+    };
+
+    window.fitDriverMap = function () {
+        if (!mbDriver || !mbDriver.map || !mbDriver.getPos) return;
+        const ll = mbDriver.getPos();
+        const dest = (typeof getDest === 'function') ? getDest() : null;
+        if (!ll || !dest) return;
+        mbDriver.follow = false;
+        const bounds = new mapboxgl.LngLatBounds([ll.lng, ll.lat], [dest.lng, dest.lat]);
+        mbDriver.map.fitBounds(bounds, { padding: 60, duration: 500 });
+    };
+
+    const origEnd = window.endBroadcastAndHome;
+    window.endBroadcastAndHome = async function () {
+        if (mbDriver && mbDriver.off) { try { mbDriver.off(); } catch (e) {} }
+        if (mbDriver && mbDriver.map) { try { mbDriver.map.remove(); } catch (e) {} }
+        mbDriver = null;
+        if (typeof origEnd === 'function') return await origEnd.apply(this, arguments);
+    };
+
+    window.initCustomerMapLive = function () {
+        if (typeof mapboxgl === 'undefined') return;
+        const box = document.getElementById('customer-map-container');
+        if (!box) return;
+        const q = new URLSearchParams(window.location.search);
+        const sid = q.get('session') || q.get('s');
+        const head = document.getElementById('cust-driver-header');
+        if (!sid) { if (head) head.textContent = 'Invalid tracking link'; return; }
+        const database = (typeof getDb === 'function') ? getDb() : null;
+        if (!database) return;
+
+        mapboxgl.accessToken = window.MAPBOX_TOKEN || MAPBOX_TOKEN;
+        if (mbCust && mbCust.map) { try { mbCust.map.remove(); } catch (e) {} }
+
+        const map = new mapboxgl.Map({
+            container: box,
+            style: MAPBOX_STYLE,
+            center: [0, 0],
+            zoom: 2
+        });
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+        let truckMarker = null;
+        let truckRot = null;
+        let destMarker = null;
+        let fitted = false;
+        let lastRouteAt = 0;
+
+        const ref = database.ref('broadcasts/' + sid);
+        ref.on('value', function (snap) {
+            const data = snap.val();
+            if (!data) return;
+            if (head && data.driverName) head.textContent = data.driverName;
+
+            const dLat = parseFloat(data.destLat), dLng = parseFloat(data.destLng);
+            const haveDest = isFinite(dLat) && isFinite(dLng) && !(dLat === 0 && dLng === 0);
+            if (haveDest && !destMarker) {
+                const pin = document.createElement('div');
+                pin.textContent = '\uD83D\uDCCD';
+                pin.style.fontSize = '26px';
+                destMarker = new mapboxgl.Marker({ element: pin }).setLngLat([dLng, dLat]).addTo(map);
+            }
+
+            const lat = parseFloat(data.lat), lng = parseFloat(data.lng);
+            const havePos = isFinite(lat) && isFinite(lng) && !(lat === 0 && lng === 0);
+            if (!havePos) return;
+
+            const deg = (parseFloat(data.heading) || 0) + (typeof TRUCK_ICON_OFFSET_DEG === 'number' ? TRUCK_ICON_OFFSET_DEG : 0);
+            if (!truckMarker) {
+                const tObj = svgTruckEl(deg, data.driverName || 'Driver');
+                truckRot = tObj.rot;
+                truckMarker = new mapboxgl.Marker({ element: tObj.wrap }).setLngLat([lng, lat]).addTo(map);
+            } else {
+                truckMarker.setLngLat([lng, lat]);
+                if (truckRot) truckRot.style.transform = 'rotate(' + deg.toFixed(1) + 'deg)';
+            }
+
+            if (haveDest && !fitted) {
+                fitted = true;
+                map.fitBounds(new mapboxgl.LngLatBounds([lng, lat], [dLng, dLat]), { padding: 60, duration: 500 });
+            } else if (!fitted) {
+                fitted = true;
+                map.easeTo({ center: [lng, lat], zoom: 15, duration: 400 });
+            }
+
+            if (haveDest && Date.now() - lastRouteAt > 4000) {
+                lastRouteAt = Date.now();
+                fetchOsrmLine(lat, lng, dLat, dLng).then(function (r) {
+                    if (r && r.coords && r.coords.length) setRouteSource(map, r.coords);
+                });
+            }
+        });
+
+        mbCust = { map: map };
+        setTimeout(function () { try { map.resize(); } catch (e) {} }, 250);
+    };
+})();
