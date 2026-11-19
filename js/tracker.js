@@ -1184,6 +1184,7 @@ window.initCustomerMapLive = function () {
     }, 500);
 };
 /* --- Clean Single Mapbox GL JS Controller, GPS Badge & Broadcast Guard --- */
+
 (function () {
     const origAlert = window.alert ? window.alert.bind(window) : null;
     window.alert = function (msg) {
@@ -1495,4 +1496,6 @@ window.initCustomerMapLive = function () {
         setTimeout(() => { try { map.resize(); } catch (e) {} }, 250);
     };
 
+})();
+}
 })();
