@@ -895,7 +895,7 @@ window.endBroadcastAndHome = async function () {
     window.activeSessionId = undefined;
     window.cachedDestLat = undefined; 
     window.cachedDestLng = undefined;
-    // stay on active broadcast
+    if (typeof window.switchView === 'function') { window.switchView('job-setup-view', true); }
 };
 
 let C = null;
