@@ -1504,3 +1504,46 @@ window.initCustomerMapLive = function () {
         };
     }
 })();
+/* --- Target Both .smd-gps-badge and Top-Left Active Broadcast GPS Box --- */
+(function () {
+    const origInit = window.initDriverActiveMap;
+    if (typeof origInit !== 'function') return;
+
+    function writeStatusBox(text, ok) {
+        const targets = new Set();
+        document.querySelectorAll('.smd-gps-badge').forEach((el) => targets.add(el));
+        document.querySelectorAll('#active-broadcast-view div').forEach((el) => {
+            const raw = (el.textContent || '').trim();
+            if (/^GPS[:\s±]/i.test(raw) && el.children.length === 0) {
+                targets.add(el);
+            }
+        });
+        targets.forEach((el) => {
+            el.textContent = text;
+            el.style.color = ok ? '#fbbf24' : '#f87171';
+        });
+    }
+
+    window.initDriverActiveMap = function () {
+        const res = origInit.apply(this, arguments);
+        if (navigator.geolocation) {
+            const onFix = (pos) => {
+                if (!pos || !pos.coords) return;
+                const acc = (typeof pos.coords.accuracy === 'number' && isFinite(pos.coords.accuracy))
+                    ? Math.round(pos.coords.accuracy) : 50;
+                const suffix = acc > 300 ? ' (weak)' : '';
+                writeStatusBox('GPS \u00B1' + acc + ' m' + suffix, acc <= 300);
+            };
+            const onErr = (err) => {
+                if (err && err.code === 1) {
+                    writeStatusBox('GPS: permission denied', false);
+                }
+            };
+            try {
+                navigator.geolocation.getCurrentPosition(onFix, onErr, { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 });
+                navigator.geolocation.watchPosition(onFix, onErr, { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 });
+            } catch (e) {}
+        }
+        return res;
+    };
+})();
