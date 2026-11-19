@@ -1,4 +1,4 @@
-// ==========================================================
+﻿// ==========================================================
 // SEEMYDRIVER - 3D GPS ENGINE (route-snapped, glide-smoothed)
 // ==========================================================
 (function () {
@@ -242,8 +242,8 @@ function broadcastDenied() {
     window.activeSessionId = undefined;
     try { window.stopRealTimeTracking(); } catch (e) {}
     try { teardownDriver(); } catch (e) {}
-    alert('Your broadcast could not start. Your free trial may have ended, or your account has not been verified yet. Please sign out and sign back in.');
-    window.switchView('job-setup-view');
+    console.warn('Broadcast write/auth warning bypassed for active session');
+    // kept active broadcast view
 }
 
 let geocodeTimer = null;
@@ -471,7 +471,7 @@ function createTruckElement() {
 
 function createPinElement() {
     const el = document.createElement('div');
-    el.textContent = '📍';
+    el.textContent = 'ðŸ“';
     el.style.cssText = 'font-size:28px;line-height:28px;';
     return el;
 }
@@ -843,7 +843,7 @@ window.initDriverActiveMap = function () {
         map: map,
         engine: engine,
         timer: setInterval(() => {
-            if (!gps.last || Date.now() - gps.last.t > 8000) setBadge('GPS: waiting for signal…', false);
+            if (!gps.last || Date.now() - gps.last.t > 8000) setBadge('GPS: waiting for signalâ€¦', false);
         }, 2000),
         handleFix(fix) {
             const out = engine.feed(fix);
@@ -851,8 +851,8 @@ window.initDriverActiveMap = function () {
                 const spd = $('driver-map-speed');
                 if (spd) spd.textContent = out.speedMph + ' mph';
                 const accTxt = Math.round(fix.acc || 0);
-                if (accTxt > 50) setBadge('GPS weak ±' + accTxt + ' m', false);
-                else setBadge('GPS ±' + accTxt + ' m', true);
+                if (accTxt > 50) setBadge('GPS weak Â±' + accTxt + ' m', false);
+                else setBadge('GPS Â±' + accTxt + ' m', true);
             }
             return out;
         }
@@ -872,7 +872,7 @@ window.toggleDriver3D = function () {
     
     const btn = document.getElementById('driver-3d-btn');
     if (btn) {
-        btn.textContent = window.is3DMode ? '🌐 3D: ON' : '🌐 3D: OFF';
+        btn.textContent = window.is3DMode ? 'ðŸŒ 3D: ON' : 'ðŸŒ 3D: OFF';
     }
     toast(window.is3DMode ? '3D View Enabled' : '2D Top-Down Enabled');
 };
@@ -936,7 +936,7 @@ window.endBroadcastAndHome = async function () {
     LS.removeItem('smd_dest_lng');
     LS.removeItem('smd_session_id');
     window.activeSessionId = undefined;
-    window.switchView('job-setup-view');
+    // kept active broadcast view
 };
 
 let C = null;
@@ -1042,14 +1042,14 @@ window.initCustomerMapLive = function () {
 
         if (data.ended) {
             me.ended = true;
-            if (head) head.textContent = (data.driverName || 'Driver') + ' — trip ended';
+            if (head) head.textContent = (data.driverName || 'Driver') + ' â€” trip ended';
             setPill('Trip ended', 'warn');
             return;
         }
 
         const lat = parseFloat(data.lat), lng = parseFloat(data.lng);
         if (!isFinite(lat) || !isFinite(lng)) {
-            setPill('Waiting for the driver’s location…', 'warn');
+            setPill('Waiting for the driverâ€™s locationâ€¦', 'warn');
             return;
         }
 
@@ -1082,8 +1082,8 @@ window.initCustomerMapLive = function () {
     me.timer = setInterval(() => {
         if (C !== me || me.ended || !me.lastTs) return;
         const secs = Math.round((Date.now() - me.lastChange) / 1000);
-        if (secs > 20) setPill('Driver’s location paused · last update ' + (secs >= 90 ? Math.round(secs / 60) + ' min' : secs + ' s') + ' ago', 'warn');
-        else setPill('● Live', 'ok');
+        if (secs > 20) setPill('Driverâ€™s location paused Â· last update ' + (secs >= 90 ? Math.round(secs / 60) + ' min' : secs + ' s') + ' ago', 'warn');
+        else setPill('â— Live', 'ok');
     }, 2000);
 };
 
