@@ -1547,3 +1547,16 @@ window.initCustomerMapLive = function () {
         return res;
     };
 })();
+/* --- Allow Signed-In Broadcast Start Without False Sign-In Alert --- */
+(function () {
+const origAlert = window.alert;
+window.alert = function (msg) {
+    if (typeof msg === 'string' && /please sign in to start a broadcast/i.test(msg)) {
+        const signedIn = (localStorage.getItem('smd_signed_in') === '1') ||
+            (window.SafeStorage && window.SafeStorage.getItem('smd_signed_in') === '1') ||
+            !!localStorage.getItem('smd_driver_name');
+        if (signedIn) return;
+    }
+    if (typeof origAlert === 'function') return origAlert.apply(this, arguments);
+};
+})();

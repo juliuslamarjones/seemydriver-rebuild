@@ -51,12 +51,14 @@ window.handleSignIn = function () {
         alert('Please enter your email address.');
         return;
     }
+    try { localStorage.setItem('smd_signed_in', '1'); if (window.SafeStorage) window.SafeStorage.setItem('smd_signed_in', '1'); } catch (e) {}
     window.switchView('job-setup-view');
 };
 
 window.endBroadcastAndHome = function () {
     localStorage.removeItem('smd_active_broadcast');
     localStorage.removeItem('smd_session_id');
+    try { localStorage.setItem('smd_signed_in', '1'); if (window.SafeStorage) window.SafeStorage.setItem('smd_signed_in', '1'); } catch (e) {}
     window.switchView('job-setup-view');
 };
 
