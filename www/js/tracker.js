@@ -1164,18 +1164,17 @@ window.initCustomerMapLive = function () {
         }
     }, 1200);
 })();
-/* --- Self-Contained Mapbox GL JS Live GPS, SVG Truck & Route Handler --- */
+/* --- Direct Mapbox GL JS Controller (Live GPS, SVG Truck, OSRM Route & 3D) --- */
 (function () {
-    const MAPBOX_STYLE = 'mapbox://styles/mapbox/streets-v12';
-    const ICON_OFFSET = 0;
-    let mbDriver = null;
-    let mbCust = null;
+    const STYLE_URL = 'mapbox://styles/mapbox/streets-v12';
+    let drvState = null;
+    let custState = null;
 
-    function readDest() {
+    function getSavedDest() {
         try {
-            const getItem = (k) => (window.SafeStorage && window.SafeStorage.getItem(k)) || localStorage.getItem(k);
-            const lat = parseFloat(getItem('smd_dest_lat'));
-            const lng = parseFloat(getItem('smd_dest_lng'));
+            const getVal = (k) => (window.SafeStorage && window.SafeStorage.getItem(k)) || localStorage.getItem(k);
+            const lat = parseFloat(getVal('smd_dest_lat'));
+            const lng = parseFloat(getVal('smd_dest_lng'));
             if (!isFinite(lat) || !isFinite(lng) || (lat === 0 && lng === 0)) return null;
             return { lat: lat, lng: lng };
         } catch (e) {
@@ -1183,97 +1182,98 @@ window.initCustomerMapLive = function () {
         }
     }
 
-    function setBadge(text, ok) {
+    function setGpsBadge(msg, ok) {
         document.querySelectorAll('.smd-gps-badge').forEach((el) => {
-            el.textContent = text;
+            el.textContent = msg;
             el.style.color = ok ? '#fbbf24' : '#f87171';
         });
     }
 
-    function svgTruckEl(bearing, labelText) {
-        const deg = (Number(bearing) || 0) + ICON_OFFSET;
-        const wrap = document.createElement('div');
-        wrap.className = 'pro-vehicle-marker';
-        wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:none;';
-        if (labelText) {
-            const lbl = document.createElement('div');
-            lbl.textContent = String(labelText).toUpperCase();
-            lbl.style.cssText = 'font-size:10px;font-weight:900;color:#fff;background:rgba(0,0,0,.78);padding:2px 6px;border-radius:6px;margin-bottom:2px;white-space:nowrap;letter-spacing:.06em;border:1px solid rgba(251,191,36,.45);';
-            wrap.appendChild(lbl);
+    function makeTruckElement(headingDeg, nameLabel) {
+        const deg = Number(headingDeg) || 0;
+        const container = document.createElement('div');
+        container.className = 'pro-vehicle-marker';
+        container.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:none;';
+        if (nameLabel) {
+            const tag = document.createElement('div');
+            tag.textContent = String(nameLabel).toUpperCase();
+            tag.style.cssText = 'font-size:10px;font-weight:900;color:#fff;background:rgba(0,0,0,.78);padding:2px 6px;border-radius:6px;margin-bottom:2px;white-space:nowrap;letter-spacing:.06em;border:1px solid rgba(251,191,36,.45);';
+            container.appendChild(tag);
         }
-        const rot = document.createElement('div');
-        rot.style.cssText = 'transform: rotate(' + deg.toFixed(1) + 'deg); transform-origin: 50% 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0px 6px 10px rgba(0,0,0,0.75));';
-        rot.innerHTML = '<svg viewBox="0 0 24 36" width="30" height="45" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1.5" y="9" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/><rect x="19" y="9" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/><rect x="1.5" y="25" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/><rect x="19" y="25" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/><rect x="4" y="12" width="16" height="21" rx="2.5" fill="#0b0f19" stroke="#374151" stroke-width="1.5"/><rect x="4" y="21" width="16" height="3.5" fill="#f59e0b"/><line x1="4" y1="22.75" x2="20" y2="22.75" stroke="#ffffff" stroke-width="0.75" opacity="0.8"/><path d="M6 12H18V5.5C18 3.84315 16.6569 2.5 15 2.5H9C7.34315 2.5 6 3.84315 6 5.5V12Z" fill="#111827" stroke="#4b5563" stroke-width="1.5"/><path d="M7.5 8H16.5L15.5 4.5H8.5L7.5 8Z" fill="#38bdf8" fill-opacity="0.9" stroke="#bae6fd" stroke-width="0.5"/><line x1="9" y1="6" x2="15" y2="6" stroke="#ffffff" stroke-width="0.75" opacity="0.6"/><circle cx="7" cy="3.5" r="1.1" fill="#fbbf24"/><circle cx="17" cy="3.5" r="1.1" fill="#fbbf24"/><circle cx="7" cy="3.5" r="0.5" fill="#ffffff"/><circle cx="17" cy="3.5" r="0.5" fill="#ffffff"/></svg>';
-        wrap.appendChild(rot);
-        return { wrap: wrap, rot: rot };
+        const rotator = document.createElement('div');
+        rotator.style.cssText = 'transform: rotate(' + deg.toFixed(1) + 'deg); transform-origin: 50% 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0px 6px 10px rgba(0,0,0,0.75));';
+        rotator.innerHTML = '<svg viewBox="0 0 24 36" width="30" height="45" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1.5" y="9" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/><rect x="19" y="9" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/><rect x="1.5" y="25" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/><rect x="19" y="25" width="3.5" height="7" rx="1" fill="#090d16" stroke="#1f2937" stroke-width="0.5"/><rect x="4" y="12" width="16" height="21" rx="2.5" fill="#0b0f19" stroke="#374151" stroke-width="1.5"/><rect x="4" y="21" width="16" height="3.5" fill="#f59e0b"/><line x1="4" y1="22.75" x2="20" y2="22.75" stroke="#ffffff" stroke-width="0.75" opacity="0.8"/><path d="M6 12H18V5.5C18 3.84315 16.6569 2.5 15 2.5H9C7.34315 2.5 6 3.84315 6 5.5V12Z" fill="#111827" stroke="#4b5563" stroke-width="1.5"/><path d="M7.5 8H16.5L15.5 4.5H8.5L7.5 8Z" fill="#38bdf8" fill-opacity="0.9" stroke="#bae6fd" stroke-width="0.5"/><line x1="9" y1="6" x2="15" y2="6" stroke="#ffffff" stroke-width="0.75" opacity="0.6"/><circle cx="7" cy="3.5" r="1.1" fill="#fbbf24"/><circle cx="17" cy="3.5" r="1.1" fill="#fbbf24"/><circle cx="7" cy="3.5" r="0.5" fill="#ffffff"/><circle cx="17" cy="3.5" r="0.5" fill="#ffffff"/></svg>';
+        container.appendChild(rotator);
+        return { el: container, rot: rotator };
     }
 
-    async function fetchOsrmLine(lat1, lng1, lat2, lng2) {
+    async function queryOsrm(lat1, lng1, lat2, lng2) {
         try {
             const url = 'https://router.project-osrm.org/route/v1/driving/' + lng1 + ',' + lat1 + ';' + lng2 + ',' + lat2 + '?overview=full&geometries=geojson';
-            const res = await fetch(url);
-            const j = await res.json();
-            if (j && j.code === 'Ok' && j.routes && j.routes[0] && j.routes[0].geometry && Array.isArray(j.routes[0].geometry.coordinates)) {
-                return { coords: j.routes[0].geometry.coordinates, dur: j.routes[0].duration, dist: j.routes[0].distance };
+            const resp = await fetch(url);
+            const data = await resp.json();
+            if (data && data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry && Array.isArray(data.routes[0].geometry.coordinates)) {
+                return data.routes[0].geometry.coordinates;
             }
         } catch (e) {}
         return null;
     }
 
-    function setRouteSource(map, coords) {
-        if (!map || !map.isStyleLoaded()) return;
-        const geojson = { type: 'Feature', geometry: { type: 'LineString', coordinates: coords || [] } };
-        if (map.getSource('smd-route-src')) {
-            map.getSource('smd-route-src').setData(geojson);
-        } else {
-            map.addSource('smd-route-src', { type: 'geojson', data: geojson });
-            map.addLayer({
-                id: 'smd-route-line',
-                type: 'line',
-                source: 'smd-route-src',
-                layout: { 'line-join': 'round', 'line-cap': 'round' },
-                paint: { 'line-color': '#2563eb', 'line-width': 6, 'line-opacity': 0.92 }
-            });
-        }
-    }
-
-    function apply3D(map, enabled) {
-        if (!map) return;
-        try { map.easeTo({ pitch: enabled ? 52 : 0, duration: 400 }); } catch (e) {}
-        const btn = document.getElementById('driver-3d-btn');
-        if (btn) btn.textContent = enabled ? '\uD83C\uDF10 3D: ON' : '\uD83C\uDF10 3D: OFF';
+    function drawRoute(map, coords) {
+        if (!map || !Array.isArray(coords) || !coords.length) return;
+        const applyLine = () => {
+            const fc = { type: 'Feature', geometry: { type: 'LineString', coordinates: coords } };
+            if (map.getSource('smd-route-src')) {
+                map.getSource('smd-route-src').setData(fc);
+            } else {
+                map.addSource('smd-route-src', { type: 'geojson', data: fc });
+                map.addLayer({
+                    id: 'smd-route-line',
+                    type: 'line',
+                    source: 'smd-route-src',
+                    layout: { 'line-join': 'round', 'line-cap': 'round' },
+                    paint: { 'line-color': '#2563eb', 'line-width': 6, 'line-opacity': 0.92 }
+                });
+            }
+        };
+        if (map.isStyleLoaded()) applyLine();
+        else map.once('load', applyLine);
     }
 
     window.toggleDriver3D = function () {
-        if (!mbDriver || !mbDriver.map) return;
-        mbDriver.is3D = !mbDriver.is3D;
-        apply3D(mbDriver.map, mbDriver.is3D);
+        if (!drvState || !drvState.map) return;
+        drvState.is3D = !drvState.is3D;
+        try { drvState.map.easeTo({ pitch: drvState.is3D ? 52 : 0, duration: 350 }); } catch (e) {}
+        const btn = document.getElementById('driver-3d-btn');
+        if (btn) btn.textContent = drvState.is3D ? '\uD83C\uDF10 3D: ON' : '\uD83C\uDF10 3D: OFF';
     };
 
     window.initDriverActiveMap = function () {
         if (typeof mapboxgl === 'undefined') return;
-        const box = document.getElementById('driver-map-container');
-        if (!box) return;
+        const container = document.getElementById('driver-map-container');
+        if (!container) return;
         mapboxgl.accessToken = window.MAPBOX_TOKEN || '';
 
-        if (mbDriver) {
-            if (mbDriver.watchId !== null && mbDriver.watchId !== undefined && navigator.geolocation) {
-                try { navigator.geolocation.clearWatch(mbDriver.watchId); } catch (e) {}
+        if (drvState) {
+            if (drvState.watchId !== null && drvState.watchId !== undefined && navigator.geolocation) {
+                try { navigator.geolocation.clearWatch(drvState.watchId); } catch (e) {}
             }
-            if (mbDriver.map) { try { mbDriver.map.remove(); } catch (e) {} }
-            mbDriver = null;
+            if (drvState.map) { try { drvState.map.remove(); } catch (e) {} }
+            drvState = null;
         }
 
-        const dest = readDest();
-        const seedFix = (window.__smdGps && window.__smdGps.last && isFinite(window.__smdGps.last.lat)) ? window.__smdGps.last : null;
-        const initCenter = seedFix ? [seedFix.lng, seedFix.lat] : (dest ? [dest.lng, dest.lat] : [0, 0]);
-        const initZoom = seedFix ? 15 : (dest ? 12 : 2);
+        const dest = getSavedDest();
+        const cached = (window.__smdGps && window.__smdGps.last && isFinite(window.__smdGps.last.lat) && isFinite(window.__smdGps.last.lng))
+            ? window.__smdGps.last : null;
+
+        const startCenter = cached ? [cached.lng, cached.lat] : (dest ? [dest.lng, dest.lat] : [0, 0]);
+        const startZoom = cached ? 15 : (dest ? 12 : 2);
 
         const map = new mapboxgl.Map({
-            container: box,
-            style: MAPBOX_STYLE,
-            center: initCenter,
-            zoom: initZoom,
+            container: container,
+            style: STYLE_URL,
+            center: startCenter,
+            zoom: startZoom,
             pitch: 52
         });
         map.addControl(new mapboxgl.NavigationControl(), 'top-right');
@@ -1286,20 +1286,11 @@ window.initCustomerMapLive = function () {
         }
 
         const driverName = ((window.SafeStorage && window.SafeStorage.getItem('smd_driver_name')) || localStorage.getItem('smd_driver_name')) || 'Driver';
-        const truckObj = svgTruckEl(0, driverName);
+        const truck = makeTruckElement(0, driverName);
         let truckMarker = null;
-        let lastRouteAt = 0;
-        let pendingCoords = null;
+        let lastRouteFetch = 0;
 
-        map.on('load', function () {
-            try { map.resize(); } catch (e) {}
-            if (pendingCoords) {
-                setRouteSource(map, pendingCoords);
-                pendingCoords = null;
-            }
-        });
-
-        function applyFix(lat, lng, acc, heading, speedMph, ts) {
+        function placeLiveFix(lat, lng, acc, heading, speedMph, ts) {
             if (!isFinite(lat) || !isFinite(lng)) return;
             const h = (typeof heading === 'number' && isFinite(heading)) ? heading : 0;
             const mph = (typeof speedMph === 'number' && isFinite(speedMph)) ? speedMph : 0;
@@ -1311,122 +1302,90 @@ window.initCustomerMapLive = function () {
             if (window.__smdGps && typeof window.__smdGps === 'object') {
                 window.__smdGps.last = { lat: lat, lng: lng, acc: a, speedMps: mph / 2.23694, speedMph: mph, heading: h, t: ts || Date.now() };
             }
-            setBadge('GPS \u00B1' + Math.round(a) + ' m', true);
+            setGpsBadge('GPS \u00B1' + Math.round(a) + ' m', true);
 
-            truckObj.rot.style.transform = 'rotate(' + ((h + ICON_OFFSET) % 360).toFixed(1) + 'deg)';
+            truck.rot.style.transform = 'rotate(' + (h % 360).toFixed(1) + 'deg)';
             if (!truckMarker) {
-                truckMarker = new mapboxgl.Marker({ element: truckObj.wrap }).setLngLat([lng, lat]).addTo(map);
+                truckMarker = new mapboxgl.Marker({ element: truck.el }).setLngLat([lng, lat]).addTo(map);
                 map.easeTo({ center: [lng, lat], zoom: 15, duration: 500 });
             } else {
                 truckMarker.setLngLat([lng, lat]);
-                if (!mbDriver || mbDriver.follow !== false) {
+                if (!drvState || drvState.follow !== false) {
                     map.panTo([lng, lat], { duration: 400 });
                 }
             }
 
-            const spdEl = document.getElementById('driver-map-speed');
-            if (spdEl) spdEl.textContent = mph + ' mph';
-
-            const dNow = readDest();
-            if (dNow && Date.now() - lastRouteAt > 4000) {
-                lastRouteAt = Date.now();
-                fetchOsrmLine(lat, lng, dNow.lat, dNow.lng).then(function (r) {
-                    if (!r || !r.coords || !r.coords.length) return;
-                    if (map.isStyleLoaded()) setRouteSource(map, r.coords);
-                    else pendingCoords = r.coords;
+            const dNow = getSavedDest();
+            if (dNow && Date.now() - lastRouteFetch > 4000) {
+                lastRouteFetch = Date.now();
+                queryOsrm(lat, lng, dNow.lat, dNow.lng).then((coords) => {
+                    if (coords && coords.length) drawRoute(map, coords);
                 });
             }
         }
 
-        function onGeoSuccess(pos) {
+        const handlePos = (pos) => {
             if (!pos || !pos.coords) return;
             const mph = (typeof pos.coords.speed === 'number' && isFinite(pos.coords.speed) && pos.coords.speed >= 0)
                 ? Math.round(pos.coords.speed * 2.23694) : 0;
-            applyFix(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, pos.coords.heading, mph, pos.timestamp || Date.now());
-        }
+            placeLiveFix(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, pos.coords.heading, mph, pos.timestamp || Date.now());
+        };
 
-        function onGeoError(err) {
-            setBadge(err && err.code === 1 ? 'GPS: permission denied' : 'GPS: searching\u2026', false);
-        }
+        const handleErr = (err) => {
+            setGpsBadge(err && err.code === 1 ? 'GPS: permission denied' : 'GPS: searching\u2026', false);
+        };
 
         let watchId = null;
         if (navigator.geolocation) {
             try {
-                navigator.geolocation.getCurrentPosition(onGeoSuccess, onGeoError, { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 });
-                watchId = navigator.geolocation.watchPosition(onGeoSuccess, onGeoError, { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 });
+                navigator.geolocation.getCurrentPosition(handlePos, handleErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 });
+                watchId = navigator.geolocation.watchPosition(handlePos, handleErr, { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 });
             } catch (e) {}
         }
 
-        if (seedFix) {
-            applyFix(seedFix.lat, seedFix.lng, seedFix.acc, seedFix.heading, seedFix.speedMph, seedFix.t);
+        if (cached) {
+            placeLiveFix(cached.lat, cached.lng, cached.acc, cached.heading, cached.speedMph, cached.t);
         }
 
-        mbDriver = {
-            map: map,
-            watchId: watchId,
-            follow: true,
-            is3D: true,
-            getPos: function () { return truckMarker ? truckMarker.getLngLat() : null; }
-        };
-
-        [150, 500, 1200].forEach(function (ms) {
-            setTimeout(function () { try { map.resize(); } catch (e) {} }, ms);
-        });
+        drvState = { map: map, watchId: watchId, follow: true, is3D: true };
+        [150, 500, 1200].forEach((ms) => setTimeout(() => { try { map.resize(); } catch (e) {} }, ms));
     };
 
-    window.recenterDriverMap = function () {
-        if (!mbDriver || !mbDriver.map || !mbDriver.getPos) return;
-        const ll = mbDriver.getPos();
-        if (!ll) return;
-        mbDriver.follow = true;
-        mbDriver.map.easeTo({ center: [ll.lng, ll.lat], zoom: Math.max(mbDriver.map.getZoom(), 15), duration: 400 });
-    };
-
-    window.fitDriverMap = function () {
-        if (!mbDriver || !mbDriver.map || !mbDriver.getPos) return;
-        const ll = mbDriver.getPos();
-        const dest = readDest();
-        if (!ll || !dest) return;
-        mbDriver.follow = false;
-        const bounds = new mapboxgl.LngLatBounds([ll.lng, ll.lat], [dest.lng, dest.lat]);
-        mbDriver.map.fitBounds(bounds, { padding: 60, duration: 500 });
-    };
-
-    const origEnd = window.endBroadcastAndHome;
+    const origEndFn = window.endBroadcastAndHome;
     window.endBroadcastAndHome = async function () {
-        if (mbDriver) {
-            if (mbDriver.watchId !== null && mbDriver.watchId !== undefined && navigator.geolocation) {
-                try { navigator.geolocation.clearWatch(mbDriver.watchId); } catch (e) {}
+        if (drvState) {
+            if (drvState.watchId !== null && drvState.watchId !== undefined && navigator.geolocation) {
+                try { navigator.geolocation.clearWatch(drvState.watchId); } catch (e) {}
             }
-            if (mbDriver.map) { try { mbDriver.map.remove(); } catch (e) {} }
-            mbDriver = null;
+            if (drvState.map) { try { drvState.map.remove(); } catch (e) {} }
+            drvState = null;
         }
-        if (typeof origEnd === 'function') return await origEnd.apply(this, arguments);
+        if (typeof origEndFn === 'function') return await origEndFn.apply(this, arguments);
     };
 
     window.initCustomerMapLive = function () {
         if (typeof mapboxgl === 'undefined') return;
-        const box = document.getElementById('customer-map-container');
-        if (!box) return;
-        const q = new URLSearchParams(window.location.search);
-        const sid = q.get('session') || q.get('s');
-        const head = document.getElementById('cust-driver-header');
-        if (!sid) { if (head) head.textContent = 'Invalid tracking link'; return; }
+        const container = document.getElementById('customer-map-container');
+        if (!container) return;
+        const params = new URLSearchParams(window.location.search);
+        const sid = params.get('session') || params.get('s');
+        const headerEl = document.getElementById('cust-driver-header');
+        if (!sid) { if (headerEl) headerEl.textContent = 'Invalid tracking link'; return; }
         const database = window.db || (typeof db !== 'undefined' ? db : null);
         if (!database) return;
 
         mapboxgl.accessToken = window.MAPBOX_TOKEN || '';
-        if (mbCust && mbCust.map) { try { mbCust.map.remove(); } catch (e) {} }
+        if (custState && custState.map) { try { custState.map.remove(); } catch (e) {} }
 
-        const map = new mapboxgl.Map({ container: box, style: MAPBOX_STYLE, center: [0, 0], zoom: 2 });
+        const map = new mapboxgl.Map({ container: container, style: STYLE_URL, center: [0, 0], zoom: 2 });
         map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-        let truckMarker = null, truckRot = null, destMarker = null, fitted = false, lastRouteAt = 0;
+        let truckMarker = null, truckRot = null, destMarker = null, fitted = false, lastRouteFetch = 0;
 
-        database.ref('broadcasts/' + sid).on('value', function (snap) {
+        database.ref('broadcasts/' + sid).on('value', (snap) => {
             const data = snap.val();
             if (!data) return;
-            if (head && data.driverName) head.textContent = data.driverName;
+            if (headerEl && data.driverName) headerEl.textContent = data.driverName;
 
             const dLat = parseFloat(data.destLat), dLng = parseFloat(data.destLng);
             const haveDest = isFinite(dLat) && isFinite(dLng) && !(dLat === 0 && dLng === 0);
@@ -1443,9 +1402,9 @@ window.initCustomerMapLive = function () {
 
             const deg = parseFloat(data.heading) || 0;
             if (!truckMarker) {
-                const tObj = svgTruckEl(deg, data.driverName || 'Driver');
-                truckRot = tObj.rot;
-                truckMarker = new mapboxgl.Marker({ element: tObj.wrap }).setLngLat([lng, lat]).addTo(map);
+                const t = makeTruckElement(deg, data.driverName || 'Driver');
+                truckRot = t.rot;
+                truckMarker = new mapboxgl.Marker({ element: t.el }).setLngLat([lng, lat]).addTo(map);
             } else {
                 truckMarker.setLngLat([lng, lat]);
                 if (truckRot) truckRot.style.transform = 'rotate(' + deg.toFixed(1) + 'deg)';
@@ -1459,15 +1418,15 @@ window.initCustomerMapLive = function () {
                 map.easeTo({ center: [lng, lat], zoom: 15, duration: 400 });
             }
 
-            if (haveDest && Date.now() - lastRouteAt > 4000) {
-                lastRouteAt = Date.now();
-                fetchOsrmLine(lat, lng, dLat, dLng).then(function (r) {
-                    if (r && r.coords && r.coords.length) setRouteSource(map, r.coords);
+            if (haveDest && Date.now() - lastRouteFetch > 4000) {
+                lastRouteFetch = Date.now();
+                queryOsrm(lat, lng, dLat, dLng).then((coords) => {
+                    if (coords && coords.length) drawRoute(map, coords);
                 });
             }
         });
 
-        mbCust = { map: map };
-        setTimeout(function () { try { map.resize(); } catch (e) {} }, 250);
+        custState = { map: map };
+        setTimeout(() => { try { map.resize(); } catch (e) {} }, 250);
     };
 })();
