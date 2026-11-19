@@ -1164,14 +1164,34 @@ window.initCustomerMapLive = function () {
         }
     }, 1200);
 })();
-/* --- Mapbox GL JS Bridge (SVG Truck, Route Polyline, 3D Toggle & Live GPS) --- */
+/* --- Self-Contained Mapbox GL JS Live GPS, SVG Truck & Route Handler --- */
 (function () {
     const MAPBOX_STYLE = 'mapbox://styles/mapbox/streets-v12';
+    const ICON_OFFSET = 0;
     let mbDriver = null;
     let mbCust = null;
 
+    function readDest() {
+        try {
+            const getItem = (k) => (window.SafeStorage && window.SafeStorage.getItem(k)) || localStorage.getItem(k);
+            const lat = parseFloat(getItem('smd_dest_lat'));
+            const lng = parseFloat(getItem('smd_dest_lng'));
+            if (!isFinite(lat) || !isFinite(lng) || (lat === 0 && lng === 0)) return null;
+            return { lat: lat, lng: lng };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function setBadge(text, ok) {
+        document.querySelectorAll('.smd-gps-badge').forEach((el) => {
+            el.textContent = text;
+            el.style.color = ok ? '#fbbf24' : '#f87171';
+        });
+    }
+
     function svgTruckEl(bearing, labelText) {
-        const deg = (Number(bearing) || 0) + (typeof TRUCK_ICON_OFFSET_DEG === 'number' ? TRUCK_ICON_OFFSET_DEG : 0);
+        const deg = (Number(bearing) || 0) + ICON_OFFSET;
         const wrap = document.createElement('div');
         wrap.className = 'pro-vehicle-marker';
         wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:none;';
@@ -1202,10 +1222,7 @@ window.initCustomerMapLive = function () {
 
     function setRouteSource(map, coords) {
         if (!map || !map.isStyleLoaded()) return;
-        const geojson = {
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: coords || [] }
-        };
+        const geojson = { type: 'Feature', geometry: { type: 'LineString', coordinates: coords || [] } };
         if (map.getSource('smd-route-src')) {
             map.getSource('smd-route-src').setData(geojson);
         } else {
@@ -1237,12 +1254,17 @@ window.initCustomerMapLive = function () {
         if (typeof mapboxgl === 'undefined') return;
         const box = document.getElementById('driver-map-container');
         if (!box) return;
-        mapboxgl.accessToken = window.MAPBOX_TOKEN || MAPBOX_TOKEN;
+        mapboxgl.accessToken = window.MAPBOX_TOKEN || '';
 
-        if (mbDriver && mbDriver.off) { try { mbDriver.off(); } catch (e) {} }
-        if (mbDriver && mbDriver.map) { try { mbDriver.map.remove(); } catch (e) {} }
+        if (mbDriver) {
+            if (mbDriver.watchId !== null && mbDriver.watchId !== undefined && navigator.geolocation) {
+                try { navigator.geolocation.clearWatch(mbDriver.watchId); } catch (e) {}
+            }
+            if (mbDriver.map) { try { mbDriver.map.remove(); } catch (e) {} }
+            mbDriver = null;
+        }
 
-        const dest = (typeof getDest === 'function') ? getDest() : null;
+        const dest = readDest();
         const seedFix = (window.__smdGps && window.__smdGps.last && isFinite(window.__smdGps.last.lat)) ? window.__smdGps.last : null;
         const initCenter = seedFix ? [seedFix.lng, seedFix.lat] : (dest ? [dest.lng, dest.lat] : [0, 0]);
         const initZoom = seedFix ? 15 : (dest ? 12 : 2);
@@ -1256,15 +1278,14 @@ window.initCustomerMapLive = function () {
         });
         map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-        let destMarker = null;
         if (dest) {
             const pin = document.createElement('div');
             pin.textContent = '\uD83D\uDCCD';
             pin.style.fontSize = '26px';
-            destMarker = new mapboxgl.Marker({ element: pin }).setLngLat([dest.lng, dest.lat]).addTo(map);
+            new mapboxgl.Marker({ element: pin }).setLngLat([dest.lng, dest.lat]).addTo(map);
         }
 
-        const driverName = (window.SafeStorage && window.SafeStorage.getItem('smd_driver_name')) || 'Driver';
+        const driverName = ((window.SafeStorage && window.SafeStorage.getItem('smd_driver_name')) || localStorage.getItem('smd_driver_name')) || 'Driver';
         const truckObj = svgTruckEl(0, driverName);
         let truckMarker = null;
         let lastRouteAt = 0;
@@ -1278,26 +1299,38 @@ window.initCustomerMapLive = function () {
             }
         });
 
-        function updateFix(fix) {
-            if (!fix || !isFinite(fix.lat) || !isFinite(fix.lng)) return;
-            const deg = (Number(fix.heading) || 0) + (typeof TRUCK_ICON_OFFSET_DEG === 'number' ? TRUCK_ICON_OFFSET_DEG : 0);
-            truckObj.rot.style.transform = 'rotate(' + deg.toFixed(1) + 'deg)';
+        function applyFix(lat, lng, acc, heading, speedMph, ts) {
+            if (!isFinite(lat) || !isFinite(lng)) return;
+            const h = (typeof heading === 'number' && isFinite(heading)) ? heading : 0;
+            const mph = (typeof speedMph === 'number' && isFinite(speedMph)) ? speedMph : 0;
+            const a = (typeof acc === 'number' && isFinite(acc)) ? acc : 50;
+
+            window.lastLat = lat;
+            window.lastLng = lng;
+            window.lastHeading = h;
+            if (window.__smdGps && typeof window.__smdGps === 'object') {
+                window.__smdGps.last = { lat: lat, lng: lng, acc: a, speedMps: mph / 2.23694, speedMph: mph, heading: h, t: ts || Date.now() };
+            }
+            setBadge('GPS \u00B1' + Math.round(a) + ' m', true);
+
+            truckObj.rot.style.transform = 'rotate(' + ((h + ICON_OFFSET) % 360).toFixed(1) + 'deg)';
             if (!truckMarker) {
-                truckMarker = new mapboxgl.Marker({ element: truckObj.wrap }).setLngLat([fix.lng, fix.lat]).addTo(map);
-                map.easeTo({ center: [fix.lng, fix.lat], zoom: 15, duration: 500 });
+                truckMarker = new mapboxgl.Marker({ element: truckObj.wrap }).setLngLat([lng, lat]).addTo(map);
+                map.easeTo({ center: [lng, lat], zoom: 15, duration: 500 });
             } else {
-                truckMarker.setLngLat([fix.lng, fix.lat]);
+                truckMarker.setLngLat([lng, lat]);
                 if (!mbDriver || mbDriver.follow !== false) {
-                    map.panTo([fix.lng, fix.lat], { duration: 400 });
+                    map.panTo([lng, lat], { duration: 400 });
                 }
             }
-            const spdEl = document.getElementById('driver-map-speed');
-            if (spdEl && typeof fix.speedMph === 'number') spdEl.textContent = fix.speedMph + ' mph';
 
-            const dNow = (typeof getDest === 'function') ? getDest() : null;
+            const spdEl = document.getElementById('driver-map-speed');
+            if (spdEl) spdEl.textContent = mph + ' mph';
+
+            const dNow = readDest();
             if (dNow && Date.now() - lastRouteAt > 4000) {
                 lastRouteAt = Date.now();
-                fetchOsrmLine(fix.lat, fix.lng, dNow.lat, dNow.lng).then(function (r) {
+                fetchOsrmLine(lat, lng, dNow.lat, dNow.lng).then(function (r) {
                     if (!r || !r.coords || !r.coords.length) return;
                     if (map.isStyleLoaded()) setRouteSource(map, r.coords);
                     else pendingCoords = r.coords;
@@ -1305,13 +1338,37 @@ window.initCustomerMapLive = function () {
             }
         }
 
-        let offSub = null;
-        if (typeof subscribe === 'function') {
-            offSub = subscribe(updateFix, true);
+        function onGeoSuccess(pos) {
+            if (!pos || !pos.coords) return;
+            const mph = (typeof pos.coords.speed === 'number' && isFinite(pos.coords.speed) && pos.coords.speed >= 0)
+                ? Math.round(pos.coords.speed * 2.23694) : 0;
+            applyFix(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, pos.coords.heading, mph, pos.timestamp || Date.now());
         }
-        if (seedFix) updateFix(seedFix);
 
-        mbDriver = { map: map, off: offSub, follow: true, is3D: true, getPos: function () { return truckMarker ? truckMarker.getLngLat() : null; } };
+        function onGeoError(err) {
+            setBadge(err && err.code === 1 ? 'GPS: permission denied' : 'GPS: searching\u2026', false);
+        }
+
+        let watchId = null;
+        if (navigator.geolocation) {
+            try {
+                navigator.geolocation.getCurrentPosition(onGeoSuccess, onGeoError, { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 });
+                watchId = navigator.geolocation.watchPosition(onGeoSuccess, onGeoError, { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 });
+            } catch (e) {}
+        }
+
+        if (seedFix) {
+            applyFix(seedFix.lat, seedFix.lng, seedFix.acc, seedFix.heading, seedFix.speedMph, seedFix.t);
+        }
+
+        mbDriver = {
+            map: map,
+            watchId: watchId,
+            follow: true,
+            is3D: true,
+            getPos: function () { return truckMarker ? truckMarker.getLngLat() : null; }
+        };
+
         [150, 500, 1200].forEach(function (ms) {
             setTimeout(function () { try { map.resize(); } catch (e) {} }, ms);
         });
@@ -1328,7 +1385,7 @@ window.initCustomerMapLive = function () {
     window.fitDriverMap = function () {
         if (!mbDriver || !mbDriver.map || !mbDriver.getPos) return;
         const ll = mbDriver.getPos();
-        const dest = (typeof getDest === 'function') ? getDest() : null;
+        const dest = readDest();
         if (!ll || !dest) return;
         mbDriver.follow = false;
         const bounds = new mapboxgl.LngLatBounds([ll.lng, ll.lat], [dest.lng, dest.lat]);
@@ -1337,9 +1394,13 @@ window.initCustomerMapLive = function () {
 
     const origEnd = window.endBroadcastAndHome;
     window.endBroadcastAndHome = async function () {
-        if (mbDriver && mbDriver.off) { try { mbDriver.off(); } catch (e) {} }
-        if (mbDriver && mbDriver.map) { try { mbDriver.map.remove(); } catch (e) {} }
-        mbDriver = null;
+        if (mbDriver) {
+            if (mbDriver.watchId !== null && mbDriver.watchId !== undefined && navigator.geolocation) {
+                try { navigator.geolocation.clearWatch(mbDriver.watchId); } catch (e) {}
+            }
+            if (mbDriver.map) { try { mbDriver.map.remove(); } catch (e) {} }
+            mbDriver = null;
+        }
         if (typeof origEnd === 'function') return await origEnd.apply(this, arguments);
     };
 
@@ -1351,28 +1412,18 @@ window.initCustomerMapLive = function () {
         const sid = q.get('session') || q.get('s');
         const head = document.getElementById('cust-driver-header');
         if (!sid) { if (head) head.textContent = 'Invalid tracking link'; return; }
-        const database = (typeof getDb === 'function') ? getDb() : null;
+        const database = window.db || (typeof db !== 'undefined' ? db : null);
         if (!database) return;
 
-        mapboxgl.accessToken = window.MAPBOX_TOKEN || MAPBOX_TOKEN;
+        mapboxgl.accessToken = window.MAPBOX_TOKEN || '';
         if (mbCust && mbCust.map) { try { mbCust.map.remove(); } catch (e) {} }
 
-        const map = new mapboxgl.Map({
-            container: box,
-            style: MAPBOX_STYLE,
-            center: [0, 0],
-            zoom: 2
-        });
+        const map = new mapboxgl.Map({ container: box, style: MAPBOX_STYLE, center: [0, 0], zoom: 2 });
         map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-        let truckMarker = null;
-        let truckRot = null;
-        let destMarker = null;
-        let fitted = false;
-        let lastRouteAt = 0;
+        let truckMarker = null, truckRot = null, destMarker = null, fitted = false, lastRouteAt = 0;
 
-        const ref = database.ref('broadcasts/' + sid);
-        ref.on('value', function (snap) {
+        database.ref('broadcasts/' + sid).on('value', function (snap) {
             const data = snap.val();
             if (!data) return;
             if (head && data.driverName) head.textContent = data.driverName;
@@ -1390,7 +1441,7 @@ window.initCustomerMapLive = function () {
             const havePos = isFinite(lat) && isFinite(lng) && !(lat === 0 && lng === 0);
             if (!havePos) return;
 
-            const deg = (parseFloat(data.heading) || 0) + (typeof TRUCK_ICON_OFFSET_DEG === 'number' ? TRUCK_ICON_OFFSET_DEG : 0);
+            const deg = parseFloat(data.heading) || 0;
             if (!truckMarker) {
                 const tObj = svgTruckEl(deg, data.driverName || 'Driver');
                 truckRot = tObj.rot;
@@ -1418,105 +1469,5 @@ window.initCustomerMapLive = function () {
 
         mbCust = { map: map };
         setTimeout(function () { try { map.resize(); } catch (e) {} }, 250);
-    };
-})();
-/* --- Immediate Live Geolocation Kick on Active Broadcast Map --- */
-(function () {
-    const origInit = window.initDriverActiveMap;
-    if (typeof origInit !== 'function') return;
-
-    window.initDriverActiveMap = function () {
-        const res = origInit.apply(this, arguments);
-        try {
-            if (navigator.geolocation && typeof navigator.geolocation.getCurrentPosition === 'function') {
-                navigator.geolocation.getCurrentPosition(
-                    function (pos) {
-                        if (!pos || !pos.coords) return;
-                        window.lastLat = pos.coords.latitude;
-                        window.lastLng = pos.coords.longitude;
-                        if (typeof pos.coords.heading === 'number' && isFinite(pos.coords.heading)) {
-                            window.lastHeading = pos.coords.heading;
-                        }
-                        if (window.__smdGps && typeof window.__smdGps === 'object') {
-                            window.__smdGps.last = {
-                                lat: pos.coords.latitude,
-                                lng: pos.coords.longitude,
-                                acc: pos.coords.accuracy,
-                                speedMps: typeof pos.coords.speed === 'number' && isFinite(pos.coords.speed) ? pos.coords.speed : 0,
-                                speedMph: typeof pos.coords.speed === 'number' && isFinite(pos.coords.speed) ? Math.round(pos.coords.speed * 2.23694) : 0,
-                                heading: typeof pos.coords.heading === 'number' && isFinite(pos.coords.heading) ? pos.coords.heading : 0,
-                                t: pos.timestamp || Date.now()
-                            };
-                        }
-                        if (typeof window.startRealTimeTracking === 'function') {
-                            window.startRealTimeTracking();
-                        }
-                    },
-                    function () {},
-                    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-                );
-            }
-        } catch (e) {}
-        return res;
-    };
-})();
-/* --- Live Fix Sync for Mapbox Driver Map, SVG Truck & Route --- */
-(function () {
-    const origInit = window.initDriverActiveMap;
-    if (typeof origInit !== 'function') return;
-
-    window.initDriverActiveMap = function () {
-        const ret = origInit.apply(this, arguments);
-
-        function pushLiveFix(pos) {
-            if (!pos || !pos.coords) return;
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-            if (!isFinite(lat) || !isFinite(lng)) return;
-
-            const acc = isFinite(pos.coords.accuracy) ? pos.coords.accuracy : 50;
-            const heading = (typeof pos.coords.heading === 'number' && isFinite(pos.coords.heading)) ? pos.coords.heading : 0;
-            const speedMps = (typeof pos.coords.speed === 'number' && isFinite(pos.coords.speed) && pos.coords.speed >= 0) ? pos.coords.speed : 0;
-            const fix = {
-                lat: lat,
-                lng: lng,
-                acc: acc,
-                speedMps: speedMps,
-                speedMph: Math.round(speedMps * 2.23694),
-                heading: heading,
-                t: pos.timestamp || Date.now()
-            };
-
-            window.lastLat = lat;
-            window.lastLng = lng;
-            window.lastHeading = heading;
-
-            if (window.__smdGps && typeof window.__smdGps === 'object') {
-                window.__smdGps.last = fix;
-                if (typeof window.__smdGps.subs === 'object' && window.__smdGps.subs && typeof window.__smdGps.subs.forEach === 'function') {
-                    window.__smdGps.subs.forEach(function (fn) {
-                        try { fn(fix); } catch (e) {}
-                    });
-                }
-            }
-
-            if (typeof setStatus === 'function') {
-                setStatus('GPS \u00B1' + Math.round(acc) + ' m', true);
-            }
-        }
-
-        if (navigator.geolocation && typeof navigator.geolocation.getCurrentPosition === 'function') {
-            navigator.geolocation.getCurrentPosition(
-                pushLiveFix,
-                function (err) {
-                    if (typeof setStatus === 'function') {
-                        setStatus(err && err.code === 1 ? 'GPS: permission denied' : 'GPS: searching\u2026', false);
-                    }
-                },
-                { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
-            );
-        }
-
-        return ret;
     };
 })();
