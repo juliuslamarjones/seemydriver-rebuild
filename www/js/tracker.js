@@ -11,7 +11,7 @@ const HEADING_UP = false;
 
 // Mapbox token configuration - reads safely from window.MAPBOX_TOKEN set in index.html
 const MAPBOX_TOKEN = window.MAPBOX_TOKEN || '';
-mapboxgl.accessToken = MAPBOX_TOKEN;
+mapboxgl.accessToken = window.MAPBOX_TOKEN || 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
 
 const $ = (id) => document.getElementById(id);
 const getDb = () => window.db || (typeof db !== 'undefined' ? db : null);
@@ -1134,3 +1134,5 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 })();
+
+setInterval(() => { try { if (window.driverMap && typeof window.driverMap.resize === 'function') window.driverMap.resize(); if (typeof map !== 'undefined' && map && typeof map.resize === 'function') map.resize(); } catch (e) {} }, 600);
