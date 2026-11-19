@@ -1053,8 +1053,7 @@ window.initCustomerMapLive = function () {
         }
     }, 500);
 };
-
-/* --- Leaflet Solo Map Resize, End Broadcast & Alert Guard --- */
+/* --- Clean Single Mapbox GL JS Controller, GPS Badge & Broadcast Guard --- */
 (function () {
     const origAlert = window.alert ? window.alert.bind(window) : null;
     window.alert = function (msg) {
@@ -1066,109 +1065,11 @@ window.initCustomerMapLive = function () {
         if (origAlert) return origAlert(msg);
     };
 
-    function refreshLeafletContainer() {
-        const box = document.getElementById('driver-map-container');
-        if (!box) return;
-        if (!box.style.minHeight) box.style.minHeight = '420px';
-        if (typeof D !== 'undefined' && D && D.map && typeof D.map.invalidateSize === 'function') {
-            try { D.map.invalidateSize({ animate: false }); } catch (e) {}
-        }
-    }
-
-    document.addEventListener('click', function (ev) {
-        const btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
-        if (!btn) return;
-        const label = (btn.textContent || '').toLowerCase();
-        if (label.includes('start cloud broadcast')) {
-            [150, 450, 1000, 2000].forEach(function (ms) {
-                setTimeout(refreshLeafletContainer, ms);
-            });
-        } else if (label.includes('end broadcast')) {
-            setTimeout(function () {
-                const b = document.getElementById('active-broadcast-view');
-                const s = document.getElementById('job-setup-view');
-                if (b && getComputedStyle(b).display !== 'none' && typeof window.switchView === 'function') {
-                    try { window.switchView('job-setup-view', true); } catch (e) {}
-                }
-                if (b && getComputedStyle(b).display !== 'none') {
-                    b.classList.add('hidden');
-                    b.style.display = 'none';
-                }
-                if (s) {
-                    s.classList.remove('hidden');
-                    if (getComputedStyle(s).display === 'none') s.style.display = 'flex';
-                }
-            }, 120);
-        }
-    }, true);
-
-    setInterval(function () {
-        const b = document.getElementById('active-broadcast-view');
-        if (b && getComputedStyle(b).display !== 'none' && !b.classList.contains('hidden')) {
-            refreshLeafletContainer();
-        }
-    }, 1200);
-})();
-})();/* --- Leaflet Solo Map Resize, End Broadcast & Alert Guard --- */
-(function () {
-    const origAlert = window.alert ? window.alert.bind(window) : null;
-    window.alert = function (msg) {
-        const text = String(msg || '');
-        if (/please sign in to start a broadcast/i.test(text)) {
-            console.warn('Suppressed premature sign-in broadcast alert:', text);
-            return;
-        }
-        if (origAlert) return origAlert(msg);
-    };
-
-    function refreshLeafletContainer() {
-        const box = document.getElementById('driver-map-container');
-        if (!box) return;
-        if (!box.style.minHeight) box.style.minHeight = '420px';
-        if (typeof D !== 'undefined' && D && D.map && typeof D.map.invalidateSize === 'function') {
-            try { D.map.invalidateSize({ animate: false }); } catch (e) {}
-        }
-    }
-
-    document.addEventListener('click', function (ev) {
-        const btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
-        if (!btn) return;
-        const label = (btn.textContent || '').toLowerCase();
-        if (label.includes('start cloud broadcast')) {
-            [150, 450, 1000, 2000].forEach(function (ms) {
-                setTimeout(refreshLeafletContainer, ms);
-            });
-        } else if (label.includes('end broadcast')) {
-            setTimeout(function () {
-                const b = document.getElementById('active-broadcast-view');
-                const s = document.getElementById('job-setup-view');
-                if (b && getComputedStyle(b).display !== 'none' && typeof window.switchView === 'function') {
-                    try { window.switchView('job-setup-view', true); } catch (e) {}
-                }
-                if (b && getComputedStyle(b).display !== 'none') {
-                    b.classList.add('hidden');
-                    b.style.display = 'none';
-                }
-                if (s) {
-                    s.classList.remove('hidden');
-                    if (getComputedStyle(s).display === 'none') s.style.display = 'flex';
-                }
-            }, 120);
-        }
-    }, true);
-
-    setInterval(function () {
-        const b = document.getElementById('active-broadcast-view');
-        if (b && getComputedStyle(b).display !== 'none' && !b.classList.contains('hidden')) {
-            refreshLeafletContainer();
-        }
-    }, 1200);
-})();
-/* --- Direct Mapbox GL JS Controller (Live GPS, SVG Truck, OSRM Route & 3D) --- */
-(function () {
     const STYLE_URL = 'mapbox://styles/mapbox/streets-v12';
     let drvState = null;
     let custState = null;
+    let hasLiveLock = false;
+    let lastAccMeters = null;
 
     function getSavedDest() {
         try {
@@ -1183,7 +1084,15 @@ window.initCustomerMapLive = function () {
     }
 
     function setGpsBadge(msg, ok) {
-        document.querySelectorAll('.smd-gps-badge').forEach((el) => {
+        const targets = new Set();
+        document.querySelectorAll('.smd-gps-badge').forEach((el) => targets.add(el));
+        document.querySelectorAll('#active-broadcast-view div').forEach((el) => {
+            const raw = (el.textContent || '').trim();
+            if (/^GPS[:\s\u00B1]/i.test(raw) && el.children.length === 0) {
+                targets.add(el);
+            }
+        });
+        targets.forEach((el) => {
             el.textContent = msg;
             el.style.color = ok ? '#fbbf24' : '#f87171';
         });
@@ -1262,6 +1171,9 @@ window.initCustomerMapLive = function () {
             drvState = null;
         }
 
+        hasLiveLock = false;
+        lastAccMeters = null;
+
         const dest = getSavedDest();
         const cached = (window.__smdGps && window.__smdGps.last && isFinite(window.__smdGps.last.lat) && isFinite(window.__smdGps.last.lng))
             ? window.__smdGps.last : null;
@@ -1294,15 +1206,17 @@ window.initCustomerMapLive = function () {
             if (!isFinite(lat) || !isFinite(lng)) return;
             const h = (typeof heading === 'number' && isFinite(heading)) ? heading : 0;
             const mph = (typeof speedMph === 'number' && isFinite(speedMph)) ? speedMph : 0;
-            const a = (typeof acc === 'number' && isFinite(acc)) ? acc : 50;
+            const a = (typeof acc === 'number' && isFinite(acc) && acc > 0) ? Math.round(acc) : 50;
 
+            hasLiveLock = true;
+            lastAccMeters = a;
             window.lastLat = lat;
             window.lastLng = lng;
             window.lastHeading = h;
             if (window.__smdGps && typeof window.__smdGps === 'object') {
                 window.__smdGps.last = { lat: lat, lng: lng, acc: a, speedMps: mph / 2.23694, speedMph: mph, heading: h, t: ts || Date.now() };
             }
-            setGpsBadge('GPS \u00B1' + Math.round(a) + ' m', true);
+            setGpsBadge('GPS \u00B1' + a + ' m' + (a > 300 ? ' (weak)' : ''), a <= 300);
 
             truck.rot.style.transform = 'rotate(' + (h % 360).toFixed(1) + 'deg)';
             if (!truckMarker) {
@@ -1332,7 +1246,13 @@ window.initCustomerMapLive = function () {
         };
 
         const handleErr = (err) => {
-            setGpsBadge(err && err.code === 1 ? 'GPS: permission denied' : 'GPS: searching\u2026', false);
+            if (err && err.code === 1) {
+                setGpsBadge('GPS: permission denied', false);
+            } else if (hasLiveLock && lastAccMeters !== null) {
+                setGpsBadge('GPS \u00B1' + lastAccMeters + ' m (stale)', false);
+            } else {
+                setGpsBadge('GPS: searching\u2026', false);
+            }
         };
 
         let watchId = null;
@@ -1429,134 +1349,4 @@ window.initCustomerMapLive = function () {
         custState = { map: map };
         setTimeout(() => { try { map.resize(); } catch (e) {} }, 250);
     };
-})();
-/* --- Persistent GPS Accuracy Badge & Signal Threshold Handler --- */
-(function () {
-    let hasLiveLock = false;
-    let lastAccMeters = null;
-
-    function formatAccuracyBadge(accMeters, isError) {
-        if (isError === 'denied') return 'GPS: permission denied';
-        if (typeof accMeters === 'number' && isFinite(accMeters) && accMeters > 0) {
-            const rounded = Math.round(accMeters);
-            if (isError === 'transient') {
-                return 'GPS \u00B1' + rounded + ' m (stale)';
-            }
-            if (rounded > 300) {
-                return 'GPS \u00B1' + rounded + ' m (weak)';
-            }
-            return 'GPS \u00B1' + rounded + ' m';
-        }
-        return 'GPS: searching\u2026';
-    }
-
-    function paintBadges(text, good) {
-        document.querySelectorAll('.smd-gps-badge').forEach((el) => {
-            el.textContent = text;
-            el.style.color = good ? '#fbbf24' : '#f87171';
-        });
-    }
-
-    const origInitMap = window.initDriverActiveMap;
-    if (typeof origInitMap === 'function') {
-        window.initDriverActiveMap = function () {
-            hasLiveLock = false;
-            lastAccMeters = null;
-            const out = origInitMap.apply(this, arguments);
-
-            if (navigator.geolocation) {
-                const syncBadge = function (pos) {
-                    if (!pos || !pos.coords) return;
-                    const acc = (typeof pos.coords.accuracy === 'number' && isFinite(pos.coords.accuracy))
-                        ? pos.coords.accuracy : 50;
-                    hasLiveLock = true;
-                    lastAccMeters = acc;
-                    paintBadges(formatAccuracyBadge(acc, null), acc <= 300);
-                };
-
-                const syncErr = function (err) {
-                    if (err && err.code === 1) {
-                        paintBadges(formatAccuracyBadge(null, 'denied'), false);
-                        return;
-                    }
-                    if (hasLiveLock && lastAccMeters !== null) {
-                        paintBadges(formatAccuracyBadge(lastAccMeters, 'transient'), false);
-                    } else {
-                        paintBadges(formatAccuracyBadge(null, null), false);
-                    }
-                };
-
-                try {
-                    navigator.geolocation.getCurrentPosition(syncBadge, syncErr, {
-                        enableHighAccuracy: true,
-                        maximumAge: 0,
-                        timeout: 12000
-                    });
-                    navigator.geolocation.watchPosition(syncBadge, syncErr, {
-                        enableHighAccuracy: true,
-                        maximumAge: 2000,
-                        timeout: 15000
-                    });
-                } catch (e) {}
-            }
-
-            return out;
-        };
-    }
-})();
-/* --- Target Both .smd-gps-badge and Top-Left Active Broadcast GPS Box --- */
-(function () {
-    const origInit = window.initDriverActiveMap;
-    if (typeof origInit !== 'function') return;
-
-    function writeStatusBox(text, ok) {
-        const targets = new Set();
-        document.querySelectorAll('.smd-gps-badge').forEach((el) => targets.add(el));
-        document.querySelectorAll('#active-broadcast-view div').forEach((el) => {
-            const raw = (el.textContent || '').trim();
-            if (/^GPS[:\s±]/i.test(raw) && el.children.length === 0) {
-                targets.add(el);
-            }
-        });
-        targets.forEach((el) => {
-            el.textContent = text;
-            el.style.color = ok ? '#fbbf24' : '#f87171';
-        });
-    }
-
-    window.initDriverActiveMap = function () {
-        const res = origInit.apply(this, arguments);
-        if (navigator.geolocation) {
-            const onFix = (pos) => {
-                if (!pos || !pos.coords) return;
-                const acc = (typeof pos.coords.accuracy === 'number' && isFinite(pos.coords.accuracy))
-                    ? Math.round(pos.coords.accuracy) : 50;
-                const suffix = acc > 300 ? ' (weak)' : '';
-                writeStatusBox('GPS \u00B1' + acc + ' m' + suffix, acc <= 300);
-            };
-            const onErr = (err) => {
-                if (err && err.code === 1) {
-                    writeStatusBox('GPS: permission denied', false);
-                }
-            };
-            try {
-                navigator.geolocation.getCurrentPosition(onFix, onErr, { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 });
-                navigator.geolocation.watchPosition(onFix, onErr, { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 });
-            } catch (e) {}
-        }
-        return res;
-    };
-})();
-/* --- Allow Signed-In Broadcast Start Without False Sign-In Alert --- */
-(function () {
-const origAlert = window.alert;
-window.alert = function (msg) {
-    if (typeof msg === 'string' && /please sign in to start a broadcast/i.test(msg)) {
-        const signedIn = (localStorage.getItem('smd_signed_in') === '1') ||
-            (window.SafeStorage && window.SafeStorage.getItem('smd_signed_in') === '1') ||
-            !!localStorage.getItem('smd_driver_name');
-        if (signedIn) return;
-    }
-    if (typeof origAlert === 'function') return origAlert.apply(this, arguments);
-};
 })();
