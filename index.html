@@ -119,7 +119,7 @@
                 </p>
                 <div class="flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-lg mt-2">
                     <button onclick="window.switchView('register-view')" class="w-full sm:w-auto bg-amber-400 hover:bg-amber-300 text-black font-black text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition shadow-[0_0_30px_rgba(251,191,36,0.25)] text-center cursor-pointer flex items-center justify-center gap-2">
-                        <span>Get Started Free</span> â†’
+                        <span>Get Started Free</span> →
                     </button>
                     <button onclick="window.switchView('signin-view')" class="w-full sm:w-auto bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs sm:text-sm py-3.5 sm:py-4 px-6 rounded-2xl transition border border-neutral-800 cursor-pointer whitespace-nowrap">
                         Sign In
@@ -132,13 +132,13 @@
                 <div class="absolute top-0 right-0 bg-amber-400/10 text-amber-400 text-[10px] font-black uppercase tracking-widest px-3 sm:px-4 py-1.5 rounded-bl-2xl border-l border-b border-amber-400/20 z-30">Live Simulation Preview</div>
                 <div class="flex flex-col md:flex-row items-center justify-between gap-6">
                     <div class="flex flex-col gap-3 max-w-md">
-                        <div class="inline-block bg-emerald-500/10 text-emerald-400 text-xs font-bold py-1 px-3 rounded-full w-fit border border-emerald-500/20">â— Live GPS Broadcast Active</div>
+                        <div class="inline-block bg-emerald-500/10 text-emerald-400 text-xs font-bold py-1 px-3 rounded-full w-fit border border-emerald-500/20">● Live GPS Broadcast Active</div>
                         <h3 class="text-xl sm:text-2xl font-bold text-white">Real-Time Client Telemetry</h3>
                         <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Your customers get a secure, clean web link showing your exact moving position, route distance, and live ETA without downloading a single app.</p>
                     </div>
                     <div class="w-full md:w-80 bg-black/80 border border-neutral-800 rounded-2xl p-3 flex flex-col gap-2.5 shadow-inner">
                         <div class="flex items-center justify-between text-[11px] text-neutral-400 px-1 font-mono">
-                            <span class="text-emerald-400 animate-pulse">â— LIVE ROUTE TELEMETRY</span>
+                            <span class="text-emerald-400 animate-pulse">● LIVE ROUTE TELEMETRY</span>
                             <span id="preview-speed" class="text-amber-400 font-bold">45 mph</span>
                         </div>
                         <div id="landing-preview-map" class="w-full h-48 bg-neutral-900 rounded-xl border border-neutral-800 relative overflow-hidden z-10 shadow-inner"></div>
@@ -164,7 +164,7 @@
                         <label class="text-[11px] font-black uppercase tracking-wider text-neutral-300">Password</label>
                         <input type="password" id="signin-password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" class="w-full bg-neutral-900 border border-neutral-800 rounded-2xl px-4.5 py-3.5 text-sm text-white focus:outline-none focus:border-amber-400">
                     </div>
-                    <button onclick="window.handleSignIn()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition cursor-pointer">Sign In to Broadcast â†’</button>
+                    <button onclick="window.handleSignIn()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition cursor-pointer">Sign In to Broadcast →</button>
                 </div>
             </div>
         </div>
@@ -176,7 +176,7 @@
                 <div class="flex flex-col gap-4">
                     <input type="email" id="reg-email" placeholder="driver@business.com" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white">
                     <input type="password" id="reg-password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white">
-                    <button onclick="window.handleRegister()" class="w-full bg-amber-400 text-black font-black text-sm py-3.5 rounded-xl cursor-pointer">Create Free Account â†’</button>
+                    <button onclick="window.handleRegister()" class="w-full bg-amber-400 text-black font-black text-sm py-3.5 rounded-xl cursor-pointer">Create Free Account →</button>
                 </div>
             </div>
         </div>
@@ -191,7 +191,7 @@
             </div>
             <div class="w-full bg-[#12141c] border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col gap-6 text-left">
                 <div class="flex items-center justify-between">
-                    <span class="bg-amber-400/10 border border-amber-400/20 text-amber-300 font-bold text-xs py-1.5 px-4 rounded-full">ðŸ“ STEP 1 OF 2: JOB SETUP</span>
+                    <span class="bg-amber-400/10 border border-amber-400/20 text-amber-300 font-bold text-xs py-1.5 px-4 rounded-full">📝 STEP 1 OF 2: JOB SETUP</span>
                     <button onclick="window.handleSignOut()" class="text-xs text-neutral-400 hover:text-amber-400 font-bold cursor-pointer">Sign Out 🚪</button>
                 </div>
                 <div class="flex flex-col gap-4">
@@ -244,7 +244,7 @@
             <div class="w-full max-w-4xl bg-[#12141c] border border-neutral-800 rounded-2xl p-4 flex flex-col gap-3 shadow-lg">
                 <div class="flex items-center justify-between">
                     <span id="cust-driver-header" class="text-lg font-black text-white">Connecting to driver...</span>
-                    <span id="cust-status-pill" class="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold px-3 py-1 rounded-full">â— Connecting</span>
+                    <span id="cust-status-pill" class="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold px-3 py-1 rounded-full">● Connecting</span>
                 </div>
             </div>
             <div class="w-full max-w-4xl h-[450px] bg-neutral-900 border border-neutral-800 rounded-3xl relative shadow-2xl flex flex-col overflow-hidden">

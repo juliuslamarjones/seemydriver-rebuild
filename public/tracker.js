@@ -1,6 +1,6 @@
 // ==========================================================
 // SEEMYDRIVER - GPS ENGINE + MAPS & TELEMETRY (PRODUCTION MASTER)
-// v9: continuous-motion truck (no snaps), Mapbox search, live ETA countdown, hold-on-route, confirmed rerouting
+// v11: smooth acceleration (no pulls), reliable dead-zone glide, speed fallback, Mapbox search, live ETA, customer auto-resync
 // ==========================================================
 (function () {
 'use strict';
@@ -183,7 +183,7 @@ function toast(msg) {
 const gps = {
     running: false, kind: null, handle: null, gen: 0,
     last: null, lastAlive: 0, lastMoved: null, speedMps: 0, heading: 0,
-    subs: new Set(), sent: { t: 0, lat: 0, lng: 0 }, stopTimer: null, denied: false, badSince: 0
+    subs: new Set(), sent: { t: 0, lat: 0, lng: 0 }, stopTimer: null, denied: false, badSince: 0, hist: []
 };
 window.__smdGps = gps;
 
@@ -209,16 +209,18 @@ const FRESH_MS = 10000;
 const isFresh = (fix, ms) => !!fix && (Date.now() - fix.t) < (ms || FRESH_MS);
 
 // Dead-zone glide: when good GPS stops coming in, the truck keeps rolling along the route
-const COAST_AFTER_MS = 3000;   // no good fix for this long => start gliding
-const COAST_MAX_S    = 60;     // glide eases down to a stop over this many seconds
-const COAST_FACTOR   = 0.85;   // glide starts at 85% of the recent speed
+const COAST_AFTER_MS = 2500;   // no good fix for this long => start gliding
+const COAST_MAX_S    = 90;     // glide eases down to a stop over this many seconds
+const COAST_FACTOR   = 0.95;   // glide continues at 95% of the recent speed, then eases off
 const COAST_MIN_MPS  = 1.5;    // if we were basically stopped, don't glide
 
 // Truck motion model: the truck ALWAYS keeps moving at its current speed and is only
 // nudged toward each real GPS fix, so it never freezes and never teleports.
-const FOLLOW_TAU  = 1.4;       // seconds to close the gap to the real position
-const CATCHUP_MAX = 30;        // m/s: fastest the truck may slide to catch up after a dead zone
-const LATERAL_TAU = 1.0;       // seconds for a sideways gap to fade onto the polyline
+const FOLLOW_TAU  = 1.4;        // seconds to close the gap to the real position
+const CATCHUP_MAX = 20;         // m/s: fastest the truck may slide to catch up after a dead zone
+const LATERAL_TAU = 1.0;        // seconds for a sideways gap to fade onto the polyline
+const ACCEL_UP    = 6;          // m/s^2: the truck speeds up this gently at most (no sudden pulls)
+const ACCEL_DN    = 8;          // m/s^2: and slows down this gently at most
 
 function ingest(r) {
     gps.lastAlive = Date.now();
@@ -250,6 +252,17 @@ function ingest(r) {
     }
 
     let v = (isFinite(r.speed) && r.speed >= 0) ? r.speed : (prev ? d / dt : 0);
+
+    // Some phones report 0 / no speed while clearly moving. Cross-check against real distance over a few seconds.
+    gps.hist.push({ t: r.t, lat: r.lat, lng: r.lng });
+    while (gps.hist.length && r.t - gps.hist[0].t > 6000) gps.hist.shift();
+    if (!(v >= 1) && gps.hist.length > 1) {
+        const old = gps.hist[0], dtw = (r.t - old.t) / 1000;
+        if (dtw >= 2) {
+            const dw = distM(old.lat, old.lng, r.lat, r.lng);
+            if (dw > Math.max(12, acc * 1.5)) v = dw / dtw;
+        }
+    }
     gps.speedMps = prev ? gps.speedMps * 0.3 + v * 0.7 : v; // Faster response on speed changes
     if (gps.speedMps < 0.5) gps.speedMps = 0;
 
@@ -260,6 +273,8 @@ function ingest(r) {
     if (gps.speedMps >= 1.0) {
         if (isFinite(r.heading) && r.heading >= 0) {
             h = r.heading;
+            // if the phone's bearing is wildly different from the way we actually moved, trust the movement
+            if (prev && d >= 6) { const mb = bearingDeg(prev.lat, prev.lng, lat, lng); if (Math.abs(angDelta(h, mb)) > 60) h = mb; }
         } else if (prev && d >= 3) {
             h = bearingDeg(prev.lat, prev.lng, lat, lng);
         }
@@ -417,7 +432,7 @@ window.stopRealTimeTracking = async function () {
 };
 
 function resetGpsState() {
-    gps.last = null; gps.lastMoved = null; gps.speedMps = 0; gps.badSince = 0;
+    gps.last = null; gps.lastMoved = null; gps.speedMps = 0; gps.badSince = 0; gps.hist = [];
     gps.sent = { t: 0, lat: 0, lng: 0 };
 }
 window.teardownDriverMap = function() {
@@ -426,9 +441,6 @@ window.teardownDriverMap = function() {
     resetGpsState();
 };
 
-// ----------------------------------------------------------
-// TRUCK ICON
-// ----------------------------------------------------------
 function getTruckIcon(bearing = 0) {
     return L.divIcon({
         className: 'custom-truck-svg-marker',
@@ -466,9 +478,6 @@ function getDriverLabelIcon(name = 'Driver') {
     });
 }
 
-// ----------------------------------------------------------
-// ROUTE TRACK MATH
-// ----------------------------------------------------------
 function buildTrack(pts, dur, dist) {
     const cum = [0];
     for (let i = 1; i < pts.length; i++) {
@@ -521,9 +530,6 @@ function trackProject(tr, lat, lng, fromS, ahead) {
     return best;
 }
 
-// ----------------------------------------------------------
-// MOVER
-// ----------------------------------------------------------
 function coastDist(v, since) {
     const t0 = COAST_AFTER_MS / 1000;
     if (since <= t0) return v * since;
@@ -533,14 +539,15 @@ function coastDist(v, since) {
 
 function makeMover(marker, label, onFrame) {
     let cur = null, curH = 0, raf = 0, lastTick = 0, mode = 'll', tr = null;
-    let S = 0, V = 0, sMeas = 0, tMeas = 0, prevS = null, prevT = 0, offLat = 0, offLng = 0;
-    let mLat = 0, mLng = 0, mvE = 0, mvN = 0, hMeas = 0;
+    let S = 0, V = 0, vCur = 0, sMeas = 0, tMeas = 0, prevS = null, prevT = 0, offLat = 0, offLng = 0;
+    let mLat = 0, mLng = 0, mvE = 0, mvN = 0, hMeas = 0, fvN = 0, fvE = 0;
 
     function paint() {
+        if (!cur) return;
         marker.setLatLng(cur);
         if (label) label.setLatLng(cur);
         const el = marker.getElement();
-        if (el && el.firstElementChild) el.firstElementChild.style.transform = 'rotate(' + (curH + TRUCK_ICON_OFFSET_DEG) + 'deg)';
+        if (el && el.firstElementChild) el.firstElementChild.style.transform = 'rotate(' + (curH + TRUCK_ICON_OFFSET_DEG).toFixed(2) + 'deg)';
     }
 
     function steer(b, dt) {
@@ -566,24 +573,31 @@ function makeMover(marker, label, onFrame) {
             const Vu = V * sf;
             const target = sMeas + coastDist(V, since);
             const e = target - S;
-            let r = e / FOLLOW_TAU;
-            r = Math.max(e < -25 ? -20 : -Vu, Math.min(CATCHUP_MAX, r));
-            S = Math.min(tr.total, Math.max(0, S + (Vu + r) * dt));
+            const cm = Math.min(CATCHUP_MAX, Math.max(5, 0.5 * V + 3 + Math.max(0, e) / 30));
+            const corr = Math.max(e < -60 ? -8 : -Vu, Math.min(cm, e / FOLLOW_TAU));
+            const vDes = Vu + corr;
+            const dv = vDes - vCur, aLim = (dv > 0 ? ACCEL_UP : ACCEL_DN) * dt;
+            vCur += Math.max(-aLim, Math.min(aLim, dv));
+            S = Math.min(tr.total, Math.max(0, S + vCur * dt));
             const p = trackPoint(tr, S), kd = Math.exp(-dt / LATERAL_TAU);
             offLat *= kd; offLng *= kd;
             cur = { lat: p.lat + offLat, lng: p.lng + offLng };
             steer(trackBearing(tr, S), dt);
-            busy = ((Vu + Math.abs(r) > 0.05) && S < tr.total) || (Math.abs(offLat) + Math.abs(offLng) > 2e-7);
+            busy = ((Math.abs(vCur) > 0.05 || Math.abs(vDes) > 0.05) && S < tr.total) || (Math.abs(offLat) + Math.abs(offLng) > 2e-7);
         } else {
             const mPerLng = (111320 * Math.cos(mLat * Math.PI / 180)) || 1;
             const tLat = mLat + coastDist(mvN, since) / 111320, tLng = mLng + coastDist(mvE, since) / mPerLng;
-            let rN = ((tLat - cur.lat) * 111320) / FOLLOW_TAU, rE = ((tLng - cur.lng) * mPerLng) / FOLLOW_TAU;
+            const eN = (tLat - cur.lat) * 111320, eE = (tLng - cur.lng) * mPerLng;
+            const em = Math.hypot(eN, eE), vm0 = Math.hypot(mvN, mvE);
+            const cm = Math.min(CATCHUP_MAX, Math.max(5, 0.5 * vm0 + 3 + em / 30));
+            let rN = eN / FOLLOW_TAU, rE = eE / FOLLOW_TAU;
             const rm = Math.hypot(rN, rE);
-            if (rm > CATCHUP_MAX) { rN *= CATCHUP_MAX / rm; rE *= CATCHUP_MAX / rm; }
-            const vN = mvN * sf + rN, vE = mvE * sf + rE;
-            cur = { lat: cur.lat + (vN * dt) / 111320, lng: cur.lng + (vE * dt) / mPerLng };
-            if (Math.hypot(mvE, mvN) > 1) steer(hMeas, dt);
-            busy = Math.hypot(vN, vE) > 0.05;
+            if (rm > cm) { rN *= cm / rm; rE *= cm / rm; }
+            const dN = mvN * sf + rN - fvN, dE = mvE * sf + rE - fvE, dm = Math.hypot(dN, dE), lim = ACCEL_UP * dt;
+            if (dm > lim) { fvN += dN * lim / dm; fvE += dE * lim / dm; } else { fvN += dN; fvE += dE; }
+            cur = { lat: cur.lat + (fvN * dt) / 111320, lng: cur.lng + (fvE * dt) / mPerLng };
+            if (vm0 > 1) steer(hMeas, dt);
+            busy = Math.hypot(fvN, fvE) > 0.05 || dm > 0.05;
         }
         paint();
         if (onFrame) onFrame(cur, mode === 's' ? S : null, mode === 's' ? tr : null);
@@ -596,7 +610,8 @@ function makeMover(marker, label, onFrame) {
         moveTo(lat, lng, h, track, s, speedMps) {
             const now = performance.now();
             const v = (isFinite(speedMps) && speedMps >= 0) ? speedMps : 0;
-            if (!cur) { cur = { lat, lng }; curH = isFinite(h) ? h : 0; }
+            const first = !cur;
+            if (first) { cur = { lat, lng }; curH = isFinite(h) ? h : 0; }
 
             if (track && s !== null && s !== undefined) {
                 if (tr !== track || mode !== 's') {
@@ -605,6 +620,7 @@ function makeMover(marker, label, onFrame) {
                     const p0 = trackPoint(track, S);
                     offLat = cur.lat - p0.lat; offLng = cur.lng - p0.lng;
                     prevS = null; V = v;
+                    vCur = first ? v : (mode === 'll' ? Math.hypot(fvN, fvE) : vCur);
                 }
                 tr = track; mode = 's';
                 let vp = 0;
@@ -614,12 +630,13 @@ function makeMover(marker, label, onFrame) {
                 V = V + (vm - V) * 0.4;
                 sMeas = s; tMeas = now;
             } else {
+                if (mode === 's') { fvN = vCur * Math.cos(curH * Math.PI / 180); fvE = vCur * Math.sin(curH * Math.PI / 180); }
                 mode = 'll'; tr = null;
                 const hh = isFinite(h) ? h : curH;
                 mLat = lat; mLng = lng; hMeas = hh; tMeas = now;
                 mvE = v * Math.sin(hh * Math.PI / 180); mvN = v * Math.cos(hh * Math.PI / 180);
             }
-            if (!raf) { lastTick = 0; if (tick()) raf = requestAnimationFrame(loop); }
+            if (!raf) { lastTick = performance.now(); raf = requestAnimationFrame(loop); }
         },
         coast() {
             const silent = (performance.now() - tMeas) / 1000;
@@ -637,21 +654,16 @@ function pinIcon() {
 
 function makeMap(box, zoomControl) {
     const map = L.map(box, { zoomControl: zoomControl, zoomAnimation: true });
-    // FIXED: Added crossOrigin: true so map tiles load inside PWA standalone WebAPK containers
     L.tileLayer(TILE_URL, { 
         maxZoom: 19, 
         keepBuffer: 4, 
         updateWhenIdle: false, 
-        crossOrigin: true,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' 
     }).addTo(map);
     [0, 250, 700].forEach((ms) => setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, ms));
     return map;
 }
 
-// ----------------------------------------------------------
-// ROUTE MANAGER
-// ----------------------------------------------------------
 function routeManager(map, color) {
     let line = null, track = null, lastFetch = 0, busy = false;
     let offCount = 0, offAny = 0, offSince = 0, offConfirmed = false;
@@ -683,7 +695,7 @@ function routeManager(map, color) {
     return {
         async update(lat, lng, dLat, dLng, opts) {
             opts = opts || {};
-            if (opts.acc > 100) return null;
+            if (opts.acc > 100) return null;                 
             const now = Date.now(), key = dLat + ',' + dLng;
             const need = !track || key !== destKey || offConfirmed || wantReroute || opts.force;
             if (busy || !need) return null;
@@ -736,10 +748,10 @@ function routeManager(map, color) {
         trim(tr, s) {
             if (!line || tr !== track) return;
             const now = performance.now();
-            if (now - lastTrim < 800 || Math.abs(s - lastTrimS) < 10) return;
+            if (now - lastTrim < 800 || Math.abs(s - lastTrimS) < 10) return;   
             lastTrim = now; lastTrimS = s;
             const p = trackPoint(tr, s);
-            try { line.setLatLngs([[p.lat, p.lng']].concat(tr.pts.slice(p.i + 1))); } catch (e) {}
+            try { line.setLatLngs([[p.lat, p.lng]].concat(tr.pts.slice(p.i + 1))); } catch (e) {}
         },
         getTrack: () => track
     };
@@ -769,7 +781,7 @@ window.initDriverActiveMap = function () {
     badge.textContent = 'GPS: acquiring\u2026';
     host.appendChild(badge);
 
-    D = { map: map, follow: true, mover: null, route: routeManager(map, '#1d4ed8'), viewSet: false, truck: null, label: null, lastT: 0, lastFixAt: Date.now(), lastSpeedMps: 0, coastTimer: 0 };
+    D = { map: map, follow: true, mover: null, route: routeManager(map, '#1d4ed8'), viewSet: false, truck: null, label: null, lastFixAt: Date.now(), lastSpeedMps: 0, coastTimer: 0 };
     const me = D;
     map.on('dragstart', () => { me.follow = false; });
 
@@ -794,12 +806,12 @@ window.initDriverActiveMap = function () {
                 lat = sn.lat; lng = sn.lng; trk = sn.track; sPos = sn.s;
                 if (sn.bearing !== null) heading = sn.bearing;
             } else if (sn.hold && me.viewSet) {
-                return;
+                return;   
             }
         }
         me.lastFixAt = Date.now();
         const v = fix.speedMph / MPS_TO_MPH;
-        me.lastSpeedMps = me.hasSpeed ? me.lastSpeedMps * 0.5 + v * 0.5 : v;
+        me.lastSpeedMps = me.hasSpeed ? me.lastSpeedMps * 0.5 + v * 0.5 : v;   
         me.hasSpeed = true;
 
         if (!me.viewSet) {
@@ -883,7 +895,7 @@ window.endBroadcastAndHome = async function () {
     window.activeSessionId = undefined;
     window.cachedDestLat = undefined; 
     window.cachedDestLng = undefined;
-    window.switchView('job-setup-view');
+    // stay on active broadcast
 };
 
 let C = null;
@@ -904,7 +916,7 @@ window.initCustomerMapLive = function () {
 
     const q = new URLSearchParams(window.location.search);
     const sid = q.get('session') || q.get('s');
-    const head = $('cust-driver-header'), sub = $('cust-eta-sub'), pill = $('cust-status-pill'), distEl = $('cust-distance'), speedEl = $('cust-speed');
+    const head = $('cust-driver-header'), sub = $('cust-eta-sub'), pill =$('cust-status-pill'), distEl = $('cust-distance'), speedEl =$('cust-speed');
     if (!sid) { if (head) head.textContent = 'Invalid tracking link'; return; }
 
     const database = getDb();
@@ -912,7 +924,7 @@ window.initCustomerMapLive = function () {
 
     const map = makeMap(box, true);
     const me = C = { map: map, follow: true, mover: null, truck: null, label: null, destMarker: null, destKey: '', fitted: false,
-        route: routeManager(map, '#1e3a8a'), lastChange: Date.now(), lastTs: 0, etaMin: null, roadMi: null, speed: 0, ended: false, waiting: true };
+        route: routeManager(map, '#1e3a8a'), lastChange: Date.now(), lastTs: 0, roadMi: null, speed: 0, ended: false, waiting: true };
     map.on('dragstart', () => { me.follow = false; });
 
     const setPill = (txt, good) => {
@@ -936,7 +948,6 @@ window.initCustomerMapLive = function () {
         }
 
         const fresh = data.timestamp !== me.lastTs;
-        const tsGap = (fresh && me.lastTs) ? (data.timestamp - me.lastTs) : 0;
         if (fresh) { me.lastTs = data.timestamp; me.lastChange = Date.now(); }
         if (data.ended) {
             me.ended = true; me.waiting = false;
@@ -957,7 +968,7 @@ window.initCustomerMapLive = function () {
 
         const phoneDigits = data.driverPhone ? String(data.driverPhone).replace(/[^\d+]/g, '') : '';
         if (phoneDigits) {
-            const callBtn = $('cust-call-btn'), msgBtn = $('cust-msg-btn');
+            const callBtn = $('cust-call-btn'), msgBtn =$('cust-msg-btn');
             if (callBtn) callBtn.href = 'tel:' + phoneDigits;
             if (msgBtn) msgBtn.href = 'sms:' + phoneDigits;
         }
@@ -1006,7 +1017,7 @@ window.initCustomerMapLive = function () {
                 if (sub) sub.textContent = formatEta(sn.etaSec);
                 if (distEl) distEl.textContent = me.roadMi.toFixed(1) + ' mi';
             } else if (sn.hold && me.truck) {
-                hold = true;
+                hold = true;   
             }
         }
 
@@ -1037,34 +1048,4 @@ window.initCustomerMapLive = function () {
 
     me.coastTimer = setInterval(() => {
         if (C !== me || me.ended || me.waiting || !me.mover) return;
-        if (Date.now() - (me.lastMove || me.lastChange) > COAST_AFTER_MS + 2000 && me.speed > 3) me.mover.coast(me.speed / MPS_TO_MPH);
-    }, 500);
-};
-
-window.recenterCustomerMap = function () {
-    if (!C || !C.mover || !C.mover.pos()) return;
-    C.follow = true; C.fitted = true;
-    const p = C.mover.pos();
-    C.map.setView([p.lat, p.lng], Math.max(C.map.getZoom(), 16), { animate: false });
-};
-window.fitCustomerMap = function () {
-    if (!C || !C.mover || !C.mover.pos() || !C.destMarker) return window.recenterCustomerMap();
-    const p = C.mover.pos(), d = C.destMarker.getLatLng();
-    C.follow = false;
-    C.map.fitBounds(L.latLngBounds([[p.lat, p.lng], [d.lat, d.lng]]), { padding: [60, 60], animate: false });
-};
-
-document.addEventListener('DOMContentLoaded', () => {
-    const q = new URLSearchParams(window.location.search);
-    if (!q.has('session') && !q.has('s') && q.get('view') !== 'customer' && broadcasting()) {
-        const last = parseInt(LS.getItem('smd_last_tx') || '0', 10);
-        if (sessionId() && Date.now() - last < 6 * 3600 * 1000) {
-            window.switchView('active-broadcast');
-            window.startRealTimeTracking();
-        } else {
-            LS.removeItem('smd_active_broadcast');
-        }
-    }
-});
-
-})();
+        if (Date.now() - (me.lastMove || me.lastChange) > COAST_AFTER_MS + 2000 &&
