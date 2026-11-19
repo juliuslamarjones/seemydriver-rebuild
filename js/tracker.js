@@ -1291,7 +1291,7 @@ window.initCustomerMapLive = function () {
         if (typeof mapboxgl === 'undefined') return;
         const container = document.getElementById('driver-map-container');
         if (!container) return;
-        mapboxgl.accessToken = window.MAPBOX_TOKEN || '';
+        mapboxgl.accessToken = window.MAPBOX_TOKEN || MAPBOX_TOKEN || '';
 
         if (drvState) {
             if (drvState.watchId !== null && drvState.watchId !== undefined && navigator.geolocation) {
@@ -1309,15 +1309,25 @@ window.initCustomerMapLive = function () {
             ? window.__smdGps.last : null;
 
         const startCenter = cached ? [cached.lng, cached.lat] : (dest ? [dest.lng, dest.lat] : [-95.3698, 29.7604]);
-        const startZoom = cached ? 15 : (dest ? 12 : 2);
+        const startZoom = cached ? 15 : (dest ? 12 : 11);
 
-        const map = new mapboxgl.Map({
-            container: container,
-            style: STYLE_URL,
-            center: startCenter,
-            zoom: startZoom,
-            pitch: 52
-        });
+        let map;
+        try {
+            map = new mapboxgl.Map({
+                container: container,
+                style: STYLE_URL,
+                center: startCenter,
+                zoom: startZoom,
+                pitch: 52
+            });
+            map.on('error', (e) => {
+                console.error('Mapbox runtime error:', e && e.error ? e.error : e);
+            });
+        } catch (err) {
+            console.error('Mapbox init error:', err);
+            setGpsBadge('GPS: map init error', false);
+            return;
+        }
         map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
         if (dest) {
@@ -1429,7 +1439,7 @@ window.initCustomerMapLive = function () {
         const database = window.db || (typeof db !== 'undefined' ? db : null);
         if (!database) return;
 
-        mapboxgl.accessToken = window.MAPBOX_TOKEN || '';
+        mapboxgl.accessToken = window.MAPBOX_TOKEN || MAPBOX_TOKEN || '';
         if (custState && custState.map) { try { custState.map.remove(); } catch (e) {} }
 
         const map = new mapboxgl.Map({ container: container, style: STYLE_URL, center: [0, 0], zoom: 2 });
