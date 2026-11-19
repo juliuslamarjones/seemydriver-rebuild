@@ -1046,10 +1046,70 @@ window.initCustomerMapLive = function () {
         if (Date.now() - me.lastChange > 20000) setPill('\u25CF Signal lost \u2014 reconnecting', false);
     }, 3000);
 
-    me.coastTimer = setInterval(() => {
+        me.coastTimer = setInterval(() => {
         if (C !== me || me.ended || me.waiting || !me.mover) return;
-        if (Date.now() - (me.lastMove || me.lastChange) > COAST_AFTER_MS + 2000 &&
+        if (Date.now() - (me.lastMove || me.lastChange) > COAST_AFTER_MS + 2000 && me.mover.coast(me.lastSpeedMps)) {
+            setPill('\u25CF Gliding \u2014 weak GPS', false);
+        }
+    }, 500);
+};
+
 /* --- Leaflet Solo Map Resize, End Broadcast & Alert Guard --- */
+(function () {
+    const origAlert = window.alert ? window.alert.bind(window) : null;
+    window.alert = function (msg) {
+        const text = String(msg || '');
+        if (/please sign in to start a broadcast/i.test(text)) {
+            console.warn('Suppressed premature sign-in broadcast alert:', text);
+            return;
+        }
+        if (origAlert) return origAlert(msg);
+    };
+
+    function refreshLeafletContainer() {
+        const box = document.getElementById('driver-map-container');
+        if (!box) return;
+        if (!box.style.minHeight) box.style.minHeight = '420px';
+        if (typeof D !== 'undefined' && D && D.map && typeof D.map.invalidateSize === 'function') {
+            try { D.map.invalidateSize({ animate: false }); } catch (e) {}
+        }
+    }
+
+    document.addEventListener('click', function (ev) {
+        const btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+        if (!btn) return;
+        const label = (btn.textContent || '').toLowerCase();
+        if (label.includes('start cloud broadcast')) {
+            [150, 450, 1000, 2000].forEach(function (ms) {
+                setTimeout(refreshLeafletContainer, ms);
+            });
+        } else if (label.includes('end broadcast')) {
+            setTimeout(function () {
+                const b = document.getElementById('active-broadcast-view');
+                const s = document.getElementById('job-setup-view');
+                if (b && getComputedStyle(b).display !== 'none' && typeof window.switchView === 'function') {
+                    try { window.switchView('job-setup-view', true); } catch (e) {}
+                }
+                if (b && getComputedStyle(b).display !== 'none') {
+                    b.classList.add('hidden');
+                    b.style.display = 'none';
+                }
+                if (s) {
+                    s.classList.remove('hidden');
+                    if (getComputedStyle(s).display === 'none') s.style.display = 'flex';
+                }
+            }, 120);
+        }
+    }, true);
+
+    setInterval(function () {
+        const b = document.getElementById('active-broadcast-view');
+        if (b && getComputedStyle(b).display !== 'none' && !b.classList.contains('hidden')) {
+            refreshLeafletContainer();
+        }
+    }, 1200);
+})();
+})();/* --- Leaflet Solo Map Resize, End Broadcast & Alert Guard --- */
 (function () {
     const origAlert = window.alert ? window.alert.bind(window) : null;
     window.alert = function (msg) {
