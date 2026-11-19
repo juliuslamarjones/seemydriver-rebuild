@@ -2118,4 +2118,6 @@ window.initCustomerMapLive = function () {
         custState = { map: map };
         setTimeout(() => { try { map.resize(); } catch (e) {} }, 250);
     };
+
+}
 })();
