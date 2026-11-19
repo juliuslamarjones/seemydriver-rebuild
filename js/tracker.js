@@ -1460,3 +1460,63 @@ window.initCustomerMapLive = function () {
         return res;
     };
 })();
+/* --- Live Fix Sync for Mapbox Driver Map, SVG Truck & Route --- */
+(function () {
+    const origInit = window.initDriverActiveMap;
+    if (typeof origInit !== 'function') return;
+
+    window.initDriverActiveMap = function () {
+        const ret = origInit.apply(this, arguments);
+
+        function pushLiveFix(pos) {
+            if (!pos || !pos.coords) return;
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            if (!isFinite(lat) || !isFinite(lng)) return;
+
+            const acc = isFinite(pos.coords.accuracy) ? pos.coords.accuracy : 50;
+            const heading = (typeof pos.coords.heading === 'number' && isFinite(pos.coords.heading)) ? pos.coords.heading : 0;
+            const speedMps = (typeof pos.coords.speed === 'number' && isFinite(pos.coords.speed) && pos.coords.speed >= 0) ? pos.coords.speed : 0;
+            const fix = {
+                lat: lat,
+                lng: lng,
+                acc: acc,
+                speedMps: speedMps,
+                speedMph: Math.round(speedMps * 2.23694),
+                heading: heading,
+                t: pos.timestamp || Date.now()
+            };
+
+            window.lastLat = lat;
+            window.lastLng = lng;
+            window.lastHeading = heading;
+
+            if (window.__smdGps && typeof window.__smdGps === 'object') {
+                window.__smdGps.last = fix;
+                if (typeof window.__smdGps.subs === 'object' && window.__smdGps.subs && typeof window.__smdGps.subs.forEach === 'function') {
+                    window.__smdGps.subs.forEach(function (fn) {
+                        try { fn(fix); } catch (e) {}
+                    });
+                }
+            }
+
+            if (typeof setStatus === 'function') {
+                setStatus('GPS \u00B1' + Math.round(acc) + ' m', true);
+            }
+        }
+
+        if (navigator.geolocation && typeof navigator.geolocation.getCurrentPosition === 'function') {
+            navigator.geolocation.getCurrentPosition(
+                pushLiveFix,
+                function (err) {
+                    if (typeof setStatus === 'function') {
+                        setStatus(err && err.code === 1 ? 'GPS: permission denied' : 'GPS: searching\u2026', false);
+                    }
+                },
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
+            );
+        }
+
+        return ret;
+    };
+})();
