@@ -1420,3 +1420,43 @@ window.initCustomerMapLive = function () {
         setTimeout(function () { try { map.resize(); } catch (e) {} }, 250);
     };
 })();
+/* --- Immediate Live Geolocation Kick on Active Broadcast Map --- */
+(function () {
+    const origInit = window.initDriverActiveMap;
+    if (typeof origInit !== 'function') return;
+
+    window.initDriverActiveMap = function () {
+        const res = origInit.apply(this, arguments);
+        try {
+            if (navigator.geolocation && typeof navigator.geolocation.getCurrentPosition === 'function') {
+                navigator.geolocation.getCurrentPosition(
+                    function (pos) {
+                        if (!pos || !pos.coords) return;
+                        window.lastLat = pos.coords.latitude;
+                        window.lastLng = pos.coords.longitude;
+                        if (typeof pos.coords.heading === 'number' && isFinite(pos.coords.heading)) {
+                            window.lastHeading = pos.coords.heading;
+                        }
+                        if (window.__smdGps && typeof window.__smdGps === 'object') {
+                            window.__smdGps.last = {
+                                lat: pos.coords.latitude,
+                                lng: pos.coords.longitude,
+                                acc: pos.coords.accuracy,
+                                speedMps: typeof pos.coords.speed === 'number' && isFinite(pos.coords.speed) ? pos.coords.speed : 0,
+                                speedMph: typeof pos.coords.speed === 'number' && isFinite(pos.coords.speed) ? Math.round(pos.coords.speed * 2.23694) : 0,
+                                heading: typeof pos.coords.heading === 'number' && isFinite(pos.coords.heading) ? pos.coords.heading : 0,
+                                t: pos.timestamp || Date.now()
+                            };
+                        }
+                        if (typeof window.startRealTimeTracking === 'function') {
+                            window.startRealTimeTracking();
+                        }
+                    },
+                    function () {},
+                    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+                );
+            }
+        } catch (e) {}
+        return res;
+    };
+})();
