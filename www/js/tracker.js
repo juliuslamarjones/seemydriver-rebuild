@@ -879,7 +879,7 @@ window.initDriverActiveMap = function () {
             map.easeTo({ center: [lng, lat], zoom: 15, duration: 500 });
         } else {
             truckMarker.setLngLat([lng, lat]);
-            if (truckRot) truckRot.style.transform = 'rotate(' + h.toFixed(1) + 'deg)';
+            if (truckRot && mph > 2) truckRot.style.transform = 'rotate(' + h.toFixed(1) + 'deg)';
             map.panTo([lng, lat], { duration: 400 });
         }
 
@@ -1493,4 +1493,14 @@ window.initCustomerMapLive = function () {
         });
     };
 })();
+
+window.checkFleetAccessAndSwitch = function () {
+  try {
+    if (typeof window.switchView === 'function' && document.getElementById('fleet-view')) {
+      window.switchView('fleet-view', true);
+      return;
+    }
+  } catch (e) {}
+  window.location.href = 'fleet.html';
+};
 })();
