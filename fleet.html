@@ -131,48 +131,18 @@
         function verifyUpgradeAccess() {
             if (DEV_BYPASS_MODE) return;
             const user = firebase.auth().currentUser;
-            if (!user && DEV_BYPASS_MODE) {
-                firebase.auth().signInAnonymously().catch((err) => console.warn('Anon auth fallback:', err));
-            }
-            if (!user && !DEV_BYPASS_MODE) {
-                alert("Access Denied: Please log in.");
-                window.location.href = "https://www.seemydriver.com/upgrade";
-            }
-        }
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI",
-            authDomain: "seemydriver-prod.firebaseapp.com",
-            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",
-            projectId: "seemydriver-prod",
-            storageBucket: "seemydriver-prod.firebasestorage.app",
-            messagingSenderId: "16366013329",
-            appId: "1:16366013329:web:7e993e6ee37f940a04a064"
-        };
-
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.database();
-
-        const FULL_MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
-        mapboxgl.accessToken = FULL_MAPBOX_TOKEN;
-
-        let map;
-        let activeMarkers = {}; 
-        let fleetData = {};let lastGeocodePickAt = 0;
-        let cachedDestLat = null;
-        let cachedDestLng = null;
-        let geocodeTimer = null;
-window.recenterFleetMap = function () {
-            if (!map) return;
-            const keys = Object.keys(activeMarkers || {});
-            if (keys.length > 0 && fleetData[keys[0]]) {
-                const d = fleetData[keys[0]];
-                if (isFinite(parseFloat(d.lat)) && isFinite(parseFloat(d.lng))) {
-                    map.easeTo({ center: [parseFloat(d.lng), parseFloat(d.lat)], zoom: 15, duration: 500 });
+            if (!user) {
+                if (DEV_BYPASS_MODE) {
+                    document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Connecting...';
+                    firebase.auth().signInAnonymously().catch((err) => {
+                        console.error('Anon auth error (enable Anonymous provider in Firebase Auth):', err);
+                        document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> Auth Blocked';
+                    });
                     return;
                 }
+                document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> Sign In Required';
+                return;
+            }
             }
             map.easeTo({ center: [-95.2831, 29.9731], zoom: 12, duration: 500 });
         };
