@@ -165,7 +165,7 @@ let fleetData = readSavedDrivers();
             if (!user) {
                 if (DEV_BYPASS_MODE) {
                     document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Connecting...';
-                    firebase.auth().signInAnonymously().catch((err) => {
+                    firebase.auth().signInAnonymously().then(() => { attachBroadcastsListener(); }).catch((err) => {
                         console.error('Anon auth error (enable Anonymous provider in Firebase Auth):', err);
                         document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> Auth Blocked';
                     });
@@ -342,6 +342,28 @@ let fleetData = readSavedDrivers();
                 }
             }, 250);
         };
+
+        function attachBroadcastsListener() {
+            const statusEl = document.getElementById('connection-status');
+            if (!window.db || typeof db.ref !== 'function') return;
+            const broadcastsRef = db.ref('broadcasts');
+            broadcastsRef.off();
+            broadcastsRef.on('value', (snapshot) => {
+                if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live';
+                const remoteData = snapshot.val() || {};
+                const savedLocal = (typeof readSavedDrivers === 'function') ? readSavedDrivers() : {};
+                fleetData = Object.assign({}, savedLocal, remoteData);
+                if (typeof writeSavedDrivers === 'function') writeSavedDrivers(fleetData);
+                renderFleetRosterAndMarkers();
+            }, (error) => {
+                console.warn('RTDB read fallback to persisted local roster:', error && error.message ? error.message : error);
+                if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> Local Sync';
+                if (typeof readSavedDrivers === 'function') {
+                    fleetData = readSavedDrivers();
+                    renderFleetRosterAndMarkers();
+                }
+            });
+        }
 
         function initFirebaseListeners() {
             firebase.auth().onAuthStateChanged((user) => {
