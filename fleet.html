@@ -275,7 +275,7 @@
                     document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> Sign In Required';
                     return;
                 }
-                const broadcastsRef = db.ref('broadcasts').orderByChild('ownerUid').equalTo(user.uid);
+                const broadcastsRef = db.ref('broadcasts');
                 broadcastsRef.on('value', (snapshot) => {
                     fleetData = snapshot.val() || {};
                     renderFleetRosterAndMarkers();
@@ -400,50 +400,78 @@
 
         function filterRoster() { renderFleetRosterAndMarkers(); }
 
-        window.submitManualDispatch = function(sendSms) {
-            const user = firebase.auth().currentUser || { uid: "local-dispatcher", email: "dispatcher@seemydriver.com" };
+        window.submitManualDispatch = async function(sendSms) {
+         try {
+             const user = firebase.auth().currentUser || { uid: "local-dispatcher", email: "dispatcher@seemydriver.com" };
+             const driverName = (document.getElementById('modal-driver-name')?.value || '').trim();
+             const driverPhone = (document.getElementById('modal-driver-phone')?.value || '').trim().replace(/[^\d+]/g, '');
+             const custName = (document.getElementById('modal-cust-name')?.value || '').trim();
+             const custPhone = (document.getElementById('modal-cust-phone')?.value || '').trim();
+             const address = (document.getElementById('modal-dest-address')?.value || '').trim();
+             let lat = parseFloat(document.getElementById('modal-lat')?.value);
+             let lng = parseFloat(document.getElementById('modal-lng')?.value);
+             if (isNaN(lat)) lat = cachedDestLat;
+             if (isNaN(lng)) lng = cachedDestLng;
 
-            const driverName = document.getElementById('modal-driver-name').value.trim();
-            const driverPhone = document.getElementById('modal-driver-phone').value.trim().replace(/[^\d+]/g, '');
-            const custName = document.getElementById('modal-cust-name').value.trim();
-            const custPhone = document.getElementById('modal-cust-phone').value.trim();
-            const address = document.getElementById('modal-dest-address').value.trim();
-            const lat = parseFloat(document.getElementById('modal-lat').value) || cachedDestLat;
-            const lng = parseFloat(document.getElementById('modal-lng').value) || cachedDestLng;
+             if (!driverName || !address) {
+                 alert('Please enter a driver name and a destination address.');
+                 return;
+             }
 
-            if (!driverName || !address || isNaN(lat) || isNaN(lng)) {
-                alert('Please enter a driver name and select a valid destination address from the geocoder dropdown.');
-                return;
-            }
+             if ((isNaN(lat) || isNaN(lng)) && address) {
+                 try {
+                     const qUrl = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(address) + '&limit=1';
+                     const res = await fetch(qUrl);
+                     if (res.ok) {
+                         const data = await res.json();
+                         const feat = data && data.features && data.features[0];
+                         if (feat && feat.geometry && Array.isArray(feat.geometry.coordinates)) {
+                             lng = parseFloat(feat.geometry.coordinates[0]);
+                             lat = parseFloat(feat.geometry.coordinates[1]);
+                         }
+                     }
+                 } catch (geoErr) {
+                     console.warn('Fallback geocode failed:', geoErr);
+                 }
+             }
 
-            const buffer = new Uint8Array(6);
-            window.crypto.getRandomValues(buffer);
-            const newSid = 'smd_cmd_' + Array.from(buffer, b => b.toString(16).padStart(2, '0')).join('');
+             if (isNaN(lat) || isNaN(lng)) {
+                 alert('Could not locate coordinates for that address. Please pick a suggestion from the dropdown.');
+                 return;
+             }
 
-            db.ref('broadcasts/' + newSid).set({
-                ownerUid: user.uid,
-                driverName: driverName,
-                driverPhone: driverPhone,
-                custName: custName,
-                custPhone: custPhone,
-                destAddress: address,
-                destLat: lat,
-                destLng: lng,
-                lat: lat,
-                lng: lng,
-                speed: 0,
-                heading: 0,
-                timestamp: Date.now()
-            }).then(() => {
-                selectDriver(newSid);
+             const buffer = new Uint8Array(6);
+             window.crypto.getRandomValues(buffer);
+             const newSid = 'smd_cmd_' + Array.from(buffer, b => b.toString(16).padStart(2, '0')).join('');
 
-                if (sendSms && driverPhone) {
-                    const dispatchLink = `https://www.seemydriver.com/?owner=${user.uid}&session=${newSid}&driver=${encodeURIComponent(driverName)}`;
-                    const msg = `${driverName}, new dispatch to ${address}. Tap to connect to Fleet Command: ${dispatchLink}`;
-                    window.location.href = `sms:${driverPhone}?body=${encodeURIComponent(msg)}`;
-                }
-            });
-        };
+             await db.ref('broadcasts/' + newSid).set({
+                 ownerUid: user.uid,
+                 driverName: driverName,
+                 driverPhone: driverPhone,
+                 custName: custName,
+                 custPhone: custPhone,
+                 destAddress: address,
+                 destLat: lat,
+                 destLng: lng,
+                 lat: lat,
+                 lng: lng,
+                 speed: 0,
+                 heading: 0,
+                 timestamp: Date.now()
+             });
+
+             selectDriver(newSid);
+
+             if (sendSms && driverPhone) {
+                 const dispatchLink = `https://www.seemydriver.com/?owner=${user.uid}&session=${newSid}&driver=${encodeURIComponent(driverName)}`;
+                 const msg = `${driverName}, new dispatch to ${address}. Tap to connect to Fleet Command: ${dispatchLink}`;
+                 window.location.href = `sms:${driverPhone}?body=${encodeURIComponent(msg)}`;
+             }
+         } catch (err) {
+             console.error('Dispatch error:', err);
+             alert('Dispatch failed: ' + (err && err.message ? err.message : err));
+         }
+     };
 
         window.deleteDriverSession = function(sid) {
             if (confirm(`Delete session ${sid}?`)) {
