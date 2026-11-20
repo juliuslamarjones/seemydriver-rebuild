@@ -781,394 +781,6 @@ window.soloFitBoth = function() {
   }
 })();
 </script>
-<script id="smd-mapbox-instance-registry">
-(function() {
-  window.__smdSoloMaps = window.__smdSoloMaps || [];
-  window.__smdTrackedCoords = window.__smdTrackedCoords || [];
-
-  function installHooks() {
-    if (typeof mapboxgl === 'undefined' || !mapboxgl.Map || mapboxgl.Map.__smdHooked) return;
-    const OrigMap = mapboxgl.Map;
-    function HookedMap(options) {
-      const inst = new OrigMap(options);
-      window.__smdSoloMap = inst;
-      window.__smdSoloMaps.push(inst);
-      return inst;
-    }
-    HookedMap.prototype = OrigMap.prototype;
-    Object.setPrototypeOf(HookedMap, OrigMap);
-    Object.getOwnPropertyNames(OrigMap).forEach((prop) => {
-      try {
-        if (!(prop in HookedMap)) {
-          Object.defineProperty(HookedMap, prop, Object.getOwnPropertyDescriptor(OrigMap, prop));
-        }
-      } catch (e) {}
-    });
-    HookedMap.__smdHooked = true;
-    mapboxgl.Map = HookedMap;
-
-    if (mapboxgl.Marker && !mapboxgl.Marker.__smdHooked) {
-      const OrigMarker = mapboxgl.Marker;
-      function HookedMarker(opts) {
-        const mk = new OrigMarker(opts);
-        const origSetLngLat = mk.setLngLat.bind(mk);
-        mk.setLngLat = function(lngLat) {
-          try {
-            let lng, lat;
-            if (Array.isArray(lngLat)) { lng = Number(lngLat[0]); lat = Number(lngLat[1]); }
-            else if (lngLat && typeof lngLat === 'object') { lng = Number(lngLat.lng !== undefined ? lngLat.lng : lngLat.lon); lat = Number(lngLat.lat); }
-            if (isFinite(lng) && isFinite(lat)) {
-              mk.__smdLngLat = [lng, lat];
-              window.__smdTrackedCoords = window.__smdTrackedCoords.filter((p) => p !== mk.__smdRef);
-              mk.__smdRef = [lng, lat];
-              window.__smdTrackedCoords.push(mk.__smdRef);
-            }
-          } catch (e) {}
-          return origSetLngLat(lngLat);
-        };
-        return mk;
-      }
-      HookedMarker.prototype = OrigMarker.prototype;
-      Object.setPrototypeOf(HookedMarker, OrigMarker);
-      Object.getOwnPropertyNames(OrigMarker).forEach((prop) => {
-        try {
-          if (!(prop in HookedMarker)) {
-            Object.defineProperty(HookedMarker, prop, Object.getOwnPropertyDescriptor(OrigMarker, prop));
-          }
-        } catch (e) {}
-      });
-      HookedMarker.__smdHooked = true;
-      mapboxgl.Marker = HookedMarker;
-    }
-  }
-
-  installHooks();
-  setInterval(installHooks, 100);
-})();
-</script>
-<script id="smd-solo-camera-actions-v3">
-(function() {
-  function getActiveMap() {
-    if (window.__smdSoloMap && typeof window.__smdSoloMap.flyTo === 'function') {
-      return window.__smdSoloMap;
-    }
-    if (Array.isArray(window.__smdSoloMaps)) {
-      for (let i = window.__smdSoloMaps.length - 1; i >= 0; i--) {
-        const m = window.__smdSoloMaps[i];
-        if (m && typeof m.flyTo === 'function') return m;
-      }
-    }
-    return null;
-  }
-
-  function getCoords(m) {
-    const pts = [];
-    if (Array.isArray(window.__smdTrackedCoords)) {
-      for (let i = 0; i < window.__smdTrackedCoords.length; i++) {
-        const p = window.__smdTrackedCoords[i];
-        if (Array.isArray(p) && isFinite(p[0]) && isFinite(p[1])) {
-          pts.push([Number(p[0]), Number(p[1])]);
-        }
-      }
-    }
-    if (pts.length === 0 && m && typeof m.getCenter === 'function') {
-      const c = m.getCenter();
-      if (c && isFinite(c.lng) && isFinite(c.lat)) {
-        pts.push([c.lng, c.lat]);
-        pts.push([c.lng - 0.045, c.lat + 0.015]);
-      }
-    }
-    return pts;
-  }
-
-  window.soloRecenterMap = function(ev) {
-    if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
-    try {
-      const m = getActiveMap();
-      if (!m) return;
-      const pts = getCoords(m);
-      const target = pts[0] || [-95.4613, 29.9855];
-      m.flyTo({ center: target, zoom: 14.5, pitch: 0, essential: true, duration: 750 });
-    } catch (e) {}
-  };
-
-  window.soloFitBoth = function(ev) {
-    if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
-    try {
-      const m = getActiveMap();
-      if (!m) return;
-      const pts = getCoords(m);
-      if (pts.length >= 2 && typeof mapboxgl !== 'undefined' && typeof m.fitBounds === 'function') {
-        const bounds = new mapboxgl.LngLatBounds();
-        pts.forEach((p) => bounds.extend(p));
-        m.fitBounds(bounds, { padding: 75, maxZoom: 15, duration: 800 });
-      } else if (pts.length === 1) {
-        m.flyTo({ center: pts[0], zoom: 13.5, essential: true, duration: 750 });
-      }
-    } catch (e) {}
-  };
-
-  function rebindButtons() {
-    const bar = document.getElementById('smd-solo-map-controls');
-    if (!bar) return;
-    const btns = bar.querySelectorAll('button');
-    if (btns[0]) {
-      btns[0].setAttribute('onclick', 'soloRecenterMap(event)');
-      if (!btns[0].dataset.smdHooked) {
-        btns[0].dataset.smdHooked = '1';
-        btns[0].addEventListener('click', window.soloRecenterMap, true);
-      }
-    }
-    if (btns[1]) {
-      btns[1].setAttribute('onclick', 'soloFitBoth(event)');
-      if (!btns[1].dataset.smdHooked) {
-        btns[1].dataset.smdHooked = '1';
-        btns[1].addEventListener('click', window.soloFitBoth, true);
-      }
-    }
-  }
-
-  rebindButtons();
-  setInterval(rebindButtons, 400);
-})();
-</script>
-<script id="smd-solo-snap-and-zoom-3d">
-(function() {
-  function toRad(d) { return d * Math.PI / 180; }
-  function toDeg(r) { return r * 180 / Math.PI; }
-
-  function haversineMeters(lat1, lng1, lat2, lng2) {
-    const R = 6371000;
-    const dLat = toRad(lat2 - lat1);
-    const dLng = toRad(lng2 - lng1);
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-      Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }
-
-  function bearingDeg(lat1, lng1, lat2, lng2) {
-    const y = Math.sin(toRad(lng2 - lng1)) * Math.cos(toRad(lat2));
-    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-      Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lng2 - lng1));
-    return (toDeg(Math.atan2(y, x)) + 360) % 360;
-  }
-
-  function snapPointToPolyline(lat, lng, fallbackHeading, coords, maxMeters) {
-    const limit = typeof maxMeters === 'number' ? maxMeters : 95;
-    if (!Array.isArray(coords) || coords.length < 2) {
-      return { lat: lat, lng: lng, heading: fallbackHeading || 0, snapped: false };
-    }
-    let bestDist = Infinity;
-    let bestPt = [lng, lat];
-    let bestHeading = fallbackHeading || 0;
-
-    for (let i = 0; i < coords.length - 1; i++) {
-      const ax = Number(coords[i][0]), ay = Number(coords[i][1]);
-      const bx = Number(coords[i + 1][0]), by = Number(coords[i + 1][1]);
-      if (!isFinite(ax) || !isFinite(ay) || !isFinite(bx) || !isFinite(by)) continue;
-
-      const dx = bx - ax;
-      const dy = by - ay;
-      const lenSq = dx * dx + dy * dy;
-      let t = lenSq > 0 ? ((lng - ax) * dx + (lat - ay) * dy) / lenSq : 0;
-      if (t < 0) t = 0;
-      if (t > 1) t = 1;
-
-      const px = ax + t * dx;
-      const py = ay + t * dy;
-      const dist = haversineMeters(lat, lng, py, px);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestPt = [px, py];
-        bestHeading = bearingDeg(ay, ax, by, bx);
-      }
-    }
-
-    if (bestDist <= limit) {
-      return { lat: bestPt[1], lng: bestPt[0], heading: bestHeading, snapped: true };
-    }
-    return { lat: lat, lng: lng, heading: fallbackHeading || 0, snapped: false };
-  }
-
-  function add3dBuildings(map) {
-    try {
-      if (!map || !map.getStyle || map.getLayer('smd-3d-buildings')) return;
-      const style = map.getStyle();
-      const layers = (style && style.layers) || [];
-      const labelLayer = layers.find((l) => l.type === 'symbol' && l.layout && l.layout['text-field']);
-      const compositeSource = style && style.sources && style.sources.composite ? 'composite' : null;
-      if (!compositeSource) return;
-
-      map.addLayer({
-        id: 'smd-3d-buildings',
-        source: compositeSource,
-        'source-layer': 'building',
-        filter: ['==', 'extrude', 'true'],
-        type: 'fill-extrusion',
-        minzoom: 14,
-        paint: {
-          'fill-extrusion-color': '#cbd5e1',
-          'fill-extrusion-height': ['coalesce', ['get', 'height'], 14],
-          'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
-          'fill-extrusion-opacity': 0.85
-        }
-      }, labelLayer ? labelLayer.id : undefined);
-    } catch (e) {}
-  }
-
-  function installSoloEnhancements() {
-    window.__smdLatestRouteCoords = window.__smdLatestRouteCoords || null;
-
-    if (typeof window.fetch === 'function' && !window.fetch.__smdRouteCapture) {
-      const origFetch = window.fetch.bind(window);
-      const hookedFetch = async function(input, init) {
-        const resp = await origFetch(input, init);
-        try {
-          const urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
-          if (urlStr.indexOf('/route/v1/') !== -1 || urlStr.indexOf('/directions/v5/') !== -1) {
-            const clone = resp.clone();
-            clone.json().then((data) => {
-              const coords = data && data.routes && data.routes[0] && data.routes[0].geometry && data.routes[0].geometry.coordinates;
-              if (Array.isArray(coords) && coords.length > 1) {
-                window.__smdLatestRouteCoords = coords;
-                const m = window.__smdSoloMap;
-                if (m && m.getSource && m.getSource('smd-route-src')) {
-                  m.getSource('smd-route-src').setData({
-                    type: 'Feature',
-                    geometry: { type: 'LineString', coordinates: coords }
-                  });
-                }
-              }
-            }).catch(() => {});
-          }
-        } catch (e) {}
-        return resp;
-      };
-      hookedFetch.__smdRouteCapture = true;
-      window.fetch = hookedFetch;
-    }
-
-    if (typeof mapboxgl !== 'undefined' && mapboxgl.Marker && !mapboxgl.Marker.__smdSnapHooked) {
-      const OrigMarker = mapboxgl.Marker;
-      function SnappedMarker(opts) {
-        const mk = new OrigMarker(opts);
-        const el = mk.getElement && mk.getElement();
-        const isTruck = !!(el && el.classList && el.classList.contains('pro-vehicle-marker'));
-        const origSetLngLat = mk.setLngLat.bind(mk);
-        mk.setLngLat = function(lngLat) {
-          let lng, lat;
-          if (Array.isArray(lngLat)) { lng = Number(lngLat[0]); lat = Number(lngLat[1]); }
-          else if (lngLat && typeof lngLat === 'object') { lng = Number(lngLat.lng !== undefined ? lngLat.lng : lngLat.lon); lat = Number(lngLat.lat); }
-
-          if (isTruck && isFinite(lat) && isFinite(lng) && Array.isArray(window.__smdLatestRouteCoords)) {
-            const snap = snapPointToPolyline(lat, lng, window.lastHeading || 0, window.__smdLatestRouteCoords, 95);
-            if (snap.snapped) {
-              lng = snap.lng;
-              lat = snap.lat;
-              const rot = el.querySelector('[style*="rotate("]');
-              if (rot) {
-                rot.style.transform = 'rotate(' + (snap.heading % 360).toFixed(1) + 'deg)';
-              }
-            }
-          }
-
-          if (isFinite(lng) && isFinite(lat)) {
-            window.__smdSoloCoords = window.__smdSoloCoords || {};
-            if (isTruck) window.__smdSoloCoords.driver = [lng, lat];
-            else window.__smdSoloCoords.dest = [lng, lat];
-          }
-          return origSetLngLat([lng, lat]);
-        };
-        return mk;
-      }
-      SnappedMarker.prototype = OrigMarker.prototype;
-      Object.setPrototypeOf(SnappedMarker, OrigMarker);
-      Object.getOwnPropertyNames(OrigMarker).forEach((prop) => {
-        try {
-          if (!(prop in SnappedMarker)) {
-            Object.defineProperty(SnappedMarker, prop, Object.getOwnPropertyDescriptor(OrigMarker, prop));
-          }
-        } catch (e) {}
-      });
-      SnappedMarker.__smdSnapHooked = true;
-      mapboxgl.Marker = SnappedMarker;
-    }
-
-    if (window.__smdSoloMap && !window.__smdSoloMap.__smdZoom3dDone) {
-      const m = window.__smdSoloMap;
-      m.__smdZoom3dDone = true;
-      const applyTight3d = () => {
-        add3dBuildings(m);
-        const c = (window.__smdSoloCoords && window.__smdSoloCoords.driver) || (m.getCenter && [m.getCenter().lng, m.getCenter().lat]);
-        if (c && typeof m.easeTo === 'function') {
-          m.easeTo({ center: c, zoom: 16, pitch: 55, duration: 500 });
-        }
-      };
-      if (m.isStyleLoaded && m.isStyleLoaded()) applyTight3d();
-      else if (m.once) m.once('load', applyTight3d);
-    }
-  }
-
-  installSoloEnhancements();
-  setInterval(installSoloEnhancements, 400);
-})();
-</script>
-<script id="smd-street-visual-polish">
-(function() {
-  function polishMapLayers(map) {
-    try {
-      if (!map || !map.getStyle || !map.isStyleLoaded || !map.isStyleLoaded()) return;
-      if (map.__smdStreetPolished) return;
-      map.__smdStreetPolished = true;
-
-      const layers = (map.getStyle().layers) || [];
-      layers.forEach((layer) => {
-        const id = (layer.id || '').toLowerCase();
-        if (layer.type === 'line') {
-          // Mute bright green path / service / cycle / track / pedestrian lines
-          if (
-            id.indexOf('path') !== -1 ||
-            id.indexOf('pedestrian') !== -1 ||
-            id.indexOf('cycle') !== -1 ||
-            id.indexOf('footway') !== -1 ||
-            id.indexOf('track') !== -1 ||
-            id.indexOf('service') !== -1
-          ) {
-            try {
-              map.setPaintProperty(layer.id, 'line-opacity', 0.14);
-              map.setPaintProperty(layer.id, 'line-width', 1.2);
-            } catch (e) {}
-          } else if (id.indexOf('road') !== -1 || id.indexOf('street') !== -1 || id.indexOf('trunk') !== -1 || id.indexOf('primary') !== -1 || id.indexOf('secondary') !== -1 || id.indexOf('tertiary') !== -1) {
-            try {
-              map.setPaintProperty(layer.id, 'line-opacity', 0.95);
-            } catch (e) {}
-          }
-        }
-      });
-
-      // Upgrade 3D building shading so buildings pop cleanly off the light ground
-      if (map.getLayer('smd-3d-buildings')) {
-        try {
-          map.setPaintProperty('smd-3d-buildings', 'fill-extrusion-color', '#94a3b8');
-          map.setPaintProperty('smd-3d-buildings', 'fill-extrusion-opacity', 0.88);
-        } catch (e) {}
-      }
-    } catch (e) {}
-  }
-
-  setInterval(() => {
-    try {
-      const maps = [];
-      if (window.__smdSoloMap) maps.push(window.__smdSoloMap);
-      if (Array.isArray(window.__smdSoloMaps)) {
-        window.__smdSoloMaps.forEach((m) => { if (m && maps.indexOf(m) === -1) maps.push(m); });
-      }
-      maps.forEach((m) => polishMapLayers(m));
-    } catch (e) {}
-  }, 500);
-})();
-</script>
 <script id="smd-landing-live-gps-preview">
 (function() {
   const DEFAULT_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
@@ -1501,6 +1113,437 @@ window.soloFitBoth = function() {
     document.addEventListener('DOMContentLoaded', separateCtaAndCard);
   }
   window.addEventListener('load', separateCtaAndCard);
+})();
+</script>
+<script id="smd-surgical-gps-engine">
+(function() {
+  if (window.__smdSurgicalEngineLoaded) return;
+  window.__smdSurgicalEngineLoaded = true;
+
+  window.__smdSoloMaps = window.__smdSoloMaps || [];
+  window.__smdSoloCoords = window.__smdSoloCoords || { driver: null, dest: null };
+  window.__smdLatestRouteCoords = window.__smdLatestRouteCoords || null;
+
+  const state = {
+    truckMarker: null,
+    truckRotEl: null,
+    currentLng: null,
+    currentLat: null,
+    targetLng: null,
+    targetLat: null,
+    currentHeading: 0,
+    targetHeading: 0,
+    lastSegIndex: 0,
+    lastRawLat: null,
+    lastRawLng: null,
+    lastDynamicRouteAt: 0,
+    rafId: null
+  };
+
+  function toRad(d) { return d * Math.PI / 180; }
+  function toDeg(r) { return r * 180 / Math.PI; }
+
+  function haversineMeters(lat1, lng1, lat2, lng2) {
+    const R = 6371000;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function bearingDeg(lat1, lng1, lat2, lng2) {
+    const y = Math.sin(toRad(lng2 - lng1)) * Math.cos(toRad(lat2));
+    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+      Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lng2 - lng1));
+    return (toDeg(Math.atan2(y, x)) + 360) % 360;
+  }
+
+  function shortestAngleDelta(fromDeg, toDegVal) {
+    let diff = ((toDegVal - fromDeg + 540) % 360) - 180;
+    return diff;
+  }
+
+  // Forward-biased nose-first polyline projection (prevents backward flipping)
+  function snapNoseFirstToPolyline(lat, lng, coords, maxSnapMeters) {
+    const limit = typeof maxSnapMeters === 'number' ? maxSnapMeters : 140;
+    if (!Array.isArray(coords) || coords.length < 2) {
+      return { lat: lat, lng: lng, heading: state.currentHeading, dist: Infinity, segIndex: 0, snapped: false };
+    }
+
+    let bestScore = Infinity;
+    let bestDist = Infinity;
+    let bestPt = [lng, lat];
+    let bestHeading = state.currentHeading;
+    let bestIdx = 0;
+
+    for (let i = 0; i < coords.length - 1; i++) {
+      const ax = Number(coords[i][0]), ay = Number(coords[i][1]);
+      const bx = Number(coords[i + 1][0]), by = Number(coords[i + 1][1]);
+      if (!isFinite(ax) || !isFinite(ay) || !isFinite(bx) || !isFinite(by)) continue;
+
+      const dx = bx - ax;
+      const dy = by - ay;
+      const lenSq = dx * dx + dy * dy;
+      let t = lenSq > 0 ? ((lng - ax) * dx + (lat - ay) * dy) / lenSq : 0;
+      if (t < 0) t = 0;
+      if (t > 1) t = 1;
+
+      const px = ax + t * dx;
+      const py = ay + t * dy;
+      const dist = haversineMeters(lat, lng, py, px);
+
+      // Penalize jumping backward behind previous route progress so truck never flips backward
+      const backwardPenalty = (i < state.lastSegIndex) ? (state.lastSegIndex - i) * 14 : 0;
+      const score = dist + backwardPenalty;
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestDist = dist;
+        bestPt = [px, py];
+        bestIdx = i;
+
+        // Look ahead ~20m along polyline so corners turn smoothly instead of twitching
+        let lookLng = bx, lookLat = by;
+        if (i + 2 < coords.length && haversineMeters(py, px, by, bx) < 12) {
+          lookLng = Number(coords[i + 2][0]);
+          lookLat = Number(coords[i + 2][1]);
+        }
+        if (haversineMeters(py, px, lookLat, lookLng) > 1.5) {
+          bestHeading = bearingDeg(py, px, lookLat, lookLng);
+        } else {
+          bestHeading = bearingDeg(ay, ax, by, bx);
+        }
+      }
+    }
+
+    if (bestDist <= limit) {
+      state.lastSegIndex = Math.max(state.lastSegIndex, bestIdx);
+      return { lat: bestPt[1], lng: bestPt[0], heading: bestHeading, dist: bestDist, segIndex: bestIdx, snapped: true };
+    }
+    return { lat: lat, lng: lng, heading: state.currentHeading, dist: bestDist, segIndex: bestIdx, snapped: false };
+  }
+
+  // Dynamic re-route if driver goes off-route (> 55m from polyline)
+  async function maybeDynamicReroute(lat, lng) {
+    const now = Date.now();
+    if (now - state.lastDynamicRouteAt < 5000) return;
+    const dest = window.__smdSoloCoords && window.__smdSoloCoords.dest;
+    if (!Array.isArray(dest) || !isFinite(dest[0]) || !isFinite(dest[1])) return;
+
+    state.lastDynamicRouteAt = now;
+    try {
+      const url = 'https://router.project-osrm.org/route/v1/driving/' +
+        lng + ',' + lat + ';' + dest[0] + ',' + dest[1] + '?overview=full&geometries=geojson';
+      const resp = await fetch(url);
+      const data = await resp.json();
+      const coords = data && data.code === 'Ok' && data.routes && data.routes[0] &&
+        data.routes[0].geometry && data.routes[0].geometry.coordinates;
+      if (Array.isArray(coords) && coords.length > 1) {
+        state.lastSegIndex = 0;
+        window.__smdLatestRouteCoords = coords;
+        const m = getSoloMap();
+        if (m && m.getSource && m.getSource('smd-route-src')) {
+          m.getSource('smd-route-src').setData({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: coords }
+          });
+        }
+        applySnappedTarget(lat, lng, true);
+      }
+    } catch (e) {}
+  }
+
+  function applySnappedTarget(rawLat, rawLng, immediate) {
+    state.lastRawLat = rawLat;
+    state.lastRawLng = rawLng;
+
+    const coords = window.__smdLatestRouteCoords;
+    const snap = snapNoseFirstToPolyline(rawLat, rawLng, coords, 140);
+
+    // Trigger dynamic reroute if we have a route & destination and drifted > 55m off-route
+    if (Array.isArray(coords) && coords.length > 1 && snap.dist > 55) {
+      maybeDynamicReroute(rawLat, rawLng);
+    }
+
+    state.targetLat = snap.lat;
+    state.targetLng = snap.lng;
+    state.targetHeading = snap.heading;
+
+    window.__smdSoloCoords.driver = [snap.lng, snap.lat];
+
+    if (immediate || state.currentLat === null || state.currentLng === null) {
+      state.currentLat = snap.lat;
+      state.currentLng = snap.lng;
+      state.currentHeading = snap.heading;
+      if (state.truckMarker && state.origSetLngLat) {
+        state.origSetLngLat([snap.lng, snap.lat]);
+      }
+      if (state.truckRotEl) {
+        state.truckRotEl.style.transform = 'rotate(' + snap.heading.toFixed(1) + 'deg)';
+      }
+    }
+  }
+
+  // 60fps butter-smooth interpolation loop (zero teleporting, zero jitter)
+  function startRenderLoop() {
+    if (state.rafId) return;
+    function tick() {
+      state.rafId = requestAnimationFrame(tick);
+      if (!state.truckMarker || state.currentLat === null || state.targetLat === null) return;
+
+      const lerpPos = 0.16;
+      const lerpRot = 0.18;
+
+      const dLat = state.targetLat - state.currentLat;
+      const dLng = state.targetLng - state.currentLng;
+      if (Math.abs(dLat) > 1e-8 || Math.abs(dLng) > 1e-8) {
+        state.currentLat += dLat * lerpPos;
+        state.currentLng += dLng * lerpPos;
+        if (state.origSetLngLat) {
+          state.origSetLngLat([state.currentLng, state.currentLat]);
+        }
+      }
+
+      const dAng = shortestAngleDelta(state.currentHeading, state.targetHeading);
+      if (Math.abs(dAng) > 0.05) {
+        state.currentHeading = (state.currentHeading + dAng * lerpRot + 360) % 360;
+      }
+      if (state.truckRotEl) {
+        state.truckRotEl.style.transform = 'rotate(' + state.currentHeading.toFixed(1) + 'deg)';
+      }
+    }
+    state.rafId = requestAnimationFrame(tick);
+  }
+
+  function polishSoloMapOnce(map) {
+    try {
+      if (!map || !map.getStyle || !map.isStyleLoaded || !map.isStyleLoaded()) return;
+      if (map.__smdPolishedV4) return;
+      map.__smdPolishedV4 = true;
+
+      const style = map.getStyle();
+      const layers = (style && style.layers) || [];
+      layers.forEach((layer) => {
+        const id = (layer.id || '').toLowerCase();
+        if (layer.type === 'line' && (
+          id.indexOf('path') !== -1 ||
+          id.indexOf('pedestrian') !== -1 ||
+          id.indexOf('cycle') !== -1 ||
+          id.indexOf('footway') !== -1 ||
+          id.indexOf('track') !== -1 ||
+          id.indexOf('service') !== -1
+        )) {
+          try {
+            map.setPaintProperty(layer.id, 'line-opacity', 0.10);
+            map.setPaintProperty(layer.id, 'line-width', 1.0);
+          } catch (e) {}
+        }
+      });
+
+      const labelLayer = layers.find((l) => l.type === 'symbol' && l.layout && l.layout['text-field']);
+      if (!map.getLayer('smd-3d-buildings') && style && style.sources && style.sources.composite) {
+        map.addLayer({
+          id: 'smd-3d-buildings',
+          source: 'composite',
+          'source-layer': 'building',
+          filter: ['==', 'extrude', 'true'],
+          type: 'fill-extrusion',
+          minzoom: 14,
+          paint: {
+            'fill-extrusion-color': '#94a3b8',
+            'fill-extrusion-height': ['coalesce', ['get', 'height'], 14],
+            'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
+            'fill-extrusion-opacity': 0.85
+          }
+        }, labelLayer ? labelLayer.id : undefined);
+      }
+
+      const c = window.__smdSoloCoords.driver || (map.getCenter && [map.getCenter().lng, map.getCenter().lat]);
+      if (c && typeof map.easeTo === 'function') {
+        map.easeTo({ center: c, zoom: 16.2, pitch: 55, duration: 450 });
+      }
+    } catch (e) {}
+  }
+
+  function getSoloMap() {
+    if (window.__smdSoloMap && typeof window.__smdSoloMap.flyTo === 'function') {
+      const c = window.__smdSoloMap.getContainer && window.__smdSoloMap.getContainer();
+      if (!c || (c.id !== 'landing-preview-map' && c.id !== 'smd-landing-preview-stage')) {
+        return window.__smdSoloMap;
+      }
+    }
+    for (let i = window.__smdSoloMaps.length - 1; i >= 0; i--) {
+      const m = window.__smdSoloMaps[i];
+      if (!m || typeof m.flyTo !== 'function') continue;
+      const c = m.getContainer && m.getContainer();
+      if (c && (c.id === 'driver-map-container' || c.id === 'customer-map-container')) return m;
+    }
+    return null;
+  }
+
+  // Intercept OSRM / Directions fetches so we immediately snap truck nose-first as soon as route loads
+  if (typeof window.fetch === 'function' && !window.fetch.__smdSurgicalRouteHook) {
+    const origFetch = window.fetch.bind(window);
+    const wrappedFetch = async function(input, init) {
+      const resp = await origFetch(input, init);
+      try {
+        const urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+        if (urlStr.indexOf('/route/v1/') !== -1 || urlStr.indexOf('/directions/v5/') !== -1) {
+          resp.clone().json().then((data) => {
+            const coords = data && data.routes && data.routes[0] && data.routes[0].geometry && data.routes[0].geometry.coordinates;
+            if (Array.isArray(coords) && coords.length > 1) {
+              state.lastSegIndex = 0;
+              window.__smdLatestRouteCoords = coords;
+              if (state.lastRawLat !== null && state.lastRawLng !== null) {
+                applySnappedTarget(state.lastRawLat, state.lastRawLng, true);
+              }
+            }
+          }).catch(() => {});
+        }
+      } catch (e) {}
+      return resp;
+    };
+    wrappedFetch.__smdSurgicalRouteHook = true;
+    window.fetch = wrappedFetch;
+  }
+
+  function installMapboxWrapper() {
+    if (typeof mapboxgl === 'undefined' || !mapboxgl.Map || mapboxgl.Map.__smdSurgicalWrapped) return;
+
+    const OrigMap = mapboxgl.Map;
+    function WrappedMap(options) {
+      const inst = new OrigMap(options);
+      const container = inst.getContainer && inst.getContainer();
+      const isLanding = container && (
+        container.id === 'landing-preview-map' ||
+        container.id === 'smd-landing-preview-stage' ||
+        (container.closest && container.closest('#landing-view'))
+      );
+      if (!isLanding) {
+        window.__smdSoloMap = inst;
+        window.__smdSoloMaps.push(inst);
+        inst.on('load', () => polishSoloMapOnce(inst));
+      }
+      return inst;
+    }
+    WrappedMap.prototype = OrigMap.prototype;
+    Object.setPrototypeOf(WrappedMap, OrigMap);
+    Object.getOwnPropertyNames(OrigMap).forEach((p) => {
+      try { if (!(p in WrappedMap)) Object.defineProperty(WrappedMap, p, Object.getOwnPropertyDescriptor(OrigMap, p)); } catch (e) {}
+    });
+    WrappedMap.__smdSurgicalWrapped = true;
+    mapboxgl.Map = WrappedMap;
+
+    if (mapboxgl.Marker && !mapboxgl.Marker.__smdSurgicalWrapped) {
+      const OrigMarker = mapboxgl.Marker;
+      function WrappedMarker(opts) {
+        const mk = new OrigMarker(opts);
+        const el = mk.getElement && mk.getElement();
+        const isLandingMarker = el && el.closest && el.closest('#landing-view');
+        const isTruck = !isLandingMarker && el && el.classList && el.classList.contains('pro-vehicle-marker');
+        const origSetLngLat = mk.setLngLat.bind(mk);
+
+        if (isTruck) {
+          state.truckMarker = mk;
+          state.origSetLngLat = origSetLngLat;
+          state.truckRotEl = el.querySelector('[style*="rotate("]');
+          startRenderLoop();
+        }
+
+        mk.setLngLat = function(lngLat) {
+          let lng, lat;
+          if (Array.isArray(lngLat)) { lng = Number(lngLat[0]); lat = Number(lngLat[1]); }
+          else if (lngLat && typeof lngLat === 'object') { lng = Number(lngLat.lng !== undefined ? lngLat.lng : lngLat.lon); lat = Number(lngLat.lat); }
+
+          if (!isFinite(lng) || !isFinite(lat)) return origSetLngLat(lngLat);
+
+          if (isTruck) {
+            // Ignore wild indoor GPS spikes (> 80m jump in < 2s while stationary)
+            if (state.lastRawLat !== null && state.lastRawLng !== null) {
+              const jumpM = haversineMeters(state.lastRawLat, state.lastRawLng, lat, lng);
+              const acc = (window.__smdGps && window.__smdGps.last && Number(window.__smdGps.last.acc)) || 25;
+              if (acc > 75 && jumpM > 35) {
+                return mk;
+              }
+            }
+            const firstPlacement = (state.currentLat === null);
+            applySnappedTarget(lat, lng, firstPlacement);
+            if (firstPlacement) {
+              return origSetLngLat([state.currentLng, state.currentLat]);
+            }
+            return mk;
+          } else if (!isLandingMarker) {
+            window.__smdSoloCoords.dest = [lng, lat];
+          }
+          return origSetLngLat([lng, lat]);
+        };
+        return mk;
+      }
+      WrappedMarker.prototype = OrigMarker.prototype;
+      Object.setPrototypeOf(WrappedMarker, OrigMarker);
+      Object.getOwnPropertyNames(OrigMarker).forEach((p) => {
+        try { if (!(p in WrappedMarker)) Object.defineProperty(WrappedMarker, p, Object.getOwnPropertyDescriptor(OrigMarker, p)); } catch (e) {}
+      });
+      WrappedMarker.__smdSurgicalWrapped = true;
+      mapboxgl.Marker = WrappedMarker;
+    }
+  }
+
+  // Instant, responsive Re-Center & Fit Both (cancels sluggish in-flight transitions first)
+  window.soloRecenterMap = function(ev) {
+    if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+    const m = getSoloMap();
+    if (!m) return;
+    if (typeof m.stop === 'function') m.stop();
+    const target = (state.currentLng !== null && state.currentLat !== null)
+      ? [state.currentLng, state.currentLat]
+      : (window.__smdSoloCoords.driver || (m.getCenter && [m.getCenter().lng, m.getCenter().lat]));
+    if (target) {
+      m.flyTo({ center: target, zoom: 16.5, pitch: 55, bearing: state.currentHeading || 0, essential: true, duration: 550 });
+    }
+  };
+
+  window.soloFitBoth = function(ev) {
+    if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+    const m = getSoloMap();
+    if (!m) return;
+    if (typeof m.stop === 'function') m.stop();
+    const drv = (state.currentLng !== null && state.currentLat !== null)
+      ? [state.currentLng, state.currentLat]
+      : window.__smdSoloCoords.driver;
+    const dst = window.__smdSoloCoords.dest;
+    if (drv && dst && typeof mapboxgl !== 'undefined' && typeof m.fitBounds === 'function') {
+      const bounds = new mapboxgl.LngLatBounds();
+      bounds.extend(drv);
+      bounds.extend(dst);
+      m.fitBounds(bounds, { padding: 75, maxZoom: 15.5, pitch: 35, duration: 600 });
+    } else if (drv) {
+      window.soloRecenterMap();
+    }
+  };
+
+  function bindSoloControls() {
+    const bar = document.getElementById('smd-solo-map-controls');
+    if (!bar) return;
+    const btns = bar.querySelectorAll('button');
+    if (btns[0] && !btns[0].dataset.smdSurgicalBound) {
+      btns[0].dataset.smdSurgicalBound = '1';
+      btns[0].addEventListener('click', window.soloRecenterMap, true);
+    }
+    if (btns[1] && !btns[1].dataset.smdSurgicalBound) {
+      btns[1].dataset.smdSurgicalBound = '1';
+      btns[1].addEventListener('click', window.soloFitBoth, true);
+    }
+  }
+
+  installMapboxWrapper();
+  bindSoloControls();
+  setInterval(() => {
+    installMapboxWrapper();
+    bindSoloControls();
+  }, 800);
 })();
 </script>
 </body>
