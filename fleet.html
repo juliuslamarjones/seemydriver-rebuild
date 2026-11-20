@@ -352,7 +352,7 @@ let fleetData = readSavedDrivers();
                 if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live';
                 const remoteData = snapshot.val() || {};
                 const savedLocal = (typeof readSavedDrivers === 'function') ? readSavedDrivers() : {};
-                fleetData = Object.assign({}, savedLocal, remoteData);
+                fleetData = remoteData;
                 if (typeof writeSavedDrivers === 'function') writeSavedDrivers(fleetData);
                 renderFleetRosterAndMarkers();
             }, (error) => {
@@ -386,7 +386,7 @@ let fleetData = readSavedDrivers();
                     document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live';
                     const remoteData = snapshot.val() || {};
                 const savedLocal = readSavedDrivers();
-const merged = Object.assign({}, savedLocal, remoteData);
+const merged = remoteData;
                 fleetData = merged;
                 writeSavedDrivers(fleetData);
                     renderFleetRosterAndMarkers();
