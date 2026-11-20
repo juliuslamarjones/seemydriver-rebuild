@@ -137,7 +137,9 @@
         let cachedDestLng = null;
         let geocodeTimer = null;
         let lastGeocodePickAt = 0;
-        const FULL_MAPBOX_TOKEN = (typeof mapboxgl !== 'undefined' && mapboxgl.accessToken) || window.MAPBOX_TOKEN || '';
+        window.MAPBOX_TOKEN = window.MAPBOX_TOKEN || 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+        if (typeof mapboxgl !== 'undefined') { mapboxgl.accessToken = window.MAPBOX_TOKEN; }
+        const FULL_MAPBOX_TOKEN = window.MAPBOX_TOKEN;
 
         function verifyUpgradeAccess() {
             if (DEV_BYPASS_MODE) return;
