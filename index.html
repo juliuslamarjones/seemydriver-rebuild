@@ -599,5 +599,187 @@ window.soloFitBoth = function() {
   window.addEventListener('load', showLandingDefault);
 })();
 </script>
+<script id="smd-landing-road-preview-v2">
+(function() {
+  const DEFAULT_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+  const START_LNG_LAT = [-95.3498, 29.9979];
+  const END_LNG_LAT = [-95.4446, 29.9854];
+
+  function ensureMapboxAssets(cb) {
+    if (typeof mapboxgl !== 'undefined') {
+      if (!document.getElementById('smd-mapbox-css')) {
+        const link = document.createElement('link');
+        link.id = 'smd-mapbox-css';
+        link.rel = 'stylesheet';
+        link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css';
+        document.head.appendChild(link);
+      }
+      return cb();
+    }
+    if (!document.getElementById('smd-mapbox-css')) {
+      const link = document.createElement('link');
+      link.id = 'smd-mapbox-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css';
+      document.head.appendChild(link);
+    }
+    if (!document.getElementById('smd-mapbox-js')) {
+      const script = document.createElement('script');
+      script.id = 'smd-mapbox-js';
+      script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js';
+      script.onload = cb;
+      script.onerror = cb;
+      document.head.appendChild(script);
+    } else {
+      setTimeout(cb, 300);
+    }
+  }
+
+  async function fetchRoadRoute(token) {
+    const pair = START_LNG_LAT[0] + ',' + START_LNG_LAT[1] + ';' + END_LNG_LAT[0] + ',' + END_LNG_LAT[1];
+    if (token) {
+      try {
+        const mbUrl = 'https://api.mapbox.com/directions/v5/mapbox/driving/' + pair +
+          '?geometries=geojson&overview=full&access_token=' + encodeURIComponent(token);
+        const res = await fetch(mbUrl);
+        if (res.ok) {
+          const json = await res.json();
+          const coords = json && json.routes && json.routes[0] && json.routes[0].geometry && json.routes[0].geometry.coordinates;
+          if (Array.isArray(coords) && coords.length > 2) return coords;
+        }
+      } catch (e) {}
+    }
+    try {
+      const osrmUrl = 'https://router.project-osrm.org/route/v1/driving/' + pair +
+        '?geometries=geojson&overview=full';
+      const res = await fetch(osrmUrl);
+      if (res.ok) {
+        const json = await res.json();
+        const coords = json && json.routes && json.routes[0] && json.routes[0].geometry && json.routes[0].geometry.coordinates;
+        if (Array.isArray(coords) && coords.length > 2) return coords;
+      }
+    } catch (e) {}
+    return [START_LNG_LAT, END_LNG_LAT];
+  }
+
+  function createCustomBlackTruckEl() {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'width:40px;height:52px;display:flex;align-items:center;justify-content:center;cursor:pointer;filter:drop-shadow(0 8px 12px rgba(0,0,0,0.45));';
+    wrap.innerHTML = [
+      '<svg viewBox="0 0 44 58" width="40" height="52" xmlns="http://www.w3.org/2000/svg">',
+        '<rect x="8" y="5" width="28" height="48" rx="8" fill="#090b10" stroke="#fbbf24" stroke-width="2.4"/>',
+        '<rect x="11" y="11" width="22" height="11" rx="3" fill="#1e293b"/>',
+        '<rect x="11" y="25" width="22" height="14" rx="2" fill="#111827"/>',
+        '<rect x="11" y="42" width="22" height="7" rx="2" fill="#18181b"/>',
+        '<circle cx="12" cy="7" r="2.2" fill="#fde047"/>',
+        '<circle cx="32" cy="7" r="2.2" fill="#fde047"/>',
+        '<rect x="10" y="51" width="6" height="3" rx="1" fill="#ef4444"/>',
+        '<rect x="28" y="51" width="6" height="3" rx="1" fill="#ef4444"/>',
+      '</svg>'
+    ].join('');
+    return wrap;
+  }
+
+  function findTargetContainer() {
+    let el = document.getElementById('landing-preview-map');
+    if (el) return el;
+    const label = Array.from(document.querySelectorAll('*')).find(
+      (n) => n.children.length === 0 && n.textContent && n.textContent.trim() === 'LIVE ROUTE TELEMETRY'
+    );
+    const card = label && (label.closest('div[class*="rounded"]') || (label.parentElement && label.parentElement.parentElement));
+    if (!card) return null;
+    const existing = card.querySelector('#smd-landing-preview-stage');
+    if (existing) return existing;
+    const blank = Array.from(card.querySelectorAll('div')).find((d) => {
+      const r = d.getBoundingClientRect();
+      return r.height > 120 && r.width > 150;
+    });
+    const stage = document.createElement('div');
+    stage.id = 'smd-landing-preview-stage';
+    if (blank && blank.parentElement) {
+      blank.replaceWith(stage);
+    } else {
+      card.appendChild(stage);
+    }
+    return stage;
+  }
+
+  function mountPreviewMap() {
+    try {
+      const container = findTargetContainer();
+      if (!container) return;
+      container.style.minHeight = '260px';
+      container.style.height = '260px';
+      container.style.width = '100%';
+      container.style.position = 'relative';
+      container.style.borderRadius = '14px';
+      container.style.overflow = 'hidden';
+      container.style.backgroundColor = '#e5e7eb';
+
+      if (container.dataset.smdRendered === '1') return;
+      container.dataset.smdRendered = '1';
+
+      ensureMapboxAssets(async () => {
+        if (typeof mapboxgl === 'undefined') return;
+        const token = window.MAPBOX_TOKEN || DEFAULT_TOKEN;
+        mapboxgl.accessToken = token;
+
+        const map = new mapboxgl.Map({
+          container: container,
+          style: 'mapbox://styles/mapbox/streets-v12',
+          center: [-95.397, 29.991],
+          zoom: 11.3,
+          interactive: true
+        });
+
+        const coords = await fetchRoadRoute(token);
+
+        map.on('load', () => {
+          if (!map.getSource('smd-landing-route')) {
+            map.addSource('smd-landing-route', {
+              type: 'geojson',
+              data: {
+                type: 'Feature',
+                properties: {},
+                geometry: { type: 'LineString', coordinates: coords }
+              }
+            });
+          }
+          if (!map.getLayer('smd-landing-route-border')) {
+            map.addLayer({
+              id: 'smd-landing-route-border',
+              type: 'line',
+              source: 'smd-landing-route',
+              layout: { 'line-join': 'round', 'line-cap': 'round' },
+              paint: { 'line-color': '#0f172a', 'line-width': 7.5, 'line-opacity': 0.9 }
+            });
+          }
+          if (!map.getLayer('smd-landing-route-core')) {
+            map.addLayer({
+              id: 'smd-landing-route-core',
+              type: 'line',
+              source: 'smd-landing-route',
+              layout: { 'line-join': 'round', 'line-cap': 'round' },
+              paint: { 'line-color': '#f59e0b', 'line-width': 4.2 }
+            });
+          }
+
+          const truckPos = coords[Math.floor(coords.length * 0.45)] || START_LNG_LAT;
+          new mapboxgl.Marker({ element: createCustomBlackTruckEl() })
+            .setLngLat(truckPos)
+            .addTo(map);
+        });
+      });
+    } catch (e) {}
+  }
+
+  setInterval(mountPreviewMap, 1000);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(mountPreviewMap, 250));
+  } else {
+    setTimeout(mountPreviewMap, 250);
+  }
+})();
+</script>
 </body>
 </html>
