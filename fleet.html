@@ -126,6 +126,9 @@
     </div>
 
     <script>
+        const firebaseConfig = { apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI", authDomain: "seemydriver-prod.firebaseapp.com", databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com", projectId: "seemydriver-prod", storageBucket: "seemydriver-prod.firebasestorage.app", messagingSenderId: "16366013329", appId: "1:16366013329:web:7e993e6ee37f940a04a064" };
+        if (typeof firebase !== 'undefined' && !firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+        if (typeof firebase !== 'undefined' && typeof window.db === 'undefined') { window.db = firebase.database(); }
         const DEV_BYPASS_MODE = true;
         let map = null;
         let fleetData = {};
