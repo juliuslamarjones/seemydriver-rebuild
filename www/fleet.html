@@ -138,7 +138,18 @@
         function savePersistedFleet(data) {
             try { localStorage.setItem(FLEET_STORAGE_KEY, JSON.stringify(data || {})); } catch (e) {}
         }
-        let fleetData = loadPersistedFleet();
+        const PERSIST_KEY = 'smd_fleet_sessions_persisted';
+function readSavedDrivers() {
+  try {
+    const raw = localStorage.getItem(PERSIST_KEY);
+    const obj = raw ? JSON.parse(raw) : {};
+    return (obj && typeof obj === 'object') ? obj : {};
+  } catch (e) { return {}; }
+}
+function writeSavedDrivers(obj) {
+  try { localStorage.setItem(PERSIST_KEY, JSON.stringify(obj || {})); } catch (e) {}
+}
+let fleetData = readSavedDrivers();
         let activeMarkers = {};
         let cachedDestLat = null;
         let cachedDestLng = null;
@@ -352,9 +363,10 @@
                 broadcastsRef.on('value', (snapshot) => {
                     document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live';
                     const remoteData = snapshot.val() || {};
-                const merged = Object.assign({}, loadPersistedFleet(), remoteData);
+                const savedLocal = readSavedDrivers();
+const merged = Object.assign({}, savedLocal, remoteData);
                 fleetData = merged;
-                savePersistedFleet(fleetData);
+                writeSavedDrivers(fleetData);
                     renderFleetRosterAndMarkers();
                 }, (error) => {
                     document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> Disconnected'; console.error('RTDB read error:', error);
@@ -583,7 +595,7 @@
             if (confirm("⚠️ WARNING: Delete ALL broadcast sessions?")) {
                 db.ref('broadcasts').remove().then(() => {
                     Object.keys(activeMarkers).forEach(id => { activeMarkers[id].marker.remove(); });
-                    activeMarkers = {}; fleetData = {}; savePersistedFleet({}); renderFleetRosterAndMarkers();
+                    activeMarkers = {}; fleetData = {}; writeSavedDrivers({}); renderFleetRosterAndMarkers();
                 });
             }
         };
