@@ -199,7 +199,7 @@ window.recenterFleetMap = function () {
             try {
                 map = new mapboxgl.Map({
                     container: 'map',
-                    style: 'mapbox://styles/mapbox/navigation-day-v1',
+                    style: 'mapbox://styles/mapbox/streets-v12',
                     center: [-95.2831, 29.9731],
                     zoom: 12
                 });
@@ -208,7 +208,7 @@ window.recenterFleetMap = function () {
                     container: 'map',
                     style: {
                         version: 8,
-                        sources: { osm: { type: 'raster', tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'], tileSize: 256 } },
+                        sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256 } },
                         layers: [{ id: 'osm-layer', type: 'raster', source: 'osm' }]
                     },
                     center: [-95.2831, 29.9731],
@@ -220,7 +220,7 @@ window.recenterFleetMap = function () {
                     map._fallbackApplied = true;
                     map.setStyle({
                         version: 8,
-                        sources: { osm: { type: 'raster', tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'], tileSize: 256 } },
+                        sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256 } },
                         layers: [{ id: 'osm-layer', type: 'raster', source: 'osm' }]
                     });
                 }
