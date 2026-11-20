@@ -131,6 +131,9 @@
         function verifyUpgradeAccess() {
             if (DEV_BYPASS_MODE) return;
             const user = firebase.auth().currentUser;
+            if (!user && DEV_BYPASS_MODE) {
+                firebase.auth().signInAnonymously().catch((err) => console.warn('Anon auth fallback:', err));
+            }
             if (!user && !DEV_BYPASS_MODE) {
                 alert("Access Denied: Please log in.");
                 window.location.href = "https://www.seemydriver.com/upgrade";
@@ -348,10 +351,11 @@ window.recenterFleetMap = function () {
                 }
                 const broadcastsRef = db.ref('broadcasts');
                 broadcastsRef.on('value', (snapshot) => {
+                    document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live';
                     fleetData = snapshot.val() || {};
                     renderFleetRosterAndMarkers();
                 }, (error) => {
-                    document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> Disconnected';
+                    document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> Disconnected'; console.error('RTDB read error:', error);
                 });
             });
         }
