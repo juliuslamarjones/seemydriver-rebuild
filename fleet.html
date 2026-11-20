@@ -131,7 +131,18 @@
         if (typeof firebase !== 'undefined' && typeof window.db === 'undefined') { window.db = firebase.database(); }
         const DEV_BYPASS_MODE = true;
         let map = null;
-        let fleetData = {};
+        const FLEET_STORAGE_KEY = 'smd_fleet_broadcasts_v1';
+        function loadPersistedFleet() {
+            try {
+                const raw = localStorage.getItem(FLEET_STORAGE_KEY);
+                const parsed = raw ? JSON.parse(raw) : {};
+                return (parsed && typeof parsed === 'object') ? parsed : {};
+            } catch (e) { return {}; }
+        }
+        function savePersistedFleet(data) {
+            try { localStorage.setItem(FLEET_STORAGE_KEY, JSON.stringify(data || {})); } catch (e) {}
+        }
+        let fleetData = loadPersistedFleet();
         let activeMarkers = {};
         let cachedDestLat = null;
         let cachedDestLng = null;
@@ -344,7 +355,10 @@
                 const broadcastsRef = db.ref('broadcasts');
                 broadcastsRef.on('value', (snapshot) => {
                     document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live';
-                    fleetData = snapshot.val() || {};
+                    const remoteData = snapshot.val() || {};
+                const merged = Object.assign({}, loadPersistedFleet(), remoteData);
+                fleetData = merged;
+                savePersistedFleet(fleetData);
                     renderFleetRosterAndMarkers();
                 }, (error) => {
                     document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> Disconnected'; console.error('RTDB read error:', error);
@@ -543,6 +557,7 @@
                     heading: 0,
                     timestamp: Date.now()
                 };
+                savePersistedFleet(fleetData);
                 renderFleetRosterAndMarkers();
                 selectDriver(newSid);
 
@@ -561,6 +576,9 @@
             if (confirm(`Delete session ${sid}?`)) {
                 db.ref(`broadcasts/${sid}`).remove().then(() => {
                     if (activeMarkers[sid]) { activeMarkers[sid].marker.remove(); delete activeMarkers[sid]; }
+                    delete fleetData[sid];
+                    savePersistedFleet(fleetData);
+                    renderFleetRosterAndMarkers();
                 });
             }
         };
@@ -569,7 +587,7 @@
             if (confirm("⚠️ WARNING: Delete ALL broadcast sessions?")) {
                 db.ref('broadcasts').remove().then(() => {
                     Object.keys(activeMarkers).forEach(id => { activeMarkers[id].marker.remove(); });
-                    activeMarkers = {}; fleetData = {}; renderFleetRosterAndMarkers();
+                    activeMarkers = {}; fleetData = {}; savePersistedFleet({}); renderFleetRosterAndMarkers();
                 });
             }
         };
