@@ -720,7 +720,7 @@ window.soloFitBoth = function() {
       container.dataset.smdRendered = '1';
 
       ensureMapboxAssets(async () => {
-        if (typeof mapboxgl === 'undefined') return;
+        if (typeof mapboxgl === 'undefined') { container.dataset.smdRendered = '0'; return; }
         const token = window.MAPBOX_TOKEN || DEFAULT_TOKEN;
         mapboxgl.accessToken = token;
 
@@ -1102,7 +1102,7 @@ window.soloFitBoth = function() {
         add3dBuildings(m);
         const c = (window.__smdSoloCoords && window.__smdSoloCoords.driver) || (m.getCenter && [m.getCenter().lng, m.getCenter().lat]);
         if (c && typeof m.easeTo === 'function') {
-          m.easeTo({ center: c, zoom: 17, pitch: 55, duration: 500 });
+          m.easeTo({ center: c, zoom: 16, pitch: 55, duration: 500 });
         }
       };
       if (m.isStyleLoaded && m.isStyleLoaded()) applyTight3d();
