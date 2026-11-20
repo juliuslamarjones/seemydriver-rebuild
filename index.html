@@ -1118,31 +1118,33 @@ window.soloFitBoth = function() {
 <script id="smd-hard-lock-controls">
 (function() {
   window.soloRecenterMap = function(e) {
-    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }
     if (typeof window.recenterDriverMap === 'function') window.recenterDriverMap();
   };
   window.soloFitBoth = function(e) {
-    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }
     if (typeof window.fitDriverMap === 'function') window.fitDriverMap();
   };
-  function bindBar() {
+  function wireSoloBar() {
     const bar = document.getElementById('smd-solo-map-controls');
     if (!bar) return;
     const btns = bar.querySelectorAll('button');
-    if (btns[0] && !btns[0].dataset.smdCleanBind) {
-      btns[0].dataset.smdCleanBind = '1';
+    if (btns[0] && !btns[0].dataset.smdWiredV10) {
+      btns[0].dataset.smdWiredV10 = '1';
       btns[0].removeAttribute('onclick');
+      btns[0].onclick = null;
       btns[0].addEventListener('click', window.soloRecenterMap, true);
     }
-    if (btns[1] && !btns[1].dataset.smdCleanBind) {
-      btns[1].dataset.smdCleanBind = '1';
+    if (btns[1] && !btns[1].dataset.smdWiredV10) {
+      btns[1].dataset.smdWiredV10 = '1';
       btns[1].removeAttribute('onclick');
+      btns[1].onclick = null;
       btns[1].addEventListener('click', window.soloFitBoth, true);
     }
   }
-  bindBar();
-  document.addEventListener('DOMContentLoaded', bindBar);
-  window.addEventListener('load', bindBar);
+  wireSoloBar();
+  document.addEventListener('DOMContentLoaded', wireSoloBar);
+  window.addEventListener('load', wireSoloBar);
 })();
 </script>
 </body>
