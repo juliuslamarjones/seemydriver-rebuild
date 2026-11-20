@@ -603,15 +603,24 @@ const merged = Object.assign({}, savedLocal, remoteData);
      };
 
         window.deleteDriverSession = function(sid) {
-            if (confirm(`Delete session ${sid}?`)) {
-                db.ref(`broadcasts/${sid}`).remove().then(() => {
-                    if (activeMarkers[sid]) { activeMarkers[sid].marker.remove(); delete activeMarkers[sid]; }
-                    delete fleetData[sid];
-                    savePersistedFleet(fleetData);
-                    renderFleetRosterAndMarkers();
+        if (!sid) return;
+        if (confirm('Delete session ' + sid + '?')) {
+            if (activeMarkers[sid]) {
+                try { activeMarkers[sid].marker.remove(); } catch (e) {}
+                delete activeMarkers[sid];
+            }
+            delete fleetData[sid];
+            if (typeof writeSavedDrivers === 'function') {
+                writeSavedDrivers(fleetData);
+            }
+            renderFleetRosterAndMarkers();
+            if (window.db && typeof db.ref === 'function') {
+                db.ref('broadcasts/' + sid).remove().catch((err) => {
+                    console.warn('RTDB remove warning for ' + sid + ':', err);
                 });
             }
-        };
+        }
+    };
 
         window.purgeAllBroadcasts = function() {
             if (confirm("⚠️ WARNING: Delete ALL broadcast sessions?")) {
