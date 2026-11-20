@@ -127,6 +127,14 @@
 
     <script>
         const DEV_BYPASS_MODE = true;
+        let map = null;
+        let fleetData = {};
+        let activeMarkers = {};
+        let cachedDestLat = null;
+        let cachedDestLng = null;
+        let geocodeTimer = null;
+        let lastGeocodePickAt = 0;
+        const FULL_MAPBOX_TOKEN = (typeof mapboxgl !== 'undefined' && mapboxgl.accessToken) || window.MAPBOX_TOKEN || '';
 
         function verifyUpgradeAccess() {
             if (DEV_BYPASS_MODE) return;
@@ -314,10 +322,20 @@
 
         function initFirebaseListeners() {
             firebase.auth().onAuthStateChanged((user) => {
-                if (!user) {
-                    document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> Sign In Required';
+            if (!user) {
+                if (DEV_BYPASS_MODE) {
+                    const statusEl = document.getElementById('connection-status');
+                    if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Connecting...';
+                    firebase.auth().signInAnonymously().catch((err) => {
+                        console.error('Anon auth error:', err);
+                        if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> Auth Blocked';
+                    });
                     return;
                 }
+                const statusEl = document.getElementById('connection-status');
+                if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> Sign In Required';
+                return;
+            }
                 const broadcastsRef = db.ref('broadcasts');
                 broadcastsRef.on('value', (snapshot) => {
                     document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live';
