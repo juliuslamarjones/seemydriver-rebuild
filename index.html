@@ -292,5 +292,104 @@ window.soloFitBoth = function() {
     }
   } catch (e) {}
 };</script>
+<script id="smd-solo-camera-controls">
+(function() {
+  function getSoloMap() {
+    const candidates = [
+      window.drvState && window.drvState.map,
+      window.soloMap,
+      window.map
+    ];
+    for (let i = 0; i < candidates.length; i++) {
+      const m = candidates[i];
+      if (m && (typeof m.flyTo === 'function' || typeof m.easeTo === 'function' || typeof m.fitBounds === 'function')) {
+        return m;
+      }
+    }
+    return null;
+  }
+
+  function getSoloCoords() {
+    const readKey = (k) => {
+      try {
+        return (window.SafeStorage && window.SafeStorage.getItem(k)) || localStorage.getItem(k);
+      } catch (e) { return null; }
+    };
+    let dLat = parseFloat(readKey('smd_lat') || readKey('smd_driver_lat'));
+    let dLng = parseFloat(readKey('smd_lng') || readKey('smd_driver_lng'));
+    let tLat = parseFloat(readKey('smd_dest_lat'));
+    let tLng = parseFloat(readKey('smd_dest_lng'));
+
+    if ((!isFinite(dLat) || !isFinite(dLng)) && window.drvState) {
+      dLat = Number(window.drvState.lat);
+      dLng = Number(window.drvState.lng);
+    }
+    if ((!isFinite(tLat) || !isFinite(tLng)) && window.drvState) {
+      tLat = Number(window.drvState.destLat);
+      tLng = Number(window.drvState.destLng);
+    }
+    return {
+      driver: (isFinite(dLat) && isFinite(dLng)) ? [dLng, dLat] : null,
+      dest: (isFinite(tLat) && isFinite(tLng)) ? [tLng, tLat] : null
+    };
+  }
+
+  window.soloRecenterMap = function() {
+    try {
+      const m = getSoloMap();
+      if (!m) return;
+      const c = getSoloCoords();
+      const target = c.driver || c.dest || [-95.4613, 29.9855];
+      if (typeof m.flyTo === 'function') {
+        m.flyTo({ center: target, zoom: 14, essential: true, duration: 800 });
+      } else if (typeof m.easeTo === 'function') {
+        m.easeTo({ center: target, zoom: 14, duration: 800 });
+      }
+    } catch (e) {}
+  };
+
+  window.soloFitBoth = function() {
+    try {
+      const m = getSoloMap();
+      if (!m) return;
+      const c = getSoloCoords();
+      if (c.driver && c.dest && typeof mapboxgl !== 'undefined' && typeof m.fitBounds === 'function') {
+        const bounds = new mapboxgl.LngLatBounds();
+        bounds.extend(c.driver);
+        bounds.extend(c.dest);
+        m.fitBounds(bounds, { padding: 65, maxZoom: 15, duration: 850 });
+      } else if (c.driver || c.dest) {
+        window.soloRecenterMap();
+      }
+    } catch (e) {}
+  };
+
+  function mountSoloButtons() {
+    try {
+      if (document.getElementById('smd-solo-map-controls')) return;
+      const container = document.getElementById('driver-map-container') || document.getElementById('map') || (document.querySelector('.mapboxgl-map') && document.querySelector('.mapboxgl-map').parentElement);
+      if (!container) return;
+      if (getComputedStyle(container).position === 'static') {
+        container.style.position = 'relative';
+      }
+      const bar = document.createElement('div');
+      bar.id = 'smd-solo-map-controls';
+      bar.style.cssText = 'position:absolute;bottom:14px;left:14px;z-index:30;display:flex;gap:8px;align-items:center;pointer-events:auto;';
+      bar.innerHTML = [
+        '<button type="button" onclick="soloRecenterMap()" style="background:rgba(15,17,23,0.92);color:#f3f4f6;border:1px solid rgba(255,255,255,0.16);border-radius:10px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.45);">Re-Center</button>',
+        '<button type="button" onclick="soloFitBoth()" style="background:rgba(15,17,23,0.92);color:#fbbf24;border:1px solid rgba(251,191,36,0.35);border-radius:10px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.45);">Fit Both</button>'
+      ].join('');
+      container.appendChild(bar);
+    } catch (e) {}
+  }
+
+  setInterval(mountSoloButtons, 800);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mountSoloButtons);
+  } else {
+    mountSoloButtons();
+  }
+})();
+</script>
 </body>
 </html>
