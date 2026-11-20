@@ -1169,5 +1169,228 @@ window.soloFitBoth = function() {
   }, 500);
 })();
 </script>
+<script id="smd-landing-live-gps-preview">
+(function() {
+  const DEFAULT_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+  const FALLBACK_START = [-95.3498, 29.9979];
+  const FALLBACK_DEST = [-95.4446, 29.9854];
+
+  function ensureMapbox(cb) {
+    if (typeof mapboxgl !== 'undefined') return cb();
+    if (!document.getElementById('smd-mapbox-css')) {
+      const link = document.createElement('link');
+      link.id = 'smd-mapbox-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css';
+      document.head.appendChild(link);
+    }
+    if (!document.getElementById('smd-mapbox-js')) {
+      const script = document.createElement('script');
+      script.id = 'smd-mapbox-js';
+      script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js';
+      script.onload = cb;
+      script.onerror = cb;
+      document.head.appendChild(script);
+    } else {
+      setTimeout(cb, 250);
+    }
+  }
+
+  function getViewerLocation() {
+    return new Promise((resolve) => {
+      if (window.__smdGps && window.__smdGps.last && isFinite(window.__smdGps.last.lat) && isFinite(window.__smdGps.last.lng)) {
+        return resolve({ lng: Number(window.__smdGps.last.lng), lat: Number(window.__smdGps.last.lat), live: true });
+      }
+      if (!navigator.geolocation) {
+        return resolve({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false });
+      }
+      let done = false;
+      const finish = (payload) => {
+        if (done) return;
+        done = true;
+        resolve(payload);
+      };
+      setTimeout(() => finish({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false }), 4500);
+      try {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (pos && pos.coords && isFinite(pos.coords.latitude) && isFinite(pos.coords.longitude)) {
+              finish({ lng: Number(pos.coords.longitude), lat: Number(pos.coords.latitude), live: true });
+            } else {
+              finish({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false });
+            }
+          },
+          () => finish({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false }),
+          { enableHighAccuracy: true, maximumAge: 10000, timeout: 4000 }
+        );
+      } catch (e) {
+        finish({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false });
+      }
+    });
+  }
+
+  async function fetchRoadCoords(startLngLat, endLngLat, token) {
+    const pair = startLngLat[0] + ',' + startLngLat[1] + ';' + endLngLat[0] + ',' + endLngLat[1];
+    if (token) {
+      try {
+        const mbUrl = 'https://api.mapbox.com/directions/v5/mapbox/driving/' + pair +
+          '?geometries=geojson&overview=full&access_token=' + encodeURIComponent(token);
+        const res = await fetch(mbUrl);
+        if (res.ok) {
+          const json = await res.json();
+          const coords = json && json.routes && json.routes[0] && json.routes[0].geometry && json.routes[0].geometry.coordinates;
+          if (Array.isArray(coords) && coords.length > 2) return coords;
+        }
+      } catch (e) {}
+    }
+    try {
+      const osrmUrl = 'https://router.project-osrm.org/route/v1/driving/' + pair +
+        '?geometries=geojson&overview=full';
+      const res = await fetch(osrmUrl);
+      if (res.ok) {
+        const json = await res.json();
+        const coords = json && json.routes && json.routes[0] && json.routes[0].geometry && json.routes[0].geometry.coordinates;
+        if (Array.isArray(coords) && coords.length > 2) return coords;
+      }
+    } catch (e) {}
+    return [startLngLat, endLngLat];
+  }
+
+  function buildTruckEl() {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'width:40px;height:52px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 8px 12px rgba(0,0,0,0.45));';
+    wrap.innerHTML = [
+      '<svg viewBox="0 0 44 58" width="40" height="52" xmlns="http://www.w3.org/2000/svg">',
+        '<rect x="8" y="5" width="28" height="48" rx="8" fill="#090b10" stroke="#fbbf24" stroke-width="2.4"/>',
+        '<rect x="11" y="11" width="22" height="11" rx="3" fill="#1e293b"/>',
+        '<rect x="11" y="25" width="22" height="14" rx="2" fill="#111827"/>',
+        '<rect x="11" y="42" width="22" height="7" rx="2" fill="#18181b"/>',
+        '<circle cx="12" cy="7" r="2.2" fill="#fde047"/>',
+        '<circle cx="32" cy="7" r="2.2" fill="#fde047"/>',
+      '</svg>'
+    ].join('');
+    return wrap;
+  }
+
+  function getPreviewHost() {
+    let el = document.getElementById('landing-preview-map') || document.getElementById('smd-landing-preview-stage');
+    if (el) return el;
+    const label = Array.from(document.querySelectorAll('*')).find(
+      (n) => n.children.length === 0 && n.textContent && n.textContent.trim() === 'LIVE ROUTE TELEMETRY'
+    );
+    const card = label && (label.closest('div[class*="rounded"]') || (label.parentElement && label.parentElement.parentElement));
+    if (!card) return null;
+    const blank = Array.from(card.querySelectorAll('div')).find((d) => {
+      const r = d.getBoundingClientRect();
+      return r.height > 120 && r.width > 150;
+    });
+    const stage = document.createElement('div');
+    stage.id = 'smd-landing-preview-stage';
+    if (blank && blank.parentElement) {
+      blank.replaceWith(stage);
+    } else {
+      card.appendChild(stage);
+    }
+    return stage;
+  }
+
+  async function initLivePreview() {
+    try {
+      const host = getPreviewHost();
+      if (!host || host.dataset.smdLiveReady === '1') return;
+      host.dataset.smdLiveReady = '1';
+      host.style.minHeight = '260px';
+      host.style.height = '260px';
+      host.style.width = '100%';
+      host.style.position = 'relative';
+      host.style.borderRadius = '14px';
+      host.style.overflow = 'hidden';
+
+      const loc = await getViewerLocation();
+      const startPt = [loc.lng, loc.lat];
+      const destPt = loc.live ? [loc.lng - 0.055, loc.lat + 0.018] : FALLBACK_DEST;
+
+      ensureMapbox(async () => {
+        if (typeof mapboxgl === 'undefined') {
+          host.dataset.smdLiveReady = '0';
+          return;
+        }
+        const token = window.MAPBOX_TOKEN || DEFAULT_TOKEN;
+        mapboxgl.accessToken = token;
+
+        const map = new mapboxgl.Map({
+          container: host,
+          style: 'mapbox://styles/mapbox/streets-v12',
+          center: startPt,
+          zoom: 13.5,
+          interactive: true
+        });
+
+        const coords = await fetchRoadCoords(startPt, destPt, token);
+        const spawnPt = (Array.isArray(coords) && coords.length > 0) ? coords[0] : startPt;
+
+        map.on('load', () => {
+          map.jumpTo({ center: spawnPt, zoom: 13.5 });
+          if (!map.getSource('smd-landing-live-route')) {
+            map.addSource('smd-landing-live-route', {
+              type: 'geojson',
+              data: {
+                type: 'Feature',
+                properties: {},
+                geometry: { type: 'LineString', coordinates: coords }
+              }
+            });
+          }
+          if (!map.getLayer('smd-landing-live-route-casing')) {
+            map.addLayer({
+              id: 'smd-landing-live-route-casing',
+              type: 'line',
+              source: 'smd-landing-live-route',
+              layout: { 'line-join': 'round', 'line-cap': 'round' },
+              paint: { 'line-color': '#0f172a', 'line-width': 7.5, 'line-opacity': 0.9 }
+            });
+          }
+          if (!map.getLayer('smd-landing-live-route-line')) {
+            map.addLayer({
+              id: 'smd-landing-live-route-line',
+              type: 'line',
+              source: 'smd-landing-live-route',
+              layout: { 'line-join': 'round', 'line-cap': 'round' },
+              paint: { 'line-color': '#2563eb', 'line-width': 4.2 }
+            });
+          }
+
+          const marker = new mapboxgl.Marker({ element: buildTruckEl() })
+            .setLngLat(spawnPt)
+            .addTo(map);
+
+          if (loc.live && navigator.geolocation && navigator.geolocation.watchPosition) {
+            navigator.geolocation.watchPosition(
+              (pos) => {
+                if (!pos || !pos.coords) return;
+                const pLng = Number(pos.coords.longitude);
+                const pLat = Number(pos.coords.latitude);
+                if (isFinite(pLng) && isFinite(pLat)) {
+                  marker.setLngLat([pLng, pLat]);
+                  map.panTo([pLng, pLat], { duration: 400 });
+                }
+              },
+              () => {},
+              { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+            );
+          }
+        });
+      });
+    } catch (e) {}
+  }
+
+  setInterval(initLivePreview, 1000);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(initLivePreview, 200));
+  } else {
+    setTimeout(initLivePreview, 200);
+  }
+})();
+</script>
 </body>
 </html>
