@@ -1413,5 +1413,62 @@ window.soloFitBoth = function() {
   }
 })();
 </script>
+<script id="smd-landing-3d-buildings-layer">
+(function() {
+  function applyLanding3D(map) {
+    try {
+      if (!map || typeof map.getStyle !== 'function' || typeof map.addLayer !== 'function') return;
+      if (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded()) {
+        if (typeof map.once === 'function') map.once('load', () => applyLanding3D(map));
+        return;
+      }
+      if (typeof map.easeTo === 'function') {
+        map.easeTo({ pitch: 55, zoom: 16, duration: 400 });
+      }
+      if (map.getLayer && map.getLayer('smd-landing-3d-buildings')) return;
+      const style = map.getStyle();
+      const layers = (style && style.layers) || [];
+      const labelLayer = layers.find((l) => l.type === 'symbol' && l.layout && l.layout['text-field']);
+      const compositeSource = style && style.sources && style.sources.composite ? 'composite' : null;
+      if (!compositeSource) return;
+
+      map.addLayer({
+        id: 'smd-landing-3d-buildings',
+        source: compositeSource,
+        'source-layer': 'building',
+        filter: ['==', 'extrude', 'true'],
+        type: 'fill-extrusion',
+        minzoom: 13,
+        paint: {
+          'fill-extrusion-color': '#94a3b8',
+          'fill-extrusion-height': ['coalesce', ['get', 'height'], 16],
+          'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
+          'fill-extrusion-opacity': 0.88
+        }
+      }, labelLayer ? labelLayer.id : undefined);
+    } catch (e) {}
+  }
+
+  setInterval(() => {
+    try {
+      const host = document.getElementById('landing-preview-map') || document.getElementById('smd-landing-preview-stage');
+      if (!host) return;
+      const maps = [];
+      if (window.__smdSoloMap) maps.push(window.__smdSoloMap);
+      if (Array.isArray(window.__smdSoloMaps)) {
+        window.__smdSoloMaps.forEach((m) => { if (m && maps.indexOf(m) === -1) maps.push(m); });
+      }
+      maps.forEach((m) => {
+        try {
+          const c = typeof m.getContainer === 'function' ? m.getContainer() : null;
+          if (c && (c.id === 'landing-preview-map' || c.id === 'smd-landing-preview-stage' || (c.closest && c.closest('#landing-view')))) {
+            applyLanding3D(m);
+          }
+        } catch (e) {}
+      });
+    } catch (e) {}
+  }, 600);
+})();
+</script>
 </body>
 </html>
