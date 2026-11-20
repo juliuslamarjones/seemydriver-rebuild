@@ -1548,11 +1548,31 @@ window.soloFitBoth = function() {
 </script>
 <script id="smd-hard-lock-controls">
 (function() {
-  if (window.__smdCleanCameraV8) return;
-  window.__smdCleanCameraV8 = true;
+  if (window.__smdUnifiedV9) return;
+  window.__smdUnifiedV9 = true;
 
   window.__smdSoloMaps = window.__smdSoloMaps || [];
   window.__smdSoloCoords = window.__smdSoloCoords || { driver: null, dest: null };
+
+  function toRad(d) { return d * Math.PI / 180; }
+  function toDeg(r) { return r * 180 / Math.PI; }
+
+  function distMeters(lat1, lng1, lat2, lng2) {
+    const R = 6371000;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function bearingDeg(lat1, lng1, lat2, lng2) {
+    const y = Math.sin(toRad(lng2 - lng1)) * Math.cos(toRad(lat2));
+    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+      Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lng2 - lng1));
+    return (toDeg(Math.atan2(y, x)) + 360) % 360;
+  }
 
   function validPt(p) {
     return Array.isArray(p) && p.length >= 2 &&
@@ -1596,6 +1616,137 @@ window.soloFitBoth = function() {
     return null;
   }
 
+  function getRouteCoords(map) {
+    if (map && typeof map.getSource === 'function') {
+      try {
+        const src = map.getSource('smd-route-src');
+        const data = src && (src._data || (src.serialize && src.serialize().data));
+        const coords = data && data.geometry && data.geometry.coordinates;
+        if (Array.isArray(coords) && coords.length >= 2) {
+          window.__smdLatestRouteCoords = coords;
+          return coords;
+        }
+      } catch (e) {}
+    }
+    return Array.isArray(window.__smdLatestRouteCoords) && window.__smdLatestRouteCoords.length >= 2
+      ? window.__smdLatestRouteCoords : null;
+  }
+
+  function snapNoseFirst(lat, lng, coords) {
+    let bestD = Infinity;
+    let bestPt = [lng, lat];
+    let bestBear = window.__smdLastTruckBearing || 0;
+
+    for (let i = 0; i < coords.length - 1; i++) {
+      if (!validPt(coords[i]) || !validPt(coords[i + 1])) continue;
+      const ax = Number(coords[i][0]), ay = Number(coords[i][1]);
+      const bx = Number(coords[i + 1][0]), by = Number(coords[i + 1][1]);
+      const dx = bx - ax, dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+      let t = len2 > 0 ? ((lng - ax) * dx + (lat - ay) * dy) / len2 : 0;
+      if (t < 0) t = 0;
+      if (t > 1) t = 1;
+      const px = ax + t * dx, py = ay + t * dy;
+      const d = distMeters(lat, lng, py, px);
+      if (d < bestD) {
+        bestD = d;
+        bestPt = [px, py];
+        let lookPt = [bx, by];
+        let ahead = distMeters(py, px, by, bx);
+        let k = i + 1;
+        while (k < coords.length - 1 && ahead < 16) {
+          if (validPt(coords[k]) && validPt(coords[k + 1])) {
+            ahead += distMeters(Number(coords[k][1]), Number(coords[k][0]), Number(coords[k + 1][1]), Number(coords[k + 1][0]));
+            lookPt = [Number(coords[k + 1][0]), Number(coords[k + 1][1])];
+          }
+          k++;
+        }
+        if (distMeters(py, px, lookPt[1], lookPt[0]) > 0.5) {
+          bestBear = bearingDeg(py, px, lookPt[1], lookPt[0]);
+        } else if (distMeters(ay, ax, by, bx) > 0.5) {
+          bestBear = bearingDeg(ay, ax, by, bx);
+        }
+      }
+    }
+
+    if (bestD <= 250) {
+      return { lng: bestPt[0], lat: bestPt[1], bearing: bestBear, snapped: true };
+    }
+    return { lng: lng, lat: lat, bearing: bestBear, snapped: false };
+  }
+
+  function ensure3DBuildings(map) {
+    try {
+      if (!map || typeof map.getStyle !== 'function' || !map.isStyleLoaded || !map.isStyleLoaded()) return;
+      const style = map.getStyle();
+      if (!style || !style.sources || !style.sources.composite) return;
+      if (!map.getLayer('smd-3d-buildings')) {
+        const labelLayer = (style.layers || []).find((l) => l.type === 'symbol' && l.layout && l.layout['text-field']);
+        map.addLayer({
+          id: 'smd-3d-buildings',
+          source: 'composite',
+          'source-layer': 'building',
+          filter: ['==', 'extrude', 'true'],
+          type: 'fill-extrusion',
+          minzoom: 14,
+          paint: {
+            'fill-extrusion-color': '#94a3b8',
+            'fill-extrusion-height': ['coalesce', ['get', 'height'], 14],
+            'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
+            'fill-extrusion-opacity': 0.62
+          }
+        }, labelLayer ? labelLayer.id : undefined);
+      }
+    } catch (e) {}
+  }
+
+  // Snap truck onto active route polyline without blocking marker creation or placement
+  if (typeof mapboxgl !== 'undefined' && mapboxgl.Marker && !mapboxgl.Marker.__smdV9Hooked) {
+    const OrigMk = mapboxgl.Marker;
+    function HookedMk(opts) {
+      const m = new OrigMk(opts);
+      const el = m.getElement && m.getElement();
+      const isLanding = el && el.closest && el.closest('#landing-view');
+      const isTruck = !isLanding && el && el.classList && el.classList.contains('pro-vehicle-marker');
+      const baseSet = m.setLngLat.bind(m);
+
+      m.setLngLat = function(ll) {
+        let lng, lat;
+        if (Array.isArray(ll)) { lng = Number(ll[0]); lat = Number(ll[1]); }
+        else if (ll && typeof ll === 'object') { lng = Number(ll.lng !== undefined ? ll.lng : ll.lon); lat = Number(ll.lat); }
+
+        if (!isFinite(lng) || !isFinite(lat)) return baseSet(ll);
+
+        if (isTruck) {
+          window.__smdSoloCoords.driver = [lng, lat];
+          const map = findActiveMap();
+          if (map) ensure3DBuildings(map);
+          const coords = getRouteCoords(map);
+          if (coords) {
+            const s = snapNoseFirst(lat, lng, coords);
+            window.__smdSoloCoords.driver = [s.lng, s.lat];
+            window.__smdLastTruckBearing = s.bearing;
+            const rotEl = el.querySelector('[style*="rotate("]');
+            if (rotEl) rotEl.style.transform = 'rotate(' + s.bearing.toFixed(1) + 'deg)';
+            return baseSet([s.lng, s.lat]);
+          }
+          return baseSet([lng, lat]);
+        } else if (!isLanding) {
+          window.__smdSoloCoords.dest = [lng, lat];
+        }
+        return baseSet(ll);
+      };
+      return m;
+    }
+    HookedMk.prototype = OrigMk.prototype;
+    Object.setPrototypeOf(HookedMk, OrigMk);
+    Object.getOwnPropertyNames(OrigMk).forEach((k) => {
+      try { if (!(k in HookedMk)) Object.defineProperty(HookedMk, k, Object.getOwnPropertyDescriptor(OrigMk, k)); } catch (e) {}
+    });
+    HookedMk.__smdV9Hooked = true;
+    mapboxgl.Marker = HookedMk;
+  }
+
   function getDriverPt(map) {
     if (validPt(window.__smdSoloCoords.driver)) return [Number(window.__smdSoloCoords.driver[0]), Number(window.__smdSoloCoords.driver[1])];
     if (window.__smdGps && window.__smdGps.last && isFinite(window.__smdGps.last.lng) && isFinite(window.__smdGps.last.lat)) {
@@ -1620,18 +1771,9 @@ window.soloFitBoth = function() {
     if (window.drvState && isFinite(Number(window.drvState.destLng)) && isFinite(Number(window.drvState.destLat))) {
       return [Number(window.drvState.destLng), Number(window.drvState.destLat)];
     }
-    if (Array.isArray(window.__smdLatestRouteCoords) && window.__smdLatestRouteCoords.length >= 2) {
-      const last = window.__smdLatestRouteCoords[window.__smdLatestRouteCoords.length - 1];
-      if (validPt(last)) return [Number(last[0]), Number(last[1])];
-    }
-    if (map && typeof map.getSource === 'function') {
-      try {
-        const src = map.getSource('smd-route-src');
-        const coords = src && src._data && src._data.geometry && src._data.geometry.coordinates;
-        if (Array.isArray(coords) && coords.length >= 2 && validPt(coords[coords.length - 1])) {
-          return [Number(coords[coords.length - 1][0]), Number(coords[coords.length - 1][1])];
-        }
-      } catch (e) {}
+    const coords = getRouteCoords(map);
+    if (coords && validPt(coords[coords.length - 1])) {
+      return [Number(coords[coords.length - 1][0]), Number(coords[coords.length - 1][1])];
     }
     return null;
   }
@@ -1644,16 +1786,11 @@ window.soloFitBoth = function() {
     }
     const map = findActiveMap();
     if (!map) return;
+    ensure3DBuildings(map);
     const pt = getDriverPt(map);
     if (!validPt(pt)) return;
     if (typeof map.stop === 'function') map.stop();
-    map.easeTo({
-      center: pt,
-      zoom: 15.5,
-      bearing: 0,
-      pitch: 0,
-      duration: 400
-    });
+    map.easeTo({ center: pt, zoom: 15.5, bearing: 0, pitch: 40, duration: 400 });
   }
 
   function runFitBoth(e) {
@@ -1664,6 +1801,7 @@ window.soloFitBoth = function() {
     }
     const map = findActiveMap();
     if (!map) return;
+    ensure3DBuildings(map);
     const drv = getDriverPt(map);
     const dst = getDestPt(map);
     if (typeof map.stop === 'function') map.stop();
@@ -1684,7 +1822,7 @@ window.soloFitBoth = function() {
       }
     }
     if (validPt(drv)) {
-      map.easeTo({ center: drv, zoom: 15.5, bearing: 0, pitch: 0, duration: 400 });
+      map.easeTo({ center: drv, zoom: 15.5, bearing: 0, pitch: 40, duration: 400 });
     }
   }
 
@@ -1699,7 +1837,7 @@ window.soloFitBoth = function() {
       const txt = (btn.textContent || '').toLowerCase();
       const isFit = txt.indexOf('fit') !== -1 || idx === 1;
       const handler = isFit ? runFitBoth : runRecenter;
-      const tag = isFit ? 'fit-v8' : 'recenter-v8';
+      const tag = isFit ? 'fit-v9' : 'recenter-v9';
       if (btn.dataset.smdCamTag !== tag) {
         btn.dataset.smdCamTag = tag;
         btn.removeAttribute('onclick');
@@ -1707,6 +1845,8 @@ window.soloFitBoth = function() {
         btn.addEventListener('click', handler, true);
       }
     });
+    const m = findActiveMap();
+    if (m) ensure3DBuildings(m);
   }
 
   bindOnce();
