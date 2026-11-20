@@ -1546,5 +1546,279 @@ window.soloFitBoth = function() {
   }, 800);
 })();
 </script>
+<script id="smd-hard-lock-controls">
+(function() {
+  if (window.__smdHardLockV7) return;
+  window.__smdHardLockV7 = true;
+
+  window.__smdSoloMaps = window.__smdSoloMaps || [];
+  window.__smdSoloCoords = window.__smdSoloCoords || { driver: null, dest: null };
+
+  function toRad(d) { return d * Math.PI / 180; }
+  function toDeg(r) { return r * 180 / Math.PI; }
+
+  function distMeters(lat1, lng1, lat2, lng2) {
+    const R = 6371000;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function bearing(lat1, lng1, lat2, lng2) {
+    const y = Math.sin(toRad(lng2 - lng1)) * Math.cos(toRad(lat2));
+    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+      Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lng2 - lng1));
+    return (toDeg(Math.atan2(y, x)) + 360) % 360;
+  }
+
+  function validPt(p) {
+    return Array.isArray(p) && p.length >= 2 &&
+      isFinite(Number(p[0])) && isFinite(Number(p[1])) &&
+      Math.abs(Number(p[0])) <= 180 && Math.abs(Number(p[1])) <= 90;
+  }
+
+  function findActiveMap() {
+    const candidates = [];
+    if (window.__smdSoloMap) candidates.push(window.__smdSoloMap);
+    if (Array.isArray(window.__smdSoloMaps)) {
+      for (let i = window.__smdSoloMaps.length - 1; i >= 0; i--) {
+        if (candidates.indexOf(window.__smdSoloMaps[i]) === -1) candidates.push(window.__smdSoloMaps[i]);
+      }
+    }
+    for (const m of candidates) {
+      if (!m || typeof m.flyTo !== 'function') continue;
+      const c = typeof m.getContainer === 'function' ? m.getContainer() : null;
+      const isLanding = c && (c.id === 'landing-preview-map' || c.id === 'smd-landing-preview-stage' || (c.closest && c.closest('#landing-view')));
+      const visible = c && c.offsetParent !== null;
+      if (!isLanding && visible) return m;
+    }
+    for (const m of candidates) {
+      if (!m || typeof m.flyTo !== 'function') continue;
+      const c = typeof m.getContainer === 'function' ? m.getContainer() : null;
+      const isLanding = c && (c.id === 'landing-preview-map' || c.id === 'smd-landing-preview-stage' || (c.closest && c.closest('#landing-view')));
+      if (!isLanding) return m;
+    }
+    return null;
+  }
+
+  function extractRouteCoords(map) {
+    if (map && typeof map.getStyle === 'function') {
+      try {
+        const style = map.getStyle();
+        const sources = (style && style.sources) || {};
+        for (const key of Object.keys(sources)) {
+          const src = map.getSource(key);
+          const data = src && (src._data || (src.serialize && src.serialize().data));
+          const geom = data && (data.geometry || (data.type === 'FeatureCollection' && data.features && data.features[0] && data.features[0].geometry));
+          if (geom && geom.type === 'LineString' && Array.isArray(geom.coordinates) && geom.coordinates.length >= 2) {
+            window.__smdLatestRouteCoords = geom.coordinates;
+            return geom.coordinates;
+          }
+        }
+      } catch (e) {}
+    }
+    return Array.isArray(window.__smdLatestRouteCoords) && window.__smdLatestRouteCoords.length >= 2
+      ? window.__smdLatestRouteCoords : null;
+  }
+
+  function snapToLine(lat, lng, coords) {
+    let bestD = Infinity;
+    let bestCoord = [lng, lat];
+    let bestBear = 0;
+
+    for (let i = 0; i < coords.length - 1; i++) {
+      if (!validPt(coords[i]) || !validPt(coords[i + 1])) continue;
+      const ax = Number(coords[i][0]), ay = Number(coords[i][1]);
+      const bx = Number(coords[i + 1][0]), by = Number(coords[i + 1][1]);
+      const dx = bx - ax, dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+      let t = len2 > 0 ? ((lng - ax) * dx + (lat - ay) * dy) / len2 : 0;
+      if (t < 0) t = 0;
+      if (t > 1) t = 1;
+      const px = ax + t * dx, py = ay + t * dy;
+      const d = distMeters(lat, lng, py, px);
+      if (d < bestD) {
+        bestD = d;
+        bestCoord = [px, py];
+        let lookPt = [bx, by];
+        let ahead = distMeters(py, px, by, bx);
+        let k = i + 1;
+        while (k < coords.length - 1 && ahead < 18) {
+          if (validPt(coords[k]) && validPt(coords[k + 1])) {
+            ahead += distMeters(Number(coords[k][1]), Number(coords[k][0]), Number(coords[k + 1][1]), Number(coords[k + 1][0]));
+            lookPt = [Number(coords[k + 1][0]), Number(coords[k + 1][1])];
+          }
+          k++;
+        }
+        if (distMeters(py, px, lookPt[1], lookPt[0]) > 0.5) {
+          bestBear = bearing(py, px, lookPt[1], lookPt[0]);
+        } else if (distMeters(ay, ax, by, bx) > 0.5) {
+          bestBear = bearing(ay, ax, by, bx);
+        }
+      }
+    }
+
+    if (bestD <= 300) {
+      return { lng: bestCoord[0], lat: bestCoord[1], bearing: bestBear, snapped: true };
+    }
+    return { lng: lng, lat: lat, bearing: bestBear, snapped: false };
+  }
+
+  function syncTruckNow() {
+    const map = findActiveMap();
+    const truckEl = document.querySelector('#driver-map-container .pro-vehicle-marker, #customer-map-container .pro-vehicle-marker, .pro-vehicle-marker:not(#landing-view .pro-vehicle-marker)');
+    if (!truckEl) return;
+
+    let rawLngLat = null;
+    if (validPt(window.__smdSoloCoords.driver)) {
+      rawLngLat = [Number(window.__smdSoloCoords.driver[0]), Number(window.__smdSoloCoords.driver[1])];
+    } else if (window.__smdGps && window.__smdGps.last && isFinite(window.__smdGps.last.lng) && isFinite(window.__smdGps.last.lat)) {
+      rawLngLat = [Number(window.__smdGps.last.lng), Number(window.__smdGps.last.lat)];
+    } else if (map && typeof map.getCenter === 'function') {
+      const c = map.getCenter();
+      if (c && isFinite(c.lng) && isFinite(c.lat)) rawLngLat = [Number(c.lng), Number(c.lat)];
+    }
+    if (!rawLngLat) return;
+
+    const coords = extractRouteCoords(map);
+    let finalLng = rawLngLat[0], finalLat = rawLngLat[1], finalBear = window.__smdLastTruckBearing || 0;
+    if (coords) {
+      const s = snapToLine(rawLngLat[1], rawLngLat[0], coords);
+      finalLng = s.lng;
+      finalLat = s.lat;
+      finalBear = s.bearing;
+      if (validPt(coords[coords.length - 1])) {
+        window.__smdSoloCoords.dest = [Number(coords[coords.length - 1][0]), Number(coords[coords.length - 1][1])];
+      }
+    }
+
+    window.__smdLastSnappedDriver = [finalLng, finalLat];
+    window.__smdLastTruckBearing = finalBear;
+
+    const rotEl = truckEl.querySelector('[style*="rotate("]');
+    if (rotEl) {
+      rotEl.style.transform = 'rotate(' + finalBear.toFixed(1) + 'deg)';
+    }
+    if (window.__smdTruckMarkerInstance && typeof window.__smdTruckMarkerInstance.__origSetLngLat === 'function') {
+      window.__smdTruckMarkerInstance.__origSetLngLat([finalLng, finalLat]);
+    }
+  }
+
+  if (typeof mapboxgl !== 'undefined' && mapboxgl.Marker && !mapboxgl.Marker.__smdV7Capture) {
+    const OrigMk = mapboxgl.Marker;
+    function CaptureMk(opts) {
+      const m = new OrigMk(opts);
+      const el = m.getElement && m.getElement();
+      const isLanding = el && el.closest && el.closest('#landing-view');
+      const isTruck = !isLanding && el && el.classList && el.classList.contains('pro-vehicle-marker');
+      const baseSet = m.setLngLat.bind(m);
+      m.__origSetLngLat = baseSet;
+      if (isTruck) {
+        window.__smdTruckMarkerInstance = m;
+      }
+      m.setLngLat = function(ll) {
+        let lng, lat;
+        if (Array.isArray(ll)) { lng = Number(ll[0]); lat = Number(ll[1]); }
+        else if (ll && typeof ll === 'object') { lng = Number(ll.lng !== undefined ? ll.lng : ll.lon); lat = Number(ll.lat); }
+        if (isFinite(lng) && isFinite(lat)) {
+          if (isTruck) {
+            window.__smdSoloCoords.driver = [lng, lat];
+            const map = findActiveMap();
+            const coords = extractRouteCoords(map);
+            if (coords) {
+              const s = snapToLine(lat, lng, coords);
+              window.__smdLastSnappedDriver = [s.lng, s.lat];
+              window.__smdLastTruckBearing = s.bearing;
+              const rotEl = el.querySelector('[style*="rotate("]');
+              if (rotEl) rotEl.style.transform = 'rotate(' + s.bearing.toFixed(1) + 'deg)';
+              return baseSet([s.lng, s.lat]);
+            }
+          } else if (!isLanding) {
+            window.__smdSoloCoords.dest = [lng, lat];
+          }
+        }
+        return baseSet(ll);
+      };
+      return m;
+    }
+    CaptureMk.prototype = OrigMk.prototype;
+    Object.setPrototypeOf(CaptureMk, OrigMk);
+    Object.getOwnPropertyNames(OrigMk).forEach((k) => {
+      try { if (!(k in CaptureMk)) Object.defineProperty(CaptureMk, k, Object.getOwnPropertyDescriptor(OrigMk, k)); } catch (e) {}
+    });
+    CaptureMk.__smdV7Capture = true;
+    mapboxgl.Marker = CaptureMk;
+  }
+
+  function runRecenter(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }
+    syncTruckNow();
+    const map = findActiveMap();
+    if (!map) return;
+    const pt = validPt(window.__smdLastSnappedDriver)
+      ? window.__smdLastSnappedDriver
+      : (validPt(window.__smdSoloCoords.driver) ? window.__smdSoloCoords.driver : (map.getCenter && [map.getCenter().lng, map.getCenter().lat]));
+    if (!validPt(pt)) return;
+    if (typeof map.stop === 'function') map.stop();
+    map.easeTo({
+      center: [Number(pt[0]), Number(pt[1])],
+      zoom: 15.6,
+      pitch: 45,
+      bearing: Number(window.__smdLastTruckBearing || 0),
+      duration: 400
+    });
+  }
+
+  function runFitBoth(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }
+    syncTruckNow();
+    const map = findActiveMap();
+    if (!map) return;
+    const drv = validPt(window.__smdLastSnappedDriver)
+      ? window.__smdLastSnappedDriver
+      : (validPt(window.__smdSoloCoords.driver) ? window.__smdSoloCoords.driver : null);
+    let dst = validPt(window.__smdSoloCoords.dest) ? window.__smdSoloCoords.dest : null;
+    const coords = extractRouteCoords(map);
+    if (!dst && coords && validPt(coords[coords.length - 1])) {
+      dst = [Number(coords[coords.length - 1][0]), Number(coords[coords.length - 1][1])];
+    }
+    if (typeof map.stop === 'function') map.stop();
+    if (validPt(drv) && validPt(dst) && typeof mapboxgl !== 'undefined' && typeof map.fitBounds === 'function') {
+      const b = new mapboxgl.LngLatBounds();
+      b.extend([Number(drv[0]), Number(drv[1])]);
+      b.extend([Number(dst[0]), Number(dst[1])]);
+      map.fitBounds(b, { padding: 70, maxZoom: 15.5, pitch: 35, duration: 450 });
+    } else if (validPt(drv)) {
+      map.easeTo({ center: [Number(drv[0]), Number(drv[1])], zoom: 15.6, pitch: 45, duration: 400 });
+    }
+  }
+
+  window.soloRecenterMap = runRecenter;
+  window.soloFitBoth = runFitBoth;
+
+  function bindButtons() {
+    const bar = document.getElementById('smd-solo-map-controls');
+    if (!bar) return;
+    const buttons = Array.from(bar.querySelectorAll('button'));
+    buttons.forEach((btn, idx) => {
+      const txt = (btn.textContent || '').toLowerCase();
+      const isFit = txt.indexOf('fit') !== -1 || idx === 1;
+      const handler = isFit ? runFitBoth : runRecenter;
+      if (btn.dataset.smdV7Handler !== (isFit ? 'fit' : 'recenter')) {
+        btn.dataset.smdV7Handler = isFit ? 'fit' : 'recenter';
+        btn.onclick = null;
+        btn.addEventListener('click', handler, true);
+      }
+    });
+    syncTruckNow();
+  }
+
+  bindButtons();
+  setInterval(bindButtons, 500);
+})();
+</script>
 </body>
 </html>
