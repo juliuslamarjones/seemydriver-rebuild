@@ -43,7 +43,7 @@
             <span class="font-black tracking-tight text-xl sm:text-2xl text-white">See<span class="text-amber-400">MyDriver</span> <span class="text-[10px] px-2.5 py-1 rounded-full bg-amber-400/10 text-amber-300 border border-amber-400/20 ml-1.5 font-mono whitespace-nowrap">FLEET COMMAND</span></span>
         </div>
         <div class="flex items-center gap-3 shrink-0">
-            <a href="index.html" class="text-xs font-bold text-neutral-300 hover:text-amber-400 bg-neutral-900 hover:bg-neutral-800 px-3 py-1.5 rounded-xl border border-neutral-800 transition">Driver Map</a>
+            <a href="index.html" class="text-xs font-black text-amber-400 hover:text-black bg-amber-400/10 hover:bg-amber-400 px-3.5 py-2 rounded-xl border border-amber-400/40 transition whitespace-nowrap">? Close Fleet</a>
             <span id="connection-status" class="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20 hidden sm:flex items-center gap-1.5">
                 <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live
             </span>
@@ -52,7 +52,7 @@
 
     <div class="flex-1 flex flex-col md:flex-row relative overflow-hidden">
         
-        <aside class="w-full md:w-96 bg-[#0f1117] border-b md:border-b-0 md:border-r border-neutral-900 flex flex-col z-20 shrink-0 h-[52%] md:h-full overflow-y-auto">
+        <aside class="w-full md:w-96 bg-[#0f1117] border-b md:border-b-0 md:border-r border-neutral-900 flex flex-col z-20 shrink-0 h-[50%] md:h-full overflow-y-auto">
             <div class="p-4 border-b border-neutral-900 flex flex-col gap-3 bg-black/40">
                 <div class="flex items-center justify-between">
                     <span class="text-xs font-black uppercase tracking-wider text-neutral-400">Active Fleet Roster</span>
@@ -115,8 +115,8 @@
             </div>
         </aside>
 
-        <main class="flex-1 relative bg-neutral-950 h-[48%] md:h-full">
-            <div id="map" class="w-full h-full z-0"></div>
+        <main class="flex-1 relative bg-neutral-950 h-[50%] min-h-[280px] md:h-full">
+            <div id="map" class="absolute inset-0 w-full h-full z-0"></div>
         </main>
     </div>
 
@@ -200,7 +200,8 @@
                 zoom: 12
             });
             map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-            map.on('load', () => { initFirebaseListeners(); });
+            map.on('load', () => { map.resize(); initFirebaseListeners(); });
+            setTimeout(() => { if (map) map.resize(); }, 250);
         }
 
         window.handleAddressInput = async function(value) {
