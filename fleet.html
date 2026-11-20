@@ -232,6 +232,14 @@
             map.on('load', function () { map.resize(); initFirebaseListeners(); });
             setTimeout(function () { if (map) map.resize(); }, 200);
             setTimeout(function () { if (map) map.resize(); }, 800);
+            if (typeof ResizeObserver !== 'undefined') {
+                const mapEl = document.getElementById('map');
+                if (mapEl) {
+                    new ResizeObserver(function () { if (map) map.resize(); }).observe(mapEl);
+                }
+            }
+            window.addEventListener('orientationchange', function () { setTimeout(function () { if (map) map.resize(); }, 250); });
+            document.addEventListener('visibilitychange', function () { if (!document.hidden && map) map.resize(); });
         }
 
         window.handleAddressInput = async function(value) {
