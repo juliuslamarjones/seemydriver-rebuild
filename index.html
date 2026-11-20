@@ -1817,7 +1817,8 @@ window.soloFitBoth = function() {
   }
 
   bindButtons();
-  setInterval(bindButtons, 500);
+  document.addEventListener('DOMContentLoaded', bindButtons);
+  window.addEventListener('load', bindButtons);
 })();
 </script>
 </body>
