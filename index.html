@@ -1114,5 +1114,60 @@ window.soloFitBoth = function() {
   setInterval(installSoloEnhancements, 400);
 })();
 </script>
+<script id="smd-street-visual-polish">
+(function() {
+  function polishMapLayers(map) {
+    try {
+      if (!map || !map.getStyle || !map.isStyleLoaded || !map.isStyleLoaded()) return;
+      if (map.__smdStreetPolished) return;
+      map.__smdStreetPolished = true;
+
+      const layers = (map.getStyle().layers) || [];
+      layers.forEach((layer) => {
+        const id = (layer.id || '').toLowerCase();
+        if (layer.type === 'line') {
+          // Mute bright green path / service / cycle / track / pedestrian lines
+          if (
+            id.indexOf('path') !== -1 ||
+            id.indexOf('pedestrian') !== -1 ||
+            id.indexOf('cycle') !== -1 ||
+            id.indexOf('footway') !== -1 ||
+            id.indexOf('track') !== -1 ||
+            id.indexOf('service') !== -1
+          ) {
+            try {
+              map.setPaintProperty(layer.id, 'line-opacity', 0.14);
+              map.setPaintProperty(layer.id, 'line-width', 1.2);
+            } catch (e) {}
+          } else if (id.indexOf('road') !== -1 || id.indexOf('street') !== -1 || id.indexOf('trunk') !== -1 || id.indexOf('primary') !== -1 || id.indexOf('secondary') !== -1 || id.indexOf('tertiary') !== -1) {
+            try {
+              map.setPaintProperty(layer.id, 'line-opacity', 0.95);
+            } catch (e) {}
+          }
+        }
+      });
+
+      // Upgrade 3D building shading so buildings pop cleanly off the light ground
+      if (map.getLayer('smd-3d-buildings')) {
+        try {
+          map.setPaintProperty('smd-3d-buildings', 'fill-extrusion-color', '#94a3b8');
+          map.setPaintProperty('smd-3d-buildings', 'fill-extrusion-opacity', 0.88);
+        } catch (e) {}
+      }
+    } catch (e) {}
+  }
+
+  setInterval(() => {
+    try {
+      const maps = [];
+      if (window.__smdSoloMap) maps.push(window.__smdSoloMap);
+      if (Array.isArray(window.__smdSoloMaps)) {
+        window.__smdSoloMaps.forEach((m) => { if (m && maps.indexOf(m) === -1) maps.push(m); });
+      }
+      maps.forEach((m) => polishMapLayers(m));
+    } catch (e) {}
+  }, 500);
+})();
+</script>
 </body>
 </html>
