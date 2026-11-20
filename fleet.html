@@ -131,7 +131,7 @@
         function verifyUpgradeAccess() {
             if (DEV_BYPASS_MODE) return;
             const user = firebase.auth().currentUser;
-            if (!user) {
+            if (!user && !DEV_BYPASS_MODE) {
                 alert("Access Denied: Please log in.");
                 window.location.href = "https://www.seemydriver.com/upgrade";
             }
@@ -242,13 +242,13 @@ window.recenterFleetMap = function () {
         window.handleAddressInput = async function(value) {
             cachedDestLat = null;
             cachedDestLng = null;
-            
+
             const suggestions = document.getElementById('address-suggestions');
             if (!suggestions) return;
 
             clearTimeout(geocodeTimer);
             const query = (value || '').trim();
-            
+
             if (query.length < 3) {
                 suggestions.classList.add('hidden');
                 suggestions.style.display = 'none';
@@ -258,39 +258,87 @@ window.recenterFleetMap = function () {
 
             geocodeTimer = setTimeout(async () => {
                 try {
-                    const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${FULL_MAPBOX_TOKEN}&autocomplete=true&types=address,poi&limit=5`);
-                    const data = await res.json();
-                    suggestions.innerHTML = '';
+                    let proxParam = '';
+                    if (map && typeof map.getCenter === 'function') {
+                        const c = map.getCenter();
+                        if (c && isFinite(c.lng) && isFinite(c.lat)) {
+                            proxParam = '&proximity=' + c.lng.toFixed(4) + ',' + c.lat.toFixed(4);
+                        }
+                    }
 
-                    if (!data.features || data.features.length === 0) {
+                    let items = [];
+                    const mbRes = await fetch('https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(query) + '.json?access_token=' + FULL_MAPBOX_TOKEN + '&autocomplete=true&limit=6' + proxParam);
+                    if (mbRes.ok) {
+                        const mbData = await mbRes.json();
+                        if (mbData && Array.isArray(mbData.features) && mbData.features.length > 0) {
+                            items = mbData.features.map(f => ({
+                                name: f.place_name || f.text || '',
+                                coords: f.center || (f.geometry && f.geometry.coordinates) || [0, 0]
+                            }));
+                        }
+                    }
+
+                    if (items.length === 0) {
+                        let pUrl = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(query) + '&limit=6';
+                        if (map && typeof map.getCenter === 'function') {
+                            const c = map.getCenter();
+                            if (c && isFinite(c.lng) && isFinite(c.lat)) {
+                                pUrl += '&lat=' + c.lat.toFixed(4) + '&lon=' + c.lng.toFixed(4);
+                            }
+                        }
+                        const pRes = await fetch(pUrl);
+                        if (pRes.ok) {
+                            const pData = await pRes.json();
+                            if (pData && Array.isArray(pData.features)) {
+                                items = pData.features.map(f => {
+                                    const props = f.properties || {};
+                                    const label = [props.name, props.housenumber, props.street, props.city, props.state, props.postcode].filter(Boolean).join(', ') || props.label || query;
+                                    const coords = (f.geometry && Array.isArray(f.geometry.coordinates)) ? f.geometry.coordinates : [0, 0];
+                                    return { name: label, coords: coords };
+                                }).filter(x => x.name);
+                            }
+                        }
+                    }
+
+                    suggestions.innerHTML = '';
+                    if (items.length === 0) {
                         suggestions.classList.add('hidden');
                         suggestions.style.display = 'none';
                         return;
                     }
 
-                    data.features.forEach(f => {
-                        const name = f.place_name || f.text || '';
-                        const coords = f.center || (f.geometry && f.geometry.coordinates) || [0, 0];
-
+                    items.forEach(item => {
                         const div = document.createElement('div');
                         div.className = "px-3 py-2.5 text-xs text-neutral-200 hover:bg-neutral-800 hover:text-amber-400 cursor-pointer border-b border-neutral-800/80 transition font-medium";
-                        div.innerText = name;
+                        div.innerText = item.name;
                         div.onpointerdown = (e) => {
                             e.preventDefault();
+                            e.stopPropagation();
+                            lastGeocodePickAt = Date.now();
                             const inputField = document.getElementById('modal-dest-address');
-                            if (inputField) inputField.value = name;
-                            
-                            cachedDestLat = coords[1];
-                            cachedDestLng = coords[0];
-                            
+                            if (inputField) inputField.value = item.name;
+
+                            cachedDestLat = item.coords[1];
+                            cachedDestLng = item.coords[0];
+
                             const latField = document.getElementById('modal-lat');
                             const lngField = document.getElementById('modal-lng');
                             if (latField) latField.value = cachedDestLat;
                             if (lngField) lngField.value = cachedDestLng;
-                            
+
                             suggestions.classList.add('hidden');
                             suggestions.style.display = 'none';
                         };
+                        suggestions.appendChild(div);
+                    });
+
+                    suggestions.classList.remove('hidden');
+                    suggestions.style.display = 'block';
+                } catch (e) {
+                    console.error('Fleet geocoder lookup error:', e);
+                }
+            }, 250);
+        };
                         suggestions.appendChild(div);
                     });
 
