@@ -1359,7 +1359,7 @@ window.initCustomerMapLive = function () {
             }
             setGpsBadge('GPS \u00B1' + a + ' m' + (a > 300 ? ' (weak)' : ''), a <= 300);
 
-            truck.rot.style.transform = 'rotate(' + (h % 360).toFixed(1) + 'deg)';
+            if (typeof mph === 'number' && mph > 2) { truck.rot.style.transform = 'rotate(' + (h % 360).toFixed(1) + 'deg)'; }
             if (!truckMarker) {
                 truckMarker = new mapboxgl.Marker({ element: truck.el }).setLngLat([lng, lat]).addTo(map);
                 map.easeTo({ center: [lng, lat], zoom: 15, duration: 500 });
