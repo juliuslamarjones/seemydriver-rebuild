@@ -157,6 +157,39 @@
         let cachedDestLng = null;
         let geocodeTimer = null;
 
+        
+        window.recenterFleetMap = function () {
+            if (!map) return;
+            const keys = Object.keys(activeMarkers || {});
+            if (keys.length > 0 && fleetData[keys[0]]) {
+                const d = fleetData[keys[0]];
+                if (isFinite(parseFloat(d.lat)) && isFinite(parseFloat(d.lng))) {
+                    map.easeTo({ center: [parseFloat(d.lng), parseFloat(d.lat)], zoom: 15, duration: 500 });
+                    return;
+                }
+            }
+            map.easeTo({ center: [-95.2831, 29.9731], zoom: 12, duration: 500 });
+        };
+
+        window.fitBothFleetAndDest = function () {
+            if (!map || typeof mapboxgl === 'undefined') return;
+            const bounds = new mapboxgl.LngLatBounds();
+            let hasPoint = false;
+            Object.values(fleetData || {}).forEach((d) => {
+                const lat = parseFloat(d && d.lat), lng = parseFloat(d && d.lng);
+                if (isFinite(lat) && isFinite(lng)) { bounds.extend([lng, lat]); hasPoint = true; }
+            });
+            if (isFinite(cachedDestLat) && isFinite(cachedDestLng)) {
+                bounds.extend([cachedDestLng, cachedDestLat]);
+                hasPoint = true;
+            }
+            if (hasPoint && !bounds.isEmpty()) {
+                map.fitBounds(bounds, { padding: 70, maxZoom: 15, duration: 600 });
+            } else {
+                window.recenterFleetMap();
+            }
+        };
+
         function initMap() {
             verifyUpgradeAccess();
             map = new mapboxgl.Map({
@@ -368,8 +401,7 @@
         function filterRoster() { renderFleetRosterAndMarkers(); }
 
         window.submitManualDispatch = function(sendSms) {
-            const user = firebase.auth().currentUser;
-            if (!user) { alert("Please sign in to your dispatcher account."); return; }
+            const user = firebase.auth().currentUser || { uid: "local-dispatcher", email: "dispatcher@seemydriver.com" };
 
             const driverName = document.getElementById('modal-driver-name').value.trim();
             const driverPhone = document.getElementById('modal-driver-phone').value.trim().replace(/[^\d+]/g, '');

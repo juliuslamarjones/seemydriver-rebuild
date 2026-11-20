@@ -832,7 +832,7 @@ window.initDriverActiveMap = function () {
     try {
         map = new mapboxgl.Map({
             container: container,
-            style: 'mapbox://styles/mapbox/streets-v12',
+            style: 'mapbox://styles/mapbox/navigation-day-v1',
             center: startCenter,
             zoom: startZoom,
             pitch: 52
@@ -1196,7 +1196,7 @@ window.initCustomerMapLive = function () {
         if (origAlert) return origAlert(msg);
     };
 
-    const STYLE_URL = 'mapbox://styles/mapbox/streets-v12';
+    const STYLE_URL = 'mapbox://styles/mapbox/navigation-day-v1';
     let drvState = null;
     let custState = null;
     let hasLiveLock = false;
