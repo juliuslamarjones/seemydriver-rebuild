@@ -157,15 +157,11 @@
 
         let map;
         let activeMarkers = {}; 
-        let fleetData = {};
-        let lastGeocodePickAt = 0;
+        let fleetData = {};let lastGeocodePickAt = 0;
         let cachedDestLat = null;
         let cachedDestLng = null;
         let geocodeTimer = null;
-        let lastGeocodePickAt = 0;
-
-        
-        window.recenterFleetMap = function () {
+window.recenterFleetMap = function () {
             if (!map) return;
             const keys = Object.keys(activeMarkers || {});
             if (keys.length > 0 && fleetData[keys[0]]) {
