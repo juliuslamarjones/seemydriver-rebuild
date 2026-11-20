@@ -745,33 +745,63 @@ window.toggleDriver3D = function () {
     toast(window.is3DMode ? '3D View Enabled' : '2D Top-Down Enabled');
 };
 
-window.recenterDriverMap = function () {
-    if (!D || !D.map || !D.engine) return;
-    const pos = D.engine.position();
-    D.engine.follow = true;
-    if (typeof D.map.stop === 'function') D.map.stop();
-    if (pos) {
-        D.map.easeTo({ center: [pos.lng, pos.lat], zoom: 15.6, bearing: 0, pitch: window.is3DMode ? 40 : 0, duration: 400 });
-    } else {
-        D.map.easeTo({ zoom: 15.6, bearing: 0, duration: 400 });
+function resolveMobileMap() {
+    if (D && D.map && typeof D.map.easeTo === 'function') return D.map;
+    if (window.soloMap && typeof window.soloMap.easeTo === 'function') return window.soloMap;
+    if (window.__smdSoloMap && typeof window.__smdSoloMap.easeTo === 'function') return window.__smdSoloMap;
+    if (window.map && typeof window.map.easeTo === 'function') return window.map;
+    const box = $('driver-map-container');
+    if (box && box._mapboxMap && typeof box._mapboxMap.easeTo === 'function') return box._mapboxMap;
+    return null;
+}
+
+function resolveDriverPos(m) {
+    if (D && D.engine && typeof D.engine.position === 'function') {
+        const p = D.engine.position();
+        if (p && isFinite(p.lng) && isFinite(p.lat)) return p;
     }
-};
+    if (gps && gps.last && isFinite(gps.last.lng) && isFinite(gps.last.lat)) {
+        return { lng: Number(gps.last.lng), lat: Number(gps.last.lat) };
+    }
+    const lat = parseFloat(LS.getItem('smd_lat') || LS.getItem('smd_driver_lat'));
+    const lng = parseFloat(LS.getItem('smd_lng') || LS.getItem('smd_driver_lng'));
+    if (isFinite(lat) && isFinite(lng)) return { lng, lat };
+    if (m && typeof m.getCenter === 'function') {
+        const c = m.getCenter();
+        if (c && isFinite(c.lng) && isFinite(c.lat)) return { lng: c.lng, lat: c.lat };
+    }
+    return null;
+}
+
+window.recenterDriverMap = function () {
+        const m = resolveMobileMap();
+        if (!m) return;
+        if (D && D.engine) D.engine.follow = true;
+        const pos = resolveDriverPos(m);
+        if (typeof m.stop === 'function') m.stop();
+        if (pos) {
+            m.easeTo({ center: [pos.lng, pos.lat], zoom: 15.8, bearing: 0, pitch: window.is3DMode ? 40 : 0, duration: 450 });
+        }
+    };
 
 window.fitDriverMap = function () {
-    if (!D || !D.map || !D.engine) return;
-    const pos = D.engine.position();
-    const dest = getDest();
-    D.engine.follow = false;
-    if (typeof D.map.stop === 'function') D.map.stop();
-    if (pos && dest) {
-        const bounds = new mapboxgl.LngLatBounds();
-        bounds.extend([pos.lng, pos.lat]);
-        bounds.extend([dest.lng, dest.lat]);
-        D.map.fitBounds(bounds, { padding: { top: 70, bottom: 85, left: 55, right: 55 }, maxZoom: 15.5, bearing: 0, pitch: 0, duration: 450 });
-    } else if (pos) {
-        D.map.easeTo({ center: [pos.lng, pos.lat], zoom: 15.6, bearing: 0, pitch: window.is3DMode ? 40 : 0, duration: 400 });
-    }
-};
+        const m = resolveMobileMap();
+        if (!m || typeof mapboxgl === 'undefined') return;
+        const pos = resolveDriverPos(m);
+        const dest = getDest();
+        if (D && D.engine) D.engine.follow = false;
+        if (typeof m.stop === 'function') m.stop();
+        if (pos && dest && typeof m.fitBounds === 'function') {
+            const bounds = new mapboxgl.LngLatBounds();
+            bounds.extend([pos.lng, pos.lat]);
+            bounds.extend([dest.lng, dest.lat]);
+            m.fitBounds(bounds, { padding: { top: 70, bottom: 85, left: 55, right: 55 }, maxZoom: 15.5, bearing: 0, pitch: 0, duration: 500 });
+        } else if (pos) {
+            m.easeTo({ center: [pos.lng, pos.lat], zoom: 15.8, bearing: 0, pitch: window.is3DMode ? 40 : 0, duration: 450 });
+        } else if (dest) {
+            m.easeTo({ center: [dest.lng, dest.lat], zoom: 15, bearing: 0, pitch: 0, duration: 450 });
+        }
+    };
 
 window.openDriverDirections = function () {
     const dest = getDest();

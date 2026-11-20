@@ -1117,32 +1117,50 @@ window.soloFitBoth = function() {
 </script>
 <script id="smd-hard-lock-controls">
 (function() {
+  let lastFire = 0;
+  function fireOnce(fn, e) {
+    if (e) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+    }
+    const now = Date.now();
+    if (now - lastFire < 250) return;
+    lastFire = now;
+    fn();
+  }
   window.soloRecenterMap = function(e) {
-    if (e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }
-    if (typeof window.recenterDriverMap === 'function') window.recenterDriverMap();
+    fireOnce(() => {
+      if (typeof window.recenterDriverMap === 'function') window.recenterDriverMap();
+    }, e);
   };
   window.soloFitBoth = function(e) {
-    if (e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }
-    if (typeof window.fitDriverMap === 'function') window.fitDriverMap();
+    fireOnce(() => {
+      if (typeof window.fitDriverMap === 'function') window.fitDriverMap();
+    }, e);
   };
+  function attachBtn(btn, handler) {
+    if (!btn || btn.dataset.smdMobileBound === '1') return;
+    btn.dataset.smdMobileBound = '1';
+    btn.style.touchAction = 'manipulation';
+    btn.style.pointerEvents = 'auto';
+    btn.style.zIndex = '40';
+    btn.removeAttribute('onclick');
+    btn.onclick = null;
+    btn.addEventListener('click', handler, true);
+    btn.addEventListener('pointerup', handler, true);
+  }
   function wireSoloBar() {
     const bar = document.getElementById('smd-solo-map-controls');
     if (!bar) return;
+    bar.style.zIndex = '40';
+    bar.style.pointerEvents = 'auto';
     const btns = bar.querySelectorAll('button');
-    if (btns[0] && !btns[0].dataset.smdWiredV10) {
-      btns[0].dataset.smdWiredV10 = '1';
-      btns[0].removeAttribute('onclick');
-      btns[0].onclick = null;
-      btns[0].addEventListener('click', window.soloRecenterMap, true);
-    }
-    if (btns[1] && !btns[1].dataset.smdWiredV10) {
-      btns[1].dataset.smdWiredV10 = '1';
-      btns[1].removeAttribute('onclick');
-      btns[1].onclick = null;
-      btns[1].addEventListener('click', window.soloFitBoth, true);
-    }
+    if (btns[0]) attachBtn(btns[0], window.soloRecenterMap);
+    if (btns[1]) attachBtn(btns[1], window.soloFitBoth);
   }
   wireSoloBar();
+  setInterval(wireSoloBar, 1000);
   document.addEventListener('DOMContentLoaded', wireSoloBar);
   window.addEventListener('load', wireSoloBar);
 })();
