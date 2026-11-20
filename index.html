@@ -1470,5 +1470,38 @@ window.soloFitBoth = function() {
   }, 600);
 })();
 </script>
+<script id="smd-landing-cta-card-spacing">
+(function() {
+  function separateCtaAndCard() {
+    try {
+      const heading = Array.from(document.querySelectorAll('#landing-view h1, #landing-view h2, #landing-view h3, #landing-view div')).find(
+        (el) => el.children.length === 0 && el.textContent && el.textContent.trim() === 'Real-Time Client Telemetry'
+      );
+      if (!heading) return;
+
+      const card = heading.closest('div[class*="rounded-2xl"], div[class*="rounded-3xl"], div[class*="rounded-xl"]') ||
+        (heading.parentElement && heading.parentElement.parentElement);
+      if (!card) return;
+
+      card.style.marginTop = '28px';
+
+      const signInBtn = Array.from(document.querySelectorAll('#landing-view button, #landing-view a')).find(
+        (el) => el.textContent && el.textContent.trim().toLowerCase() === 'sign in'
+      );
+      const ctaRow = signInBtn && signInBtn.parentElement;
+      if (ctaRow && ctaRow.parentElement === card.parentElement) {
+        ctaRow.style.marginBottom = '16px';
+      }
+    } catch (e) {}
+  }
+
+  separateCtaAndCard();
+  setInterval(separateCtaAndCard, 500);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', separateCtaAndCard);
+  }
+  window.addEventListener('load', separateCtaAndCard);
+})();
+</script>
 </body>
 </html>
