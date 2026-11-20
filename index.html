@@ -781,5 +781,156 @@ window.soloFitBoth = function() {
   }
 })();
 </script>
+<script id="smd-mapbox-instance-registry">
+(function() {
+  window.__smdSoloMaps = window.__smdSoloMaps || [];
+  window.__smdTrackedCoords = window.__smdTrackedCoords || [];
+
+  function installHooks() {
+    if (typeof mapboxgl === 'undefined' || !mapboxgl.Map || mapboxgl.Map.__smdHooked) return;
+    const OrigMap = mapboxgl.Map;
+    function HookedMap(options) {
+      const inst = new OrigMap(options);
+      window.__smdSoloMap = inst;
+      window.__smdSoloMaps.push(inst);
+      return inst;
+    }
+    HookedMap.prototype = OrigMap.prototype;
+    Object.setPrototypeOf(HookedMap, OrigMap);
+    Object.getOwnPropertyNames(OrigMap).forEach((prop) => {
+      try {
+        if (!(prop in HookedMap)) {
+          Object.defineProperty(HookedMap, prop, Object.getOwnPropertyDescriptor(OrigMap, prop));
+        }
+      } catch (e) {}
+    });
+    HookedMap.__smdHooked = true;
+    mapboxgl.Map = HookedMap;
+
+    if (mapboxgl.Marker && !mapboxgl.Marker.__smdHooked) {
+      const OrigMarker = mapboxgl.Marker;
+      function HookedMarker(opts) {
+        const mk = new OrigMarker(opts);
+        const origSetLngLat = mk.setLngLat.bind(mk);
+        mk.setLngLat = function(lngLat) {
+          try {
+            let lng, lat;
+            if (Array.isArray(lngLat)) { lng = Number(lngLat[0]); lat = Number(lngLat[1]); }
+            else if (lngLat && typeof lngLat === 'object') { lng = Number(lngLat.lng !== undefined ? lngLat.lng : lngLat.lon); lat = Number(lngLat.lat); }
+            if (isFinite(lng) && isFinite(lat)) {
+              mk.__smdLngLat = [lng, lat];
+              window.__smdTrackedCoords = window.__smdTrackedCoords.filter((p) => p !== mk.__smdRef);
+              mk.__smdRef = [lng, lat];
+              window.__smdTrackedCoords.push(mk.__smdRef);
+            }
+          } catch (e) {}
+          return origSetLngLat(lngLat);
+        };
+        return mk;
+      }
+      HookedMarker.prototype = OrigMarker.prototype;
+      Object.setPrototypeOf(HookedMarker, OrigMarker);
+      Object.getOwnPropertyNames(OrigMarker).forEach((prop) => {
+        try {
+          if (!(prop in HookedMarker)) {
+            Object.defineProperty(HookedMarker, prop, Object.getOwnPropertyDescriptor(OrigMarker, prop));
+          }
+        } catch (e) {}
+      });
+      HookedMarker.__smdHooked = true;
+      mapboxgl.Marker = HookedMarker;
+    }
+  }
+
+  installHooks();
+  setInterval(installHooks, 100);
+})();
+</script>
+<script id="smd-solo-camera-actions-v3">
+(function() {
+  function getActiveMap() {
+    if (window.__smdSoloMap && typeof window.__smdSoloMap.flyTo === 'function') {
+      return window.__smdSoloMap;
+    }
+    if (Array.isArray(window.__smdSoloMaps)) {
+      for (let i = window.__smdSoloMaps.length - 1; i >= 0; i--) {
+        const m = window.__smdSoloMaps[i];
+        if (m && typeof m.flyTo === 'function') return m;
+      }
+    }
+    return null;
+  }
+
+  function getCoords(m) {
+    const pts = [];
+    if (Array.isArray(window.__smdTrackedCoords)) {
+      for (let i = 0; i < window.__smdTrackedCoords.length; i++) {
+        const p = window.__smdTrackedCoords[i];
+        if (Array.isArray(p) && isFinite(p[0]) && isFinite(p[1])) {
+          pts.push([Number(p[0]), Number(p[1])]);
+        }
+      }
+    }
+    if (pts.length === 0 && m && typeof m.getCenter === 'function') {
+      const c = m.getCenter();
+      if (c && isFinite(c.lng) && isFinite(c.lat)) {
+        pts.push([c.lng, c.lat]);
+        pts.push([c.lng - 0.045, c.lat + 0.015]);
+      }
+    }
+    return pts;
+  }
+
+  window.soloRecenterMap = function(ev) {
+    if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+    try {
+      const m = getActiveMap();
+      if (!m) return;
+      const pts = getCoords(m);
+      const target = pts[0] || [-95.4613, 29.9855];
+      m.flyTo({ center: target, zoom: 14.5, pitch: 0, essential: true, duration: 750 });
+    } catch (e) {}
+  };
+
+  window.soloFitBoth = function(ev) {
+    if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+    try {
+      const m = getActiveMap();
+      if (!m) return;
+      const pts = getCoords(m);
+      if (pts.length >= 2 && typeof mapboxgl !== 'undefined' && typeof m.fitBounds === 'function') {
+        const bounds = new mapboxgl.LngLatBounds();
+        pts.forEach((p) => bounds.extend(p));
+        m.fitBounds(bounds, { padding: 75, maxZoom: 15, duration: 800 });
+      } else if (pts.length === 1) {
+        m.flyTo({ center: pts[0], zoom: 13.5, essential: true, duration: 750 });
+      }
+    } catch (e) {}
+  };
+
+  function rebindButtons() {
+    const bar = document.getElementById('smd-solo-map-controls');
+    if (!bar) return;
+    const btns = bar.querySelectorAll('button');
+    if (btns[0]) {
+      btns[0].setAttribute('onclick', 'soloRecenterMap(event)');
+      if (!btns[0].dataset.smdHooked) {
+        btns[0].dataset.smdHooked = '1';
+        btns[0].addEventListener('click', window.soloRecenterMap, true);
+      }
+    }
+    if (btns[1]) {
+      btns[1].setAttribute('onclick', 'soloFitBoth(event)');
+      if (!btns[1].dataset.smdHooked) {
+        btns[1].dataset.smdHooked = '1';
+        btns[1].addEventListener('click', window.soloFitBoth, true);
+      }
+    }
+  }
+
+  rebindButtons();
+  setInterval(rebindButtons, 400);
+})();
+</script>
 </body>
 </html>
