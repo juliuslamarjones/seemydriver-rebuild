@@ -17,7 +17,7 @@ const HEADING_UP = false;
 const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
-const LIGHT_STREETS_STYLE = 'mapbox://styles/mapbox/light-v11';
+const LIGHT_STREETS_STYLE = 'mapbox://styles/mapbox/streets-v12';
 
 const $ = (id) => document.getElementById(id);
 const getDb = () => window.db || (typeof db !== 'undefined' ? db : null);
@@ -389,13 +389,13 @@ function createTripEngine(map, opts) {
         if (!E.running) return;
         const data = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } };
         try {
-            const src = map.getSource('route-source');
+            const src = map.getSource('smd-route-src');
             if (src) {
                 src.setData(data);
             } else {
-                map.addSource('route-source', { type: 'geojson', data: data });
+                map.addSource('smd-route-src', { type: 'geojson', data: data });
                 map.addLayer({
-                    id: 'route-line', type: 'line', source: 'route-source',
+                    id: 'smd-route-line', type: 'line', source: 'smd-route-src',
                     layout: { 'line-join': 'round', 'line-cap': 'round' },
                     paint: { 'line-color': '#2563eb', 'line-width': 6, 'line-opacity': 0.94 }
                 });
@@ -465,7 +465,7 @@ function createTripEngine(map, opts) {
         if (!E.route || now - E.lastLine < 200) return;
         E.lastLine = now;
         try {
-            const src = map.getSource('route-source');
+            const src = map.getSource('smd-route-src');
             if (!src) return;
             const r = E.route;
             const s = E.snapped ? E.rS : E.sRef;
@@ -725,9 +725,11 @@ window.initDriverActiveMap = function () {
     };
 
     map.on('load', () => {
-        apply3DBuildingsLayer(map);
         map.resize();
+        apply3DBuildingsLayer(map);
     });
+    setTimeout(() => { try { map.resize(); } catch (e) {} }, 150);
+    setTimeout(() => { try { map.resize(); apply3DBuildingsLayer(map); } catch (e) {} }, 450);
     if (gps.last && Date.now() - gps.last.t < 30000) D.handleFix(gps.last);
 };
 
