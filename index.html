@@ -391,5 +391,164 @@ window.soloFitBoth = function() {
   }
 })();
 </script>
+<script id="smd-landing-preview-upgrade">
+(function() {
+  function hasGarbledChars(str) {
+    for (let i = 0; i < str.length; i++) {
+      const code = str.charCodeAt(i);
+      if (code === 0x00F0 || code === 0x0178 || code === 0x00E2 || code === 0x20AC || code === 0x00C3 || code === 0x00C2) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function fixMojibakeNodes() {
+    try {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const txt = node.nodeValue || '';
+        if (txt.indexOf('30-Day Free Trial') !== -1) {
+          node.nodeValue = '🔥 30-Day Free Trial — Then $29/month Solo Plan 🔥';
+        } else if (hasGarbledChars(txt)) {
+          node.nodeValue = txt
+            .replace(/ðŸ[^s]*/g, '')
+            .replace(/â€”/g, '—')
+            .replace(/â€“/g, '–')
+            .replace(/Â/g, '')
+            .trim();
+        }
+      }
+    } catch (e) {}
+  }
+
+  function enhanceTelemetryCopy() {
+    try {
+      if (document.getElementById('smd-telemetry-copy-box')) return;
+      const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,p,div,span'));
+      const target = headings.find((el) => el.textContent && el.textContent.trim() === 'Real-Time Client Telemetry');
+      const host = target && target.parentElement;
+      if (!host) return;
+      const box = document.createElement('div');
+      box.id = 'smd-telemetry-copy-box';
+      box.style.cssText = 'margin-top:12px;color:#b8beca;font-size:14px;line-height:1.55;max-width:440px;';
+      box.innerHTML = [
+        '<p style="margin:0 0 10px 0;">Your live GPS position streams directly from your browser onto a light street map with a road-hugging route polyline and real-time speed telemetry.</p>',
+        '<p style="margin:0;color:#9ca3af;font-size:13px;">Share a single SMS or web link with your client so they watch your route progress along actual streets without downloading an app.</p>'
+      ].join('');
+      host.appendChild(box);
+    } catch (e) {}
+  }
+
+  function makeBlackTruckSvg() {
+    return '<div style="width:34px;height:46px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 6px 10px rgba(0,0,0,0.45));">' +
+      '<svg viewBox="0 0 40 56" width="34" height="46" xmlns="http://www.w3.org/2000/svg">' +
+        '<rect x="7" y="6" width="26" height="44" rx="7" fill="#0b0d12" stroke="#f59e0b" stroke-width="2.2"/>' +
+        '<rect x="10" y="12" width="20" height="10" rx="2.5" fill="#1f2937"/>' +
+        '<rect x="10" y="34" width="20" height="8" rx="2" fill="#18181b"/>' +
+        '<circle cx="11" cy="8" r="2.2" fill="#fde68a"/>' +
+        '<circle cx="29" cy="8" r="2.2" fill="#fde68a"/>' +
+      '</svg></div>';
+  }
+
+  function renderRoadHuggingPreview() {
+    try {
+      const previewLabel = Array.from(document.querySelectorAll('*')).find((el) => el.children.length === 0 && el.textContent && el.textContent.trim() === 'LIVE SIMULATION PREVIEW');
+      const card = previewLabel && (previewLabel.closest('div[class*="rounded"]') || (previewLabel.parentElement && previewLabel.parentElement.parentElement));
+      if (!card) return;
+      let stage = card.querySelector('#smd-light-road-map');
+      if (!stage) {
+        const darkBlank = Array.from(card.querySelectorAll('div')).find((d) => {
+          const r = d.getBoundingClientRect();
+          return r.height > 140 && r.width > 180 && d.id !== 'smd-light-road-map';
+        });
+        stage = document.createElement('div');
+        stage.id = 'smd-light-road-map';
+        stage.style.cssText = 'position:relative;width:100%;height:250px;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.12);background:#eef2f6;margin-top:8px;';
+        if (darkBlank && darkBlank.parentElement) {
+          darkBlank.replaceWith(stage);
+        } else {
+          card.appendChild(stage);
+        }
+      }
+      if (stage.dataset.smdMapReady === '1') return;
+      stage.dataset.smdMapReady = '1';
+
+      const start = [-95.3498, 29.9979];
+      const end = [-95.4446, 29.9854];
+      const token = window.MAPBOX_TOKEN || (window.mapboxgl && window.mapboxgl.accessToken) || '';
+
+      if (typeof mapboxgl !== 'undefined' && token) {
+        mapboxgl.accessToken = token;
+        const m = new mapboxgl.Map({
+          container: stage,
+          style: 'mapbox://styles/mapbox/streets-v12',
+          center: [-95.397, 29.991],
+          zoom: 11.4,
+          interactive: true
+        });
+        m.on('load', async () => {
+          let coords = [start, end];
+          try {
+            const url = 'https://api.mapbox.com/directions/v5/mapbox/driving/' +
+              start[0] + ',' + start[1] + ';' + end[0] + ',' + end[1] +
+              '?geometries=geojson&overview=full&access_token=' + encodeURIComponent(token);
+            const resp = await fetch(url);
+            const data = await resp.json();
+            if (data && data.routes && data.routes[0] && data.routes[0].geometry && Array.isArray(data.routes[0].geometry.coordinates)) {
+              coords = data.routes[0].geometry.coordinates;
+            }
+          } catch (e) {}
+
+          m.addSource('smd-road-route', {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: {},
+              geometry: { type: 'LineString', coordinates: coords }
+            }
+          });
+          m.addLayer({
+            id: 'smd-road-route-casing',
+            type: 'line',
+            source: 'smd-road-route',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#111827', 'line-width': 7, 'line-opacity': 0.85 }
+          });
+          m.addLayer({
+            id: 'smd-road-route-line',
+            type: 'line',
+            source: 'smd-road-route',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#f59e0b', 'line-width': 4 }
+          });
+
+          const truckEl = document.createElement('div');
+          truckEl.innerHTML = makeBlackTruckSvg();
+          new mapboxgl.Marker({ element: truckEl.firstChild })
+            .setLngLat(coords[Math.floor(coords.length * 0.45)] || start)
+            .addTo(m);
+        });
+      } else {
+        stage.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#111827;font-weight:700;font-size:13px;">Loading light road map...</div>';
+      }
+    } catch (e) {}
+  }
+
+  function runAll() {
+    fixMojibakeNodes();
+    enhanceTelemetryCopy();
+    renderRoadHuggingPreview();
+  }
+
+  setInterval(runAll, 900);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', runAll);
+  } else {
+    runAll();
+  }
+})();
+</script>
 </body>
 </html>
