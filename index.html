@@ -550,5 +550,54 @@ window.soloFitBoth = function() {
   }
 })();
 </script>
+<script id="smd-landing-default-boot">
+(function() {
+  function isStandaloneApp() {
+    try {
+      if (window.matchMedia && (
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches ||
+        window.matchMedia('(display-mode: minimal-ui)').matches
+      )) return true;
+      if (window.navigator && window.navigator.standalone === true) return true;
+      if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) return true;
+      if (window.cordova) return true;
+    } catch (e) {}
+    return false;
+  }
+
+  function showLandingDefault() {
+    try {
+      if (window.__smdUserOpenedSignIn) return;
+      if (isStandaloneApp()) return;
+      const landing = document.getElementById('landing-view');
+      if (landing) {
+        landing.classList.remove('hidden');
+        landing.style.display = 'flex';
+      }
+      if (typeof window.switchView === 'function') {
+        window.switchView('landing', true);
+      }
+    } catch (e) {}
+  }
+
+  document.addEventListener('click', function(ev) {
+    const btn = ev.target && ev.target.closest('button,a');
+    if (!btn) return;
+    const label = (btn.textContent || '').trim().toLowerCase();
+    if (label === 'sign in' || label.indexOf('sign in') === 0) {
+      window.__smdUserOpenedSignIn = true;
+    }
+  }, true);
+
+  showLandingDefault();
+  setTimeout(showLandingDefault, 120);
+  setTimeout(showLandingDefault, 450);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', showLandingDefault);
+  }
+  window.addEventListener('load', showLandingDefault);
+})();
+</script>
 </body>
 </html>
