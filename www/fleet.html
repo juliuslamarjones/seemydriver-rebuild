@@ -339,16 +339,6 @@ window.recenterFleetMap = function () {
                 }
             }, 250);
         };
-                        suggestions.appendChild(div);
-                    });
-
-                    suggestions.classList.remove('hidden');
-                    suggestions.style.display = 'block';
-                } catch (e) {
-                    console.error('Fleet geocoder lookup error:', e);
-                }
-            }, 300);
-        };
 
         function initFirebaseListeners() {
             firebase.auth().onAuthStateChanged((user) => {
