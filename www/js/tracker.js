@@ -477,7 +477,7 @@ function getTruckIcon(bearing = 0) {
 }
 
 function getDriverLabelIcon(name = 'Driver') {
-    const safeName = String(name || 'Driver').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
+    const safeName = String(name || 'Driver').replace(/[&<>'"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', ''': '&#39;', '"': '&quot;' }[c]; });
     return L.divIcon({
         className: 'custom-driver-label-marker',
         html: `<div style="transform: translate(-50%, -100%); font-size: 11px; font-weight: 900; color: #000; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff; white-space: nowrap; letter-spacing: 0.08em; text-transform: uppercase;">${safeName}</div>`,
@@ -1492,4 +1492,6 @@ window.initCustomerMapLive = function () {
             }
         });
     };
+})();
+]);
 })();
