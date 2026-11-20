@@ -149,10 +149,6 @@ function getDest() {
 
 window.launchLiveBroadcast = function() {
     const authUser = window.firebase && window.firebase.auth ? window.firebase.auth().currentUser : null;
-    if (!authUser) {
-        alert('Please sign in to start a broadcast.');
-        return;
-    }
 
     const driverName = $('job-driver-name').value.trim();
     const driverPhone = $('job-driver-phone').value.trim();
@@ -193,7 +189,7 @@ window.launchLiveBroadcast = function() {
 
     if (database) {
         database.ref('broadcasts/' + sid).set({
-            ownerUid: authUser.uid,
+            ownerUid: (authUser && authUser.uid) || 'browser-session',
             driverName: driverName,
             driverPhone: driverPhone,
             companyName: companyName,
