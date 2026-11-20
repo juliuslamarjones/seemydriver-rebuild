@@ -307,7 +307,13 @@ function sendFirebase(out) {
 }
 
 function setBadge(text, ok) {
-    document.querySelectorAll('.smd-gps-badge').forEach((b) => {
+    const targets = Array.from(document.querySelectorAll('.smd-gps-badge'));
+    const activeView = $('active-broadcast-view');
+    if (activeView) {
+        const pill = activeView.querySelector('[class*="top-3"][class*="left-3"]');
+        if (pill && targets.indexOf(pill) === -1) targets.push(pill);
+    }
+    targets.forEach((b) => {
         b.textContent = text + ' \u00b7 ' + ENGINE_VERSION;
         b.style.color = ok ? '#fbbf24' : '#f87171';
     });
@@ -711,10 +717,11 @@ window.initDriverActiveMap = function () {
         }, 2000),
         handleFix(fix) {
             const out = engine.feed(fix);
-            if (out) {
+            const accVal = Math.round((fix && fix.acc) || 0);
+            if (out || (fix && isFinite(fix.lat) && isFinite(fix.lng))) {
                 const spd = $('driver-map-speed');
-                if (spd) spd.textContent = out.speedMph + ' mph';
-                setBadge('GPS \u00b1' + Math.round(fix.acc || 0) + ' m', true);
+                if (spd && out) spd.textContent = out.speedMph + ' mph';
+                setBadge(accVal > 0 ? ('GPS \u00b1' + accVal + ' m') : 'GPS LOCK', true);
             }
             return out;
         }
