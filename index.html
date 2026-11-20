@@ -1355,7 +1355,7 @@ window.soloFitBoth = function() {
             'fill-extrusion-color': '#94a3b8',
             'fill-extrusion-height': ['coalesce', ['get', 'height'], 14],
             'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
-            'fill-extrusion-opacity': 0.85
+            'fill-extrusion-opacity': 0.58
           }
         }, labelLayer ? labelLayer.id : undefined);
       }
@@ -1501,7 +1501,7 @@ window.soloFitBoth = function() {
       ? [state.currentLng, state.currentLat]
       : (window.__smdSoloCoords.driver || (m.getCenter && [m.getCenter().lng, m.getCenter().lat]));
     if (target) {
-      m.flyTo({ center: target, zoom: 16.5, pitch: 55, bearing: state.currentHeading || 0, essential: true, duration: 550 });
+      m.flyTo({ center: target, zoom: 15.4, pitch: 42, bearing: state.currentHeading || 0, essential: true, duration: 550 });
     }
   };
 
