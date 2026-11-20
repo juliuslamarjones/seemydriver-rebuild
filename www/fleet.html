@@ -97,7 +97,7 @@
                 <input type="hidden" id="modal-lat" value="29.9731">
                 <input type="hidden" id="modal-lng" value="-95.2831">
 
-                <button onclick="submitManualDispatch(true)" class="w-full bg-neutral-800 hover:bg-neutral-700 text-amber-400 font-black text-xs py-2.5 rounded-xl border border-neutral-700 transition-all cursor-pointer mt-1">📱 Text Driver & Deploy</button>
+                <button onclick="submitManualDispatch(true)" class="w-full bg-neutral-800 hover:bg-neutral-700 text-amber-400 font-black text-xs py-3 rounded-xl border border-neutral-700 transition-all cursor-pointer mt-3">📱 Text Driver & Deploy</button>
                 <button onclick="submitManualDispatch(false)" class="w-full bg-amber-400 hover:bg-amber-500 text-black font-black text-xs py-2.5 rounded-xl transition-all shadow-md cursor-pointer">Deploy Only 🚀</button>
             </div>
 
@@ -153,9 +153,10 @@
         let map;
         let activeMarkers = {}; 
         let fleetData = {};
-        let cachedDestLat = null;
+        let cachedDestLat = null; lastGeocodePickAt = Date.now();
         let cachedDestLng = null;
         let geocodeTimer = null;
+        let lastGeocodePickAt = 0;
 
         
         window.recenterFleetMap = function () {
@@ -207,7 +208,7 @@
         }
 
         window.handleAddressInput = async function(value) {
-            cachedDestLat = null;
+            cachedDestLat = null; lastGeocodePickAt = Date.now();
             cachedDestLng = null;
             
             const suggestions = document.getElementById('address-suggestions');
@@ -247,7 +248,7 @@
                             const inputField = document.getElementById('modal-dest-address');
                             if (inputField) inputField.value = name;
                             
-                            cachedDestLat = coords[1];
+                            cachedDestLat = coords[1]; lastGeocodePickAt = Date.now();
                             cachedDestLng = coords[0];
                             
                             const latField = document.getElementById('modal-lat');
@@ -401,6 +402,7 @@
         function filterRoster() { renderFleetRosterAndMarkers(); }
 
         window.submitManualDispatch = async function(sendSms) {
+            if (Date.now() - lastGeocodePickAt < 450) { return; }
          try {
              const user = firebase.auth().currentUser || { uid: "local-dispatcher", email: "dispatcher@seemydriver.com" };
              const driverName = (document.getElementById('modal-driver-name')?.value || '').trim();
@@ -460,7 +462,23 @@
                  timestamp: Date.now()
              });
 
-             selectDriver(newSid);
+             fleetData[newSid] = {
+                    ownerUid: user.uid,
+                    driverName: driverName,
+                    driverPhone: driverPhone,
+                    custName: custName,
+                    custPhone: custPhone,
+                    destAddress: address,
+                    destLat: lat,
+                    destLng: lng,
+                    lat: lat,
+                    lng: lng,
+                    speed: 0,
+                    heading: 0,
+                    timestamp: Date.now()
+                };
+                renderFleetRosterAndMarkers();
+                selectDriver(newSid);
 
              if (sendSms && driverPhone) {
                  const dispatchLink = `https://www.seemydriver.com/?owner=${user.uid}&session=${newSid}&driver=${encodeURIComponent(driverName)}`;
