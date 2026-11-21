@@ -1247,5 +1247,149 @@ window.soloFitBoth = function() {
   window.addEventListener('load', bind3DBtn);
 })();
 </script>
+<script id="smd-solo-geocoder-guard">
+(function() {
+  let timer = null;
+  let seq = 0;
+
+  function hideSuggestions(el) {
+    if (!el) return;
+    el.classList.add('hidden');
+    el.style.display = 'none';
+    el.innerHTML = '';
+  }
+
+  function showStatus(el, msg) {
+    if (!el) return;
+    el.innerHTML = '';
+    const row = document.createElement('div');
+    row.className = 'px-3.5 py-2.5 text-xs text-neutral-400 bg-[#161923]';
+    row.textContent = msg;
+    el.appendChild(row);
+    el.classList.remove('hidden');
+    el.style.display = 'block';
+  }
+
+  async function lookupAddresses(q) {
+    const encoded = encodeURIComponent(q);
+    try {
+      const pRes = await fetch('https://photon.komoot.io/api/?q=' + encoded + '&limit=5');
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        const feats = Array.isArray(pData && pData.features) ? pData.features : [];
+        const mapped = feats
+          .filter(f => f && f.geometry && Array.isArray(f.geometry.coordinates) && f.geometry.coordinates.length >= 2)
+          .map(f => {
+            const p = f.properties || {};
+            const street = [p.housenumber, p.street || p.name].filter(Boolean).join(' ');
+            const cityState = [p.city || p.district || p.county, p.state, p.postcode].filter(Boolean).join(', ');
+            const label = [street, cityState].filter(Boolean).join(', ') || p.name || q;
+            return {
+              name: label,
+              lng: parseFloat(f.geometry.coordinates[0]),
+              lat: parseFloat(f.geometry.coordinates[1])
+            };
+          })
+          .filter(x => isFinite(x.lng) && isFinite(x.lat));
+        if (mapped.length > 0) return mapped;
+      }
+    } catch (e) {}
+
+    const tok = (typeof MAPBOX_TOKEN !== 'undefined' && MAPBOX_TOKEN) ? MAPBOX_TOKEN : MAPBOX_FALLBACK;
+    if (tok) {
+      try {
+        const mRes = await fetch('https://api.mapbox.com/geocoding/v5/mapbox.places/' + encoded + '.json?access_token=' + tok + '&autocomplete=true&types=address,poi&limit=5');
+        if (mRes.ok) {
+          const mData = await mRes.json();
+          const mFeats = Array.isArray(mData && mData.features) ? mData.features : [];
+          return mFeats
+            .filter(f => f && Array.isArray(f.center) && f.center.length >= 2)
+            .map(f => ({
+              name: f.place_name || f.text || q,
+              lng: parseFloat(f.center[0]),
+              lat: parseFloat(f.center[1])
+            }))
+            .filter(x => isFinite(x.lng) && isFinite(x.lat));
+        }
+      } catch (e) {}
+    }
+    return [];
+  }
+
+  function runAutocomplete(rawVal) {
+    const input = document.getElementById('job-cust-address');
+    const sug = document.getElementById('address-suggestions');
+    if (!input || !sug) return;
+
+    const val = (typeof rawVal === 'string' ? rawVal : input.value || '').trim();
+    window.cachedDestLat = null;
+    window.cachedDestLng = null;
+    try {
+      localStorage.removeItem('smd_dest_lat');
+      localStorage.removeItem('smd_dest_lng');
+    } catch (e) {}
+
+    clearTimeout(timer);
+    if (val.length < 3) {
+      hideSuggestions(sug);
+      return;
+    }
+
+    const mySeq = ++seq;
+    timer = setTimeout(async () => {
+      showStatus(sug, 'Searching addresses...');
+      const results = await lookupAddresses(val);
+      if (mySeq !== seq) return;
+
+      sug.innerHTML = '';
+      if (!results.length) {
+        showStatus(sug, 'No matching addresses found.');
+        return;
+      }
+
+      results.forEach((item) => {
+        const div = document.createElement('div');
+        div.className = 'px-3.5 py-2.5 text-xs text-neutral-200 hover:bg-neutral-800 hover:text-amber-400 cursor-pointer border-b border-neutral-800/80 transition font-medium';
+        div.textContent = item.name;
+        const selectItem = (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          input.value = item.name;
+          window.cachedDestLat = item.lat;
+          window.cachedDestLng = item.lng;
+          try {
+            localStorage.setItem('smd_dest_lat', String(item.lat));
+            localStorage.setItem('smd_dest_lng', String(item.lng));
+          } catch (e) {}
+          hideSuggestions(sug);
+        };
+        div.addEventListener('pointerdown', selectItem);
+        div.addEventListener('click', selectItem);
+        sug.appendChild(div);
+      });
+
+      sug.classList.remove('hidden');
+      sug.style.display = 'block';
+      sug.style.zIndex = '80';
+    }, 250);
+  }
+
+  window.handleAddressInput = runAutocomplete;
+
+  function bindInput() {
+    const input = document.getElementById('job-cust-address');
+    if (!input || input.dataset.smdGeoBound === '1') return;
+    input.dataset.smdGeoBound = '1';
+    input.addEventListener('input', () => runAutocomplete(input.value));
+    input.addEventListener('focus', () => {
+      if ((input.value || '').trim().length >= 3) runAutocomplete(input.value);
+    });
+  }
+
+  bindInput();
+  setInterval(bindInput, 600);
+  document.addEventListener('DOMContentLoaded', bindInput);
+})();
+</script>
 </body>
 </html>
