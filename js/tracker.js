@@ -863,6 +863,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
+
     window.toggleDriver3D = function () {
         const m = (typeof resolveMobileMap === 'function' && resolveMobileMap()) ||
             (D && D.map) || window.soloMap || window.__smdSoloMap || window.map;
@@ -918,3 +919,4 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (e) {}
     }, 300);
+})();
