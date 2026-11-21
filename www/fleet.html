@@ -430,7 +430,7 @@ const merged = remoteData;
                 writeSavedDrivers(fleetData);
                     renderFleetRosterAndMarkers();
                 }, (error) => {
-                    document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> Disconnected'; console.error('RTDB read error:', error);
+                    console.warn('RTDB read error fallback to local roster:', error && error.message ? error.message : error); const statusEl = document.getElementById('connection-status'); if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> Local Sync'; if (typeof readSavedDrivers === 'function') { window.fleetData = window.fleetData = fleetData = readSavedDrivers(); if (typeof renderFleetRosterAndMarkers === 'function') renderFleetRosterAndMarkers(); }
                 });
             });
         }
