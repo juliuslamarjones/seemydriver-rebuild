@@ -295,6 +295,7 @@ const gps = { running: false, last: null, handle: null, lastSend: 0 };
 let D = null;
 
 function ingest(pos) {
+    try { if (typeof window.initDriverActiveMap === 'function' && (!D || !D.map)) window.initDriverActiveMap(); } catch (e) {}
     const c = pos.coords;
     const fix = {
         lat: c.latitude,
@@ -357,6 +358,7 @@ function watchGps() {
 }
 
 window.startRealTimeTracking = function () {
+    try { if (typeof window.initDriverActiveMap === 'function' && (!D || !D.map)) window.initDriverActiveMap(); } catch (e) {}
     if (gps.running) return;
     gps.running = true;
     watchGps();
@@ -503,7 +505,8 @@ window.initDriverActiveMap = function () {
             center: dest ? [dest.lng, dest.lat] : [-95.3698, 29.7604],
             zoom: 15.6, pitch: 40, bearing: 0, antialias: true
         });
-    } catch (err) {
+        try { window.soloMap = map; window.map = map; if (box) box._mapboxMap = map; } catch (e) {}
+} catch (err) {
         D = { map: null, engine: null, timer: null };
         return;
     }
