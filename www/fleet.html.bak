@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SeeMyDriver Fleet | Command Center</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: { amber: { 400: '#fbbf24', 500: '#f59e0b' } }
+                }
+            }
+        }
+    </script>
+
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+
+    <style>
+        .mapboxgl-popup-content { background: #12141c !important; color: #fff !important; border-radius: 12px; border: 1px solid #262626; padding: 14px !important; }
+        .pro-vehicle-marker { background: transparent !important; border: none !important; cursor: pointer; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0f1117; }
+        ::-webkit-scrollbar-thumb { background: #262626; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-black text-white h-screen w-screen overflow-hidden flex flex-col font-sans selection:bg-amber-400 selection:text-black antialiased">
+
+    <header class="w-full border-b border-neutral-900 bg-black/90 backdrop-blur-md z-50 px-4 sm:px-8 py-3.5 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3 cursor-pointer">
+            <div class="w-11 h-11 bg-amber-400 rounded-2xl flex items-center justify-center shadow-[0_0_25px_rgba(251,191,36,0.5)] shrink-0 overflow-hidden">
+                <span class="text-black font-black text-xl">👀</span>
+            </div>
+            <span class="font-black tracking-tight text-xl sm:text-2xl text-white">See<span class="text-amber-400">MyDriver</span> <span class="text-[10px] px-2.5 py-1 rounded-full bg-amber-400/10 text-amber-300 border border-amber-400/20 ml-1.5 font-mono whitespace-nowrap">FLEET COMMAND</span></span>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+            <a href="index.html" class="text-xs font-black text-amber-400 hover:text-black bg-amber-400/10 hover:bg-amber-400 px-3.5 py-2 rounded-xl border border-amber-400/40 transition whitespace-nowrap">&times; Close Fleet</a>
+            <span id="connection-status" class="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20 hidden sm:flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live
+            </span>
+        </div>
+    </header>
+
+    <div class="flex-1 flex flex-col md:flex-row relative overflow-hidden">
+        
+        <aside class="w-full md:w-96 bg-[#0f1117] border-b md:border-b-0 md:border-r border-neutral-900 flex flex-col z-20 shrink-0 h-[50%] md:h-full overflow-y-auto">
+            <div class="p-4 border-b border-neutral-900 flex flex-col gap-3 bg-black/40">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-black uppercase tracking-wider text-neutral-400">Active Fleet Roster</span>
+                    <span id="driver-count" class="text-xs bg-neutral-900 text-amber-400 px-3 py-1 rounded-full font-mono border border-neutral-800">0 Active</span>
+                </div>
+                <div class="relative">
+                    <input type="text" id="fleet-search" oninput="filterRoster()" placeholder="Search drivers or destinations..." class="w-full bg-neutral-900/90 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400/50 font-mono transition-all">
+                </div>
+            </div>
+
+            <div class="p-4 border-b border-neutral-900 bg-[#12141c]/60 flex flex-col gap-3 font-mono text-xs">
+                <div class="font-black text-white text-xs flex items-center gap-2">🚀 NEW JOB DISPATCH CONTROL</div>
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-neutral-400 block mb-1 text-[10px]">DRIVER NAME *</label>
+                        <input type="text" id="modal-driver-name" placeholder="e.g. Marcus" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
+                    </div>
+                    <div>
+                        <label class="text-neutral-400 block mb-1 text-[10px]">DRIVER PHONE</label>
+                        <input type="tel" id="modal-driver-phone" placeholder="8329025417" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-neutral-400 block mb-1 text-[10px]">CUSTOMER NAME</label>
+                        <input type="text" id="modal-cust-name" placeholder="John Smith" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
+                    </div>
+                    <div>
+                        <label class="text-neutral-400 block mb-1 text-[10px]">CUSTOMER PHONE</label>
+                        <input type="tel" id="modal-cust-phone" placeholder="555-0142" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
+                    </div>
+                </div>
+
+                <div class="relative">
+                    <label class="text-neutral-400 block mb-1 text-[10px]">DESTINATION ADDRESS *</label>
+                    <input type="text" id="modal-dest-address" oninput="window.handleAddressInput(this.value)" autocomplete="off" placeholder="Start typing address..." class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:border-amber-400">
+                    <div id="address-suggestions" class="hidden absolute left-0 right-0 top-full mt-1 bg-[#161923] border border-neutral-800 rounded-xl shadow-2xl z-[99999] max-h-48 overflow-y-auto"></div>
+                </div>
+
+                <input type="hidden" id="modal-lat" value="29.9731">
+                <input type="hidden" id="modal-lng" value="-95.2831">
+
+                <button onclick="submitManualDispatch(true)" class="w-full bg-neutral-800 hover:bg-neutral-700 text-amber-400 font-black text-xs py-3 rounded-xl border border-neutral-700 transition-all cursor-pointer mt-3">📱 Text Driver & Deploy</button>
+                <button onclick="submitManualDispatch(false)" class="w-full bg-amber-400 hover:bg-amber-500 text-black font-black text-xs py-2.5 rounded-xl transition-all shadow-md cursor-pointer">Deploy Only 🚀</button>
+            </div>
+
+            <div id="driver-list" class="flex-1 min-h-[220px] max-h-[45vh] md:max-h-none overflow-y-auto p-3.5 space-y-2.5">
+                <div class="text-xs text-neutral-500 text-center py-8 font-mono">Listening for active broadcasts...</div>
+            </div>
+
+            <div class="px-3.5 py-2.5 border-t border-neutral-900 bg-black/50 flex items-center justify-between gap-2 font-mono text-[11px] shrink-0">
+                <button onclick="resetFleetView()" class="flex-1 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white font-bold py-2 px-2.5 rounded-lg border border-neutral-800 transition cursor-pointer truncate">&#8634; Overview</button>
+                <button onclick="purgeAllBroadcasts()" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-bold py-2 px-2.5 rounded-lg border border-red-500/20 transition cursor-pointer shrink-0">&#128465;&#65039; Purge All</button>
+            </div>
+        </aside>
+
+        <main class="flex-1 relative bg-neutral-200 h-[50%] min-h-[280px] md:h-full">
+            <div id="map" class="absolute inset-0 w-full h-full z-0"></div>
+            <div class="absolute bottom-4 left-3 right-3 z-20 flex flex-wrap items-center gap-2 font-mono text-xs pointer-events-auto">
+                <button id="fleet-recenter-btn" onclick="recenterFleetMap()" class="bg-[#12141c]/95 hover:bg-neutral-800 text-white font-bold px-3.5 py-2 rounded-xl border border-neutral-700 shadow-lg cursor-pointer transition">Re-Center</button>
+                <button id="fleet-fit-both-btn" onclick="fitBothFleetAndDest()" class="bg-amber-400 hover:bg-amber-300 text-black font-black px-3.5 py-2 rounded-xl shadow-lg cursor-pointer transition">Fit Both</button>
+                <button id="fleet-overview-btn" onclick="resetFleetView()" class="bg-[#12141c]/95 hover:bg-neutral-800 text-neutral-200 font-bold px-3.5 py-2 rounded-xl border border-neutral-700 shadow-lg cursor-pointer transition">Overview</button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const firebaseConfig = { apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI", authDomain: "seemydriver-prod.firebaseapp.com", databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com", projectId: "seemydriver-prod", storageBucket: "seemydriver-prod.firebasestorage.app", messagingSenderId: "16366013329", appId: "1:16366013329:web:7e993e6ee37f940a04a064" };
+        if (typeof firebase !== 'undefined' && !firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+        if (typeof firebase !== 'undefined' && typeof window.db === 'undefined') { window.db = firebase.database(); }
+        const DEV_BYPASS_MODE = true;
+        let map = null;
+        const FLEET_STORAGE_KEY = 'smd_fleet_broadcasts_v1';
+        function loadPersistedFleet() {
+            try {
+                const raw = localStorage.getItem(FLEET_STORAGE_KEY);
+                const parsed = raw ? JSON.parse(raw) : {};
+                return (parsed && typeof parsed === 'object') ? parsed : {};
+            } catch (e) { return {}; }
+        }
+        function savePersistedFleet(data) {
+            try { localStorage.setItem(FLEET_STORAGE_KEY, JSON.stringify(data || {})); } catch (e) {}
+        }
+        const PERSIST_KEY = 'smd_fleet_sessions_persisted';
+function readSavedDrivers() {
+  try {
+    const raw = localStorage.getItem(PERSIST_KEY);
+    const obj = raw ? JSON.parse(raw) : {};
+    return (obj && typeof obj === 'object') ? obj : {};
+  } catch (e) { return {}; }
+}
+function writeSavedDrivers(obj) {
+  try { localStorage.setItem(PERSIST_KEY, JSON.stringify(obj || {})); } catch (e) {}
+}
+let fleetData = readSavedDrivers();
+        let activeMarkers = {};
+        let cachedDestLat = null;
+        let cachedDestLng = null;
+        let geocodeTimer = null;
+        let lastGeocodePickAt = 0;
+        window.MAPBOX_TOKEN = window.MAPBOX_TOKEN || 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+        if (typeof mapboxgl !== 'undefined') { mapboxgl.accessToken = window.MAPBOX_TOKEN; }
+        const FULL_MAPBOX_TOKEN = window.MAPBOX_TOKEN;
+
+        function verifyUpgradeAccess() {
+            if (DEV_BYPASS_MODE) return;
+            const user = firebase.auth().currentUser;
+            if (!user) {
+                if (DEV_BYPASS_MODE) {
+                    document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Connecting...';
+                    firebase.auth().signInAnonymously().then(() => { attachBroadcastsListener(); }).catch((err) => {
+                        console.error('Anon auth error (enable Anonymous provider in Firebase Auth):', err);
+                        document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> Auth Blocked';
+                    });
+                    return;
+                }
+                document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> Sign In Required';
+                return;
+            }
+            map.easeTo({ center: [-95.2831, 29.9731], zoom: 12, duration: 500 });
+        };
+
+        window.fitBothFleetAndDest = function () {
+            if (!map || typeof mapboxgl === 'undefined') return;
+            const bounds = new mapboxgl.LngLatBounds();
+            let hasPoint = false;
+            Object.values(fleetData || {}).forEach((d) => {
+                const lat = parseFloat(d && d.lat), lng = parseFloat(d && d.lng);
+                if (isFinite(lat) && isFinite(lng)) { bounds.extend([lng, lat]); hasPoint = true; }
+            });
+            if (isFinite(cachedDestLat) && isFinite(cachedDestLng)) {
+                bounds.extend([cachedDestLng, cachedDestLat]);
+                hasPoint = true;
+            }
+            if (hasPoint && !bounds.isEmpty()) {
+                map.fitBounds(bounds, { padding: 70, maxZoom: 15, duration: 600 });
+            } else {
+                window.recenterFleetMap();
+            }
+        };
+
+        function initMap() {
+            if (map) return;
+            verifyUpgradeAccess();
+            try {
+                map = new mapboxgl.Map({
+                    container: 'map',
+                    style: 'mapbox://styles/mapbox/streets-v12',
+                    center: [-95.2831, 29.9731],
+                    zoom: 12
+                });
+            } catch (e) {
+                map = new mapboxgl.Map({
+                    container: 'map',
+                    style: {
+                        version: 8,
+                        sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256 } },
+                        layers: [{ id: 'osm-layer', type: 'raster', source: 'osm' }]
+                    },
+                    center: [-95.2831, 29.9731],
+                    zoom: 12
+                });
+            }
+            map.on('error', function () {
+                if (!map._fallbackApplied) {
+                    map._fallbackApplied = true;
+                    map.setStyle({
+                        version: 8,
+                        sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256 } },
+                        layers: [{ id: 'osm-layer', type: 'raster', source: 'osm' }]
+                    });
+                }
+            });
+            map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+            map.on('load', function () { map.resize(); initFirebaseListeners(); });
+            setTimeout(function () { if (map) map.resize(); }, 200);
+            setTimeout(function () { if (map) map.resize(); }, 800);
+            if (typeof ResizeObserver !== 'undefined') {
+                const mapEl = document.getElementById('map');
+                if (mapEl) {
+                    new ResizeObserver(function () { if (map) map.resize(); }).observe(mapEl);
+                }
+            }
+            window.addEventListener('orientationchange', function () { setTimeout(function () { if (map) map.resize(); }, 250); });
+            document.addEventListener('visibilitychange', function () { if (!document.hidden && map) map.resize(); });
+        }
+
+        window.handleAddressInput = async function(value) {
+            cachedDestLat = null;
+            cachedDestLng = null;
+
+            const suggestions = document.getElementById('address-suggestions');
+            if (!suggestions) return;
+
+            clearTimeout(geocodeTimer);
+            const query = (value || '').trim();
+
+            if (query.length < 3) {
+                suggestions.classList.add('hidden');
+                suggestions.style.display = 'none';
+                suggestions.innerHTML = '';
+                return;
+            }
+
+            geocodeTimer = setTimeout(async () => {
+                try {
+                    let proxParam = '';
+                    if (map && typeof map.getCenter === 'function') {
+                        const c = map.getCenter();
+                        if (c && isFinite(c.lng) && isFinite(c.lat)) {
+                            proxParam = '&proximity=' + c.lng.toFixed(4) + ',' + c.lat.toFixed(4);
+                        }
+                    }
+
+                    let items = [];
+                    const mbRes = await fetch('https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(query) + '.json?access_token=' + FULL_MAPBOX_TOKEN + '&autocomplete=true&limit=6' + proxParam);
+                    if (mbRes.ok) {
+                        const mbData = await mbRes.json();
+                        if (mbData && Array.isArray(mbData.features) && mbData.features.length > 0) {
+                            items = mbData.features.map(f => ({
+                                name: f.place_name || f.text || '',
+                                coords: f.center || (f.geometry && f.geometry.coordinates) || [0, 0]
+                            }));
+                        }
+                    }
+
+                    if (items.length === 0) {
+                        let pUrl = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(query) + '&limit=6';
+                        if (map && typeof map.getCenter === 'function') {
+                            const c = map.getCenter();
+                            if (c && isFinite(c.lng) && isFinite(c.lat)) {
+                                pUrl += '&lat=' + c.lat.toFixed(4) + '&lon=' + c.lng.toFixed(4);
+                            }
+                        }
+                        const pRes = await fetch(pUrl);
+                        if (pRes.ok) {
+                            const pData = await pRes.json();
+                            if (pData && Array.isArray(pData.features)) {
+                                items = pData.features.map(f => {
+                                    const props = f.properties || {};
+                                    const label = [props.name, props.housenumber, props.street, props.city, props.state, props.postcode].filter(Boolean).join(', ') || props.label || query;
+                                    const coords = (f.geometry && Array.isArray(f.geometry.coordinates)) ? f.geometry.coordinates : [0, 0];
+                                    return { name: label, coords: coords };
+                                }).filter(x => x.name);
+                            }
+                        }
+                    }
+
+                    suggestions.innerHTML = '';
+                    if (items.length === 0) {
+                        suggestions.classList.add('hidden');
+                        suggestions.style.display = 'none';
+                        return;
+                    }
+
+                    items.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = "px-3 py-2.5 text-xs text-neutral-200 hover:bg-neutral-800 hover:text-amber-400 cursor-pointer border-b border-neutral-800/80 transition font-medium";
+                        div.innerText = item.name;
+                        div.onpointerdown = (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            lastGeocodePickAt = Date.now();
+                            const inputField = document.getElementById('modal-dest-address');
+                            if (inputField) inputField.value = item.name;
+
+                            cachedDestLat = item.coords[1];
+                            cachedDestLng = item.coords[0];
+
+                            const latField = document.getElementById('modal-lat');
+                            const lngField = document.getElementById('modal-lng');
+                            if (latField) latField.value = cachedDestLat;
+                            if (lngField) lngField.value = cachedDestLng;
+
+                            suggestions.classList.add('hidden');
+                            suggestions.style.display = 'none';
+                        };
+                        suggestions.appendChild(div);
+                    });
+
+                    suggestions.classList.remove('hidden');
+                    suggestions.style.display = 'block';
+                } catch (e) {
+                    console.error('Fleet geocoder lookup error:', e);
+                }
+            }, 250);
+        };
+
+        function attachBroadcastsListener() {
+            const statusEl = document.getElementById('connection-status');
+            if (!window.db || typeof db.ref !== 'function') return;
+            const broadcastsRef = db.ref('broadcasts');
+            broadcastsRef.off();
+            broadcastsRef.on('value', (snapshot) => {
+                if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live';
+                const remoteData = snapshot.val() || {};
+                const savedLocal = (typeof readSavedDrivers === 'function') ? readSavedDrivers() : {};
+                fleetData = remoteData;
+                if (typeof writeSavedDrivers === 'function') writeSavedDrivers(fleetData);
+                renderFleetRosterAndMarkers();
+            }, (error) => {
+                console.warn('RTDB read fallback to persisted local roster:', error && error.message ? error.message : error);
+                if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> Local Sync';
+                if (typeof readSavedDrivers === 'function') {
+                    fleetData = readSavedDrivers();
+                    renderFleetRosterAndMarkers();
+                }
+            });
+        }
+
+        function initFirebaseListeners() {
+            firebase.auth().onAuthStateChanged((user) => {
+            if (!user) {
+                if (DEV_BYPASS_MODE) {
+                    const statusEl = document.getElementById('connection-status');
+                    if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Connecting...';
+                    firebase.auth().signInAnonymously().catch((err) => {
+                        console.error('Anon auth error:', err);
+                        if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> Auth Blocked';
+                    });
+                    return;
+                }
+                const statusEl = document.getElementById('connection-status');
+                if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> Sign In Required';
+                return;
+            }
+                const broadcastsRef = db.ref('broadcasts');
+                broadcastsRef.on('value', (snapshot) => {
+                    document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live';
+                    const remoteData = snapshot.val() || {};
+                const savedLocal = readSavedDrivers();
+const merged = remoteData;
+                fleetData = merged;
+                writeSavedDrivers(fleetData);
+                    renderFleetRosterAndMarkers();
+                }, (error) => {
+                    document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> Disconnected'; console.error('RTDB read error:', error);
+                });
+            });
+        }
+
+        function createTruckElement(accentColor) {
+            const el = document.createElement('div');
+            el.className = 'pro-vehicle-marker';
+            el.style.width = '40px';
+            el.style.height = '40px';
+            el.style.display = 'flex';
+            el.style.alignItems = 'center';
+            el.style.justifyContent = 'center';
+            el.style.filter = 'drop-shadow(0px 6px 12px rgba(0,0,0,0.6))';
+            el.innerHTML = `
+                <svg viewBox="0 0 24 36" width="32" height="48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="1.5" y="9" width="3.5" height="7" rx="1" fill="#090d16" stroke="${accentColor}" stroke-width="1"/>
+                    <rect x="19" y="9" width="3.5" height="7" rx="1" fill="#090d16" stroke="${accentColor}" stroke-width="1"/>
+                    <rect x="1.5" y="25" width="3.5" height="7" rx="1" fill="#090d16" stroke="${accentColor}" stroke-width="1"/>
+                    <rect x="19" y="25" width="3.5" height="7" rx="1" fill="#090d16" stroke="${accentColor}" stroke-width="1"/>
+                    <rect x="4" y="12" width="16" height="21" rx="2.5" fill="#0b0f19" stroke="${accentColor}" stroke-width="1.5"/>
+                    <rect x="4" y="21" width="16" height="3.5" fill="#fbbf24"/>
+                    <line x1="4" y1="22.75" x2="20" y2="22.75" stroke="#ffffff" stroke-width="0.75" opacity="0.8"/>
+                    <path d="M6 12H18V5.5C18 3.84315 16.6569 2.5 15 2.5H9C7.34315 2.5 6 3.84315 6 5.5V12Z" fill="#111827" stroke="#4b5563" stroke-width="1.5"/>
+                    <path d="M7.5 8H16.5L15.5 4.5H8.5L7.5 8Z" fill="#38bdf8" fill-opacity="0.9" stroke="#bae6fd" stroke-width="0.5"/>
+                    <line x1="9" y1="6" x2="15" y2="6" stroke="#ffffff" stroke-width="0.75" opacity="0.6"/>
+                    <circle cx="7" cy="3.5" r="1.1" fill="#fbbf24"/>
+                    <circle cx="17" cy="3.5" r="1.1" fill="#fbbf24"/>
+                    <circle cx="7" cy="3.5" r="0.5" fill="#ffffff"/>
+                    <circle cx="17" cy="3.5" r="0.5" fill="#ffffff"/>
+                </svg>
+            `;
+            return el;
+        }
+
+        function renderFleetRosterAndMarkers() {
+            const listContainer = document.getElementById('driver-list');
+            listContainer.innerHTML = '';
+            const sessionIds = Object.keys(fleetData);
+            const searchTerm = (document.getElementById('fleet-search').value || '').toLowerCase();
+
+            const activeSessions = sessionIds.filter(id => {
+                const d = fleetData[id];
+                if (!d) return false;
+                const lat = Number(d.lat || d.latitude || d.destLat);
+                const lng = Number(d.lng || d.lon || d.longitude || d.destLng);
+                if (!isFinite(lat) || !isFinite(lng)) return false;
+                if (searchTerm) {
+                    const name = (d.driverName || '').toLowerCase();
+                    const addr = (d.custAddress || d.destAddress || '').toLowerCase();
+                    return name.includes(searchTerm) || addr.includes(searchTerm);
+                }
+                return true;
+            });
+
+            document.getElementById('driver-count').innerText = `${activeSessions.length} Active`;
+
+            if (activeSessions.length === 0) {
+                listContainer.innerHTML = '<div class="text-xs text-neutral-500 text-center py-8 font-mono">No matching active broadcasts.</div>';
+                Object.keys(activeMarkers).forEach(id => { activeMarkers[id].marker.remove(); delete activeMarkers[id]; });
+                return;
+            }
+
+            const currentMarkerIds = new Set(activeSessions);
+            Object.keys(activeMarkers).forEach(id => {
+                if (!currentMarkerIds.has(id)) { activeMarkers[id].marker.remove(); delete activeMarkers[id]; }
+            });
+
+            activeSessions.forEach((sid, index) => {
+                const driver = fleetData[sid];
+                const accentColors = ['#fbbf24', '#3b82f6', '#10b981', '#f43f5e', '#a855f7'];
+                const color = accentColors[index % accentColors.length];
+                const lat = Number(driver.lat || driver.latitude || driver.destLat);
+                const lng = Number(driver.lng || driver.lon || driver.longitude || driver.destLng);
+                const driverName = driver.driverName || 'Active Driver';
+                const address = driver.custAddress || driver.destAddress || 'Custom Destination';
+                const speed = driver.speed || 0;
+
+                const card = document.createElement('div');
+                card.className = `bg-[#12141c] hover:bg-[#161923] border border-neutral-800 p-4 rounded-2xl cursor-pointer transition-all shadow-lg flex flex-col gap-2`;
+                card.style.borderLeft = `4px solid ${color}`;
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="font-black text-white text-sm flex items-center gap-2" onclick="selectDriver('${sid}')">
+                            <span class="w-2.5 h-2.5 rounded-full" style="background: ${color};"></span>
+                            ${driverName}
+                        </span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-400/10 text-amber-400 border border-amber-400/20">En Route</span>
+                            <button onclick="event.stopPropagation(); deleteDriverSession('${sid}')" title="Remove Session" class="group text-neutral-300 hover:text-red-400 p-2.5 rounded-xl transition-all bg-neutral-900 hover:bg-red-500/20 border border-neutral-800 cursor-pointer flex items-center justify-center">
+                                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"></path><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-neutral-400 font-medium truncate" onclick="selectDriver('${sid}')">Dest: ${address}</p>
+                    <div class="flex items-center justify-between text-xs font-mono text-neutral-400 pt-1 border-t border-neutral-800/60" onclick="selectDriver('${sid}')">
+                        <span>Speed: <strong style="color: ${color};">${speed} mph</strong></span>
+                        <span>Live Telemetry</span>
+                    </div>
+                `;
+                listContainer.appendChild(card);
+
+                const lngLat = [lng, lat];
+                const popupHtml = `<b style="color:${color}; font-size:14px;">${driverName}</b><br><span style="color:#a3a3a3">Speed: ${speed} mph</span><br>Dest: <b>${address}</b>`;
+
+                if (activeMarkers[sid]) {
+                    activeMarkers[sid].marker.setLngLat(lngLat);
+                    activeMarkers[sid].marker.getPopup().setHTML(popupHtml);
+                } else {
+                    const el = createTruckElement(color);
+                    const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(popupHtml);
+                    const marker = new mapboxgl.Marker(el).setLngLat(lngLat).setPopup(popup).addTo(map);
+                    el.addEventListener('click', () => selectDriver(sid));
+                    activeMarkers[sid] = { marker, driver };
+                }
+            });
+        }
+
+        function filterRoster() { renderFleetRosterAndMarkers(); }
+
+        window.submitManualDispatch = async function(sendSms) {
+            if (Date.now() - lastGeocodePickAt < 450) { return; }
+         try {
+             const user = firebase.auth().currentUser || { uid: "local-dispatcher", email: "dispatcher@seemydriver.com" };
+             const driverName = (document.getElementById('modal-driver-name')?.value || '').trim();
+             const driverPhone = (document.getElementById('modal-driver-phone')?.value || '').trim().replace(/[^\d+]/g, '');
+             const custName = (document.getElementById('modal-cust-name')?.value || '').trim();
+             const custPhone = (document.getElementById('modal-cust-phone')?.value || '').trim();
+             const address = (document.getElementById('modal-dest-address')?.value || '').trim();
+             let lat = parseFloat(document.getElementById('modal-lat')?.value);
+             let lng = parseFloat(document.getElementById('modal-lng')?.value);
+             if (isNaN(lat)) lat = cachedDestLat;
+             if (isNaN(lng)) lng = cachedDestLng;
+
+             if (!driverName || !address) {
+                 alert('Please enter a driver name and a destination address.');
+                 return;
+             }
+
+             if ((isNaN(lat) || isNaN(lng)) && address) {
+                 try {
+                     const qUrl = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(address) + '&limit=1';
+                     const res = await fetch(qUrl);
+                     if (res.ok) {
+                         const data = await res.json();
+                         const feat = data && data.features && data.features[0];
+                         if (feat && feat.geometry && Array.isArray(feat.geometry.coordinates)) {
+                             lng = parseFloat(feat.geometry.coordinates[0]);
+                             lat = parseFloat(feat.geometry.coordinates[1]);
+                         }
+                     }
+                 } catch (geoErr) {
+                     console.warn('Fallback geocode failed:', geoErr);
+                 }
+             }
+
+             if (isNaN(lat) || isNaN(lng)) {
+                 alert('Could not locate coordinates for that address. Please pick a suggestion from the dropdown.');
+                 return;
+             }
+
+             const buffer = new Uint8Array(6);
+             window.crypto.getRandomValues(buffer);
+             const newSid = 'smd_cmd_' + Array.from(buffer, b => b.toString(16).padStart(2, '0')).join('');
+
+             await db.ref('broadcasts/' + newSid).set({
+                 ownerUid: user.uid,
+                 driverName: driverName,
+                 driverPhone: driverPhone,
+                 custName: custName,
+                 custPhone: custPhone,
+                 destAddress: address,
+                 destLat: lat,
+                 destLng: lng,
+                 lat: lat,
+                 lng: lng,
+                 speed: 0,
+                 heading: 0,
+                 timestamp: Date.now()
+             });
+
+             fleetData[newSid] = {
+                    ownerUid: user.uid,
+                    driverName: driverName,
+                    driverPhone: driverPhone,
+                    custName: custName,
+                    custPhone: custPhone,
+                    destAddress: address,
+                    destLat: lat,
+                    destLng: lng,
+                    lat: lat,
+                    lng: lng,
+                    speed: 0,
+                    heading: 0,
+                    timestamp: Date.now()
+                };
+                savePersistedFleet(fleetData);
+                renderFleetRosterAndMarkers();
+                selectDriver(newSid);
+
+             if (sendSms && driverPhone) {
+                 const dispatchLink = `https://www.seemydriver.com/?owner=${user.uid}&session=${newSid}&driver=${encodeURIComponent(driverName)}`;
+                 const msg = `${driverName}, new dispatch to ${address}. Tap to connect to Fleet Command: ${dispatchLink}`;
+                 window.location.href = `sms:${driverPhone}?body=${encodeURIComponent(msg)}`;
+             }
+         } catch (err) {
+             console.error('Dispatch error:', err);
+             alert('Dispatch failed: ' + (err && err.message ? err.message : err));
+         }
+     };
+
+        window.deleteDriverSession = function(sid) {
+        if (!sid) return;
+        if (confirm('Delete session ' + sid + '?')) {
+            if (activeMarkers[sid]) {
+                try { activeMarkers[sid].marker.remove(); } catch (e) {}
+                delete activeMarkers[sid];
+            }
+            delete fleetData[sid];
+            if (typeof writeSavedDrivers === 'function') {
+                writeSavedDrivers(fleetData);
+            }
+            renderFleetRosterAndMarkers();
+            if (window.db && typeof db.ref === 'function') {
+                db.ref('broadcasts/' + sid).remove().catch((err) => {
+                    console.warn('RTDB remove warning for ' + sid + ':', err);
+                });
+            }
+        }
+    };
+
+        window.purgeAllBroadcasts = function() {
+            if (confirm("⚠️ WARNING: Delete ALL broadcast sessions?")) {
+                db.ref('broadcasts').remove().then(() => {
+                    Object.keys(activeMarkers).forEach(id => { activeMarkers[id].marker.remove(); });
+                    activeMarkers = {}; fleetData = {}; writeSavedDrivers({}); renderFleetRosterAndMarkers();
+                });
+            }
+        };
+
+        window.selectDriver = function(sid) {
+            const data = activeMarkers[sid] || fleetData[sid];
+            if (!data) return;
+            const driver = data.driver || data;
+            map.flyTo({ center: [Number(driver.lng || driver.destLng), Number(driver.lat || driver.destLat)], zoom: 15, essential: true, duration: 1200 });
+            if (activeMarkers[sid] && activeMarkers[sid].marker) activeMarkers[sid].marker.togglePopup();
+        };
+
+        window.resetFleetView = function() { map.flyTo({ center: [-95.2831, 29.9731], zoom: 12, essential: true, duration: 1000 }); };
+        if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', initMap); } else { initMap(); }
+        window.addEventListener('load', initMap);
+    </script>
+</body>
+</html>
