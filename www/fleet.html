@@ -201,14 +201,14 @@ let fleetData = readSavedDrivers();
             if (map) return;
             verifyUpgradeAccess();
             try {
-                map = new mapboxgl.Map({
+                window.map = map = new mapboxgl.Map({
                     container: 'map',
                     style: 'mapbox://styles/mapbox/streets-v12',
                     center: [-95.2831, 29.9731],
                     zoom: 12
                 });
             } catch (e) {
-                map = new mapboxgl.Map({
+                window.map = map = new mapboxgl.Map({
                     container: 'map',
                     style: {
                         version: 8,
@@ -353,14 +353,14 @@ let fleetData = readSavedDrivers();
                 if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live';
                 const remoteData = snapshot.val() || {};
                 const savedLocal = (typeof readSavedDrivers === 'function') ? readSavedDrivers() : {};
-                fleetData = remoteData;
+                window.fleetData = fleetData = remoteData;
                 if (typeof writeSavedDrivers === 'function') writeSavedDrivers(fleetData);
                 renderFleetRosterAndMarkers();
             }, (error) => {
                 console.warn('RTDB read fallback to persisted local roster:', error && error.message ? error.message : error);
                 if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> Local Sync';
                 if (typeof readSavedDrivers === 'function') {
-                    fleetData = readSavedDrivers();
+                    window.fleetData = fleetData = readSavedDrivers();
                     renderFleetRosterAndMarkers();
                 }
             });
@@ -388,7 +388,7 @@ let fleetData = readSavedDrivers();
                     const remoteData = snapshot.val() || {};
                 const savedLocal = readSavedDrivers();
 const merged = remoteData;
-                fleetData = merged;
+                window.fleetData = fleetData = merged;
                 writeSavedDrivers(fleetData);
                     renderFleetRosterAndMarkers();
                 }, (error) => {
@@ -627,7 +627,7 @@ const merged = remoteData;
             if (confirm("⚠️ WARNING: Delete ALL broadcast sessions?")) {
                 db.ref('broadcasts').remove().then(() => {
                     Object.keys(activeMarkers).forEach(id => { activeMarkers[id].marker.remove(); });
-                    activeMarkers = {}; fleetData = {}; writeSavedDrivers({}); renderFleetRosterAndMarkers();
+                    activeMarkers = {}; window.fleetData = fleetData = {}; writeSavedDrivers({}); renderFleetRosterAndMarkers();
                 });
             }
         };
@@ -647,15 +647,114 @@ const merged = remoteData;
 <script id="smd-fleet-map-controls-v1">
 (function() {
   window.fleetIs3D = false;
-  let lastSelectedSid = null;
+  let selectedFleetSid = null;
 
-  const origSelectDriver = window.selectDriver;
-  if (typeof origSelectDriver === 'function') {
-    window.selectDriver = function(sid) {
-      lastSelectedSid = sid;
-      return origSelectDriver.apply(this, arguments);
-    };
+  function getMap() {
+    return (typeof map !== 'undefined' && map) ? map : window.map;
   }
+
+  function getFleet() {
+    return (typeof fleetData !== 'undefined' && fleetData) ? fleetData : (window.fleetData || {});
+  }
+
+  function isValidCoord(lat, lng) {
+    if (!isFinite(lat) || !isFinite(lng)) return false;
+    if (Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001) return false;
+    if (lat < -85 || lat > 85 || lng < -180 || lng > 180) return false;
+    return true;
+  }
+
+  function getValidEntries() {
+    const store = getFleet();
+    const out = [];
+    Object.keys(store || {}).forEach((sid) => {
+      const d = store[sid];
+      if (!d) return;
+      const lat = parseFloat(d.lat), lng = parseFloat(d.lng);
+      const dLat = parseFloat(d.destLat), dLng = parseFloat(d.destLng);
+      const hasDriver = isValidCoord(lat, lng);
+      const hasDest = isValidCoord(dLat, dLng);
+      if (hasDriver || hasDest) {
+        out.push({
+          sid,
+          driver: d,
+          lat: hasDriver ? lat : null,
+          lng: hasDriver ? lng : null,
+          destLat: hasDest ? dLat : null,
+          destLng: hasDest ? dLng : null
+        });
+      }
+    });
+    return out;
+  }
+
+  const prevSelect = window.selectDriver;
+  window.selectDriver = function(sid) {
+    selectedFleetSid = sid;
+    if (typeof prevSelect === 'function') prevSelect.apply(this, arguments);
+    const m = getMap();
+    const hit = getValidEntries().find(e => e.sid === sid);
+    if (hit && m && typeof m.easeTo === 'function') {
+      const targetLng = hit.lng !== null ? hit.lng : hit.destLng;
+      const targetLat = hit.lat !== null ? hit.lat : hit.destLat;
+      m.easeTo({ center: [targetLng, targetLat], zoom: 15.8, bearing: 0, pitch: window.fleetIs3D ? 45 : 0, duration: 550 });
+    }
+  };
+
+  window.recenterFleetMap = function() {
+    const m = getMap();
+    if (!m || typeof m.easeTo !== 'function') return;
+    const entries = getValidEntries();
+    const hit = (selectedFleetSid && entries.find(e => e.sid === selectedFleetSid)) || entries[0];
+    if (hit) {
+      const targetLng = hit.lng !== null ? hit.lng : hit.destLng;
+      const targetLat = hit.lat !== null ? hit.lat : hit.destLat;
+      m.easeTo({ center: [targetLng, targetLat], zoom: 15.8, bearing: 0, pitch: window.fleetIs3D ? 45 : 0, duration: 500 });
+    } else if (typeof m.getCenter === 'function') {
+      const c = m.getCenter();
+      m.easeTo({ center: [c.lng, c.lat], zoom: 14, bearing: 0, pitch: window.fleetIs3D ? 45 : 0, duration: 450 });
+    }
+  };
+
+  window.fitBothFleetAndDest = function() {
+    const m = getMap();
+    if (!m || typeof mapboxgl === 'undefined') return;
+    const entries = getValidEntries();
+    const focus = (selectedFleetSid && entries.filter(e => e.sid === selectedFleetSid).length)
+      ? entries.filter(e => e.sid === selectedFleetSid)
+      : entries;
+    const bounds = new mapboxgl.LngLatBounds();
+    let pts = 0;
+    focus.forEach((e) => {
+      if (e.lng !== null && e.lat !== null) { bounds.extend([e.lng, e.lat]); pts++; }
+      if (e.destLng !== null && e.destLat !== null) { bounds.extend([e.destLng, e.destLat]); pts++; }
+    });
+    if (pts >= 2 && typeof m.fitBounds === 'function') {
+      m.fitBounds(bounds, { padding: { top: 65, bottom: 75, left: 55, right: 55 }, maxZoom: 15.5, bearing: 0, pitch: 0, duration: 550 });
+    } else if (pts === 1) {
+      window.recenterFleetMap();
+    } else {
+      window.resetFleetView();
+    }
+  };
+
+  window.resetFleetView = function() {
+    const m = getMap();
+    if (!m || typeof mapboxgl === 'undefined') return;
+    const entries = getValidEntries();
+    const bounds = new mapboxgl.LngLatBounds();
+    let pts = 0;
+    entries.forEach((e) => {
+      if (e.lng !== null && e.lat !== null) { bounds.extend([e.lng, e.lat]); pts++; }
+    });
+    if (pts >= 2 && typeof m.fitBounds === 'function') {
+      m.fitBounds(bounds, { padding: { top: 65, bottom: 75, left: 55, right: 55 }, maxZoom: 14.8, bearing: 0, pitch: window.fleetIs3D ? 45 : 0, duration: 550 });
+    } else if (pts === 1) {
+      window.recenterFleetMap();
+    } else if (typeof m.flyTo === 'function') {
+      m.flyTo({ center: [-95.2831, 29.9731], zoom: 12, bearing: 0, pitch: window.fleetIs3D ? 45 : 0, essential: true, duration: 700 });
+    }
+  };
 
   function applyFleet3DLayer(m) {
     if (!m || typeof m.getLayer !== 'function') return;
@@ -670,11 +769,10 @@ const merged = remoteData;
           break;
         }
       }
-      const srcId = m.getSource('composite') ? 'composite' : null;
-      if (!srcId) return;
+      if (!m.getSource('composite')) return;
       m.addLayer({
         id: 'smd-fleet-3d-buildings',
-        source: srcId,
+        source: 'composite',
         'source-layer': 'building',
         filter: ['==', 'extrude', 'true'],
         type: 'fill-extrusion',
@@ -690,7 +788,7 @@ const merged = remoteData;
   }
 
   window.toggleFleet3D = function() {
-    const m = window.map;
+    const m = getMap();
     if (!m || typeof m.easeTo !== 'function') return;
     window.fleetIs3D = !window.fleetIs3D;
     const btn = document.getElementById('fleet-3d-btn');
@@ -703,55 +801,25 @@ const merged = remoteData;
     }
   };
 
-  window.recenterFleetMap = function() {
-    const m = window.map;
-    if (!m || typeof m.easeTo !== 'function') return;
-    const keys = Object.keys(window.fleetData || {});
-    const sid = (lastSelectedSid && window.fleetData && window.fleetData[lastSelectedSid]) ? lastSelectedSid : keys[0];
-    const d = sid ? window.fleetData[sid] : null;
-    const lng = d ? parseFloat(d.lng || d.destLng) : NaN;
-    const lat = d ? parseFloat(d.lat || d.destLat) : NaN;
-    if (isFinite(lng) && isFinite(lat)) {
-      m.easeTo({ center: [lng, lat], zoom: 15.5, bearing: 0, pitch: window.fleetIs3D ? 45 : 0, duration: 500 });
-    } else if (typeof m.getCenter === 'function') {
-      const c = m.getCenter();
-      m.easeTo({ center: [c.lng, c.lat], zoom: 14, bearing: 0, pitch: window.fleetIs3D ? 45 : 0, duration: 450 });
-    }
-  };
-
-  window.resetFleetView = function() {
-    const m = window.map;
-    if (!m || typeof mapboxgl === 'undefined') return;
-    const bounds = new mapboxgl.LngLatBounds();
-    let count = 0;
-    Object.values(window.fleetData || {}).forEach((d) => {
-      const lat = parseFloat(d && d.lat), lng = parseFloat(d && d.lng);
-      if (isFinite(lat) && isFinite(lng)) { bounds.extend([lng, lat]); count++; }
-    });
-    if (count > 0 && typeof m.fitBounds === 'function') {
-      m.fitBounds(bounds, { padding: 70, maxZoom: 15, bearing: 0, pitch: window.fleetIs3D ? 45 : 0, duration: 600 });
-    } else if (typeof m.flyTo === 'function') {
-      m.flyTo({ center: [-95.2831, 29.9731], zoom: 12, bearing: 0, pitch: window.fleetIs3D ? 45 : 0, essential: true, duration: 1000 });
-    }
-  };
-
   let lastTouch = 0;
   function bindFleetBtn(id, fn) {
     const el = document.getElementById(id);
-    if (!el || el.dataset.smdFleetBound === '1') return;
-    el.dataset.smdFleetBound = '1';
+    if (!el || el.dataset.smdFleetBound === '2') return;
+    el.dataset.smdFleetBound = '2';
     el.style.touchAction = 'manipulation';
     el.style.pointerEvents = 'auto';
     el.style.zIndex = '30';
-    const run = (e) => {
+    el.removeAttribute('onclick');
+    el.onclick = null;
+    const fire = (e) => {
       if (e) { e.preventDefault(); e.stopPropagation(); }
       const now = Date.now();
       if (now - lastTouch < 250) return;
       lastTouch = now;
       fn();
     };
-    el.addEventListener('click', run, true);
-    el.addEventListener('pointerup', run, true);
+    el.addEventListener('click', fire, true);
+    el.addEventListener('pointerup', fire, true);
   }
 
   function wireAllFleetBtns() {
@@ -759,10 +827,17 @@ const merged = remoteData;
     bindFleetBtn('fleet-fit-both-btn', window.fitBothFleetAndDest);
     bindFleetBtn('fleet-overview-btn', window.resetFleetView);
     bindFleetBtn('fleet-3d-btn', window.toggleFleet3D);
-    if (window.map && typeof window.map.on === 'function' && !window.map._smdFleet3dHooked) {
-      window.map._smdFleet3dHooked = true;
-      window.map.on('style.load', () => {
-        if (window.fleetIs3D) applyFleet3DLayer(window.map);
+    document.querySelectorAll('button[onclick="resetFleetView()"]').forEach((btn) => {
+      if (btn.id === 'fleet-overview-btn' || btn.dataset.smdFleetBound === '2') return;
+      btn.dataset.smdFleetBound = '2';
+      btn.removeAttribute('onclick');
+      btn.addEventListener('click', (e) => { e.preventDefault(); window.resetFleetView(); }, true);
+    });
+    const m = getMap();
+    if (m && typeof m.on === 'function' && !m._smdFleet3dHooked) {
+      m._smdFleet3dHooked = true;
+      m.on('style.load', () => {
+        if (window.fleetIs3D) applyFleet3DLayer(m);
       });
     }
   }
