@@ -405,7 +405,8 @@ window.soloFitBoth = function() {
   function mountSoloButtons() {
     try {
       if (document.getElementById('smd-solo-map-controls')) return;
-      const container = document.getElementById('driver-map-container') || document.getElementById('map') || (document.querySelector('.mapboxgl-map') && document.querySelector('.mapboxgl-map').parentElement);
+      const mapBox = document.getElementById('driver-map-container');
+      const container = (mapBox && mapBox.parentElement) || mapBox || document.getElementById('map');
       if (!container) return;
       if (getComputedStyle(container).position === 'static') {
         container.style.position = 'relative';
