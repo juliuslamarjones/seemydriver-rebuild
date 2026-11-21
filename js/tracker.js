@@ -358,9 +358,10 @@ function watchGps() {
 }
 
 window.startRealTimeTracking = function () {
-    setTimeout(() => { try { if (typeof window.initDriverActiveMap === 'function') window.initDriverActiveMap(); if (D && D.map && typeof D.map.resize === 'function') D.map.resize(); } catch (e) {} }, 120);
-    setTimeout(() => { try { if (D && D.map && typeof D.map.resize === 'function') D.map.resize(); } catch (e) {} }, 500);
     try { if (typeof window.initDriverActiveMap === 'function' && (!D || !D.map)) window.initDriverActiveMap(); } catch (e) {}
+    [150, 500, 1000].forEach((ms) => {
+        setTimeout(() => { try { if (D && D.map && typeof D.map.resize === 'function') D.map.resize(); } catch (e) {} }, ms);
+    });
     if (gps.running) return;
     gps.running = true;
     watchGps();
@@ -487,6 +488,7 @@ function teardownDriver() {
         try { clearInterval(D.timer); } catch (e) {}
         try { if (D.map) D.map.remove(); } catch (e) {}
     }
+    try { const box = $('driver-map-container'); if (box) box.innerHTML = ''; } catch (e) {}
     D = null;
 }
 

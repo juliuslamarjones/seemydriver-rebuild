@@ -766,12 +766,12 @@ function routeManager(map, color) {
 
 let D = null;
 function teardownDriver() {
-    if (!D) return;
-    try { clearInterval(D.coastTimer); } catch (e) {}
-    try { D.off(); } catch (e) {}
-    try { D.mover && D.mover.stop(); } catch (e) {}
-    try { D.map.remove(); } catch (e) {}
-    document.querySelectorAll('.smd-gps-badge').forEach((b) => b.remove());
+    if (D) {
+        try { if (D.engine) D.engine.destroy(); } catch (e) {}
+        try { clearInterval(D.timer); } catch (e) {}
+        try { if (D.map) D.map.remove(); } catch (e) {}
+    }
+    try { const box = $('driver-map-container'); if (box) box.innerHTML = ''; } catch (e) {}
     D = null;
 }
 
