@@ -190,6 +190,7 @@ window.launchLiveBroadcast = function() {
     if (database) {
         database.ref('broadcasts/' + sid).set({
             ownerUid: (authUser && authUser.uid) || 'browser-session',
+            ownerEmail: (authUser && authUser.email ? String(authUser.email).toLowerCase() : ''),
             driverName: driverName,
             driverPhone: driverPhone,
             companyName: companyName,

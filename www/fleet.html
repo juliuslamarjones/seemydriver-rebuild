@@ -128,28 +128,66 @@
         if (typeof firebase !== 'undefined' && typeof window.db === 'undefined') { window.db = firebase.database(); }
         const DEV_BYPASS_MODE = true;
         let map = null;
-        const FLEET_STORAGE_KEY = 'smd_fleet_broadcasts_v1';
+        function getActiveAccountScope() {
+            try {
+                const u = (window.firebase && firebase.auth && firebase.auth().currentUser) || null;
+                if (u && u.uid) return 'uid_' + String(u.uid).replace(/[^a-zA-Z0-9_-]/g, '_');
+                if (u && u.email) return 'email_' + String(u.email).toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+            } catch (e) {}
+            return 'signed_out';
+        }
+        function getScopedFleetStorageKey() {
+            return 'smd_fleet_broadcasts_v2_' + getActiveAccountScope();
+        }
+        function getScopedPersistKey() {
+            return 'smd_fleet_sessions_v2_' + getActiveAccountScope();
+        }
         function loadPersistedFleet() {
             try {
-                const raw = localStorage.getItem(FLEET_STORAGE_KEY);
+                if (getActiveAccountScope() === 'signed_out') return {};
+                const raw = localStorage.getItem(getScopedFleetStorageKey());
                 const parsed = raw ? JSON.parse(raw) : {};
                 return (parsed && typeof parsed === 'object') ? parsed : {};
             } catch (e) { return {}; }
         }
         function savePersistedFleet(data) {
-            try { localStorage.setItem(FLEET_STORAGE_KEY, JSON.stringify(data || {})); } catch (e) {}
+            try {
+                if (getActiveAccountScope() === 'signed_out') return;
+                localStorage.setItem(getScopedFleetStorageKey(), JSON.stringify(data || {}));
+            } catch (e) {}
         }
-        const PERSIST_KEY = 'smd_fleet_sessions_persisted';
-function readSavedDrivers() {
-  try {
-    const raw = localStorage.getItem(PERSIST_KEY);
-    const obj = raw ? JSON.parse(raw) : {};
-    return (obj && typeof obj === 'object') ? obj : {};
-  } catch (e) { return {}; }
-}
-function writeSavedDrivers(obj) {
-  try { localStorage.setItem(PERSIST_KEY, JSON.stringify(obj || {})); } catch (e) {}
-}
+        function readSavedDrivers() {
+            try {
+                if (getActiveAccountScope() === 'signed_out') return {};
+                const raw = localStorage.getItem(getScopedPersistKey());
+                if (!raw) return {};
+                const parsed = JSON.parse(raw);
+                return (parsed && typeof parsed === 'object') ? parsed : {};
+            } catch (e) { return {}; }
+        }
+        function writeSavedDrivers(obj) {
+            try {
+                if (getActiveAccountScope() === 'signed_out') return;
+                localStorage.setItem(getScopedPersistKey(), JSON.stringify(obj || {}));
+            } catch (e) {}
+        }
+        function filterBroadcastsForCurrentAccount(rawMap) {
+            const out = {};
+            const u = (window.firebase && firebase.auth && firebase.auth().currentUser) || null;
+            if (!u || !u.uid) return out;
+            const myUid = String(u.uid);
+            const myEmail = u.email ? String(u.email).trim().toLowerCase() : '';
+            Object.keys(rawMap || {}).forEach((sid) => {
+                const item = rawMap[sid];
+                if (!item || typeof item !== 'object') return;
+                const itemUid = item.ownerUid ? String(item.ownerUid) : '';
+                const itemEmail = item.ownerEmail ? String(item.ownerEmail).trim().toLowerCase() : '';
+                if (itemUid === myUid || (myEmail && itemEmail && itemEmail === myEmail)) {
+                    out[sid] = item;
+                }
+            });
+            return out;
+        }
 let fleetData = readSavedDrivers();
         let activeMarkers = {};
         let cachedDestLat = null;
@@ -351,7 +389,7 @@ let fleetData = readSavedDrivers();
             broadcastsRef.off();
             broadcastsRef.on('value', (snapshot) => {
                 if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live';
-                const remoteData = snapshot.val() || {};
+                const remoteData = filterBroadcastsForCurrentAccount(snapshot.val() || {});
                 const savedLocal = (typeof readSavedDrivers === 'function') ? readSavedDrivers() : {};
                 window.fleetData = window.fleetData = fleetData = remoteData;
                 if (typeof writeSavedDrivers === 'function') writeSavedDrivers(fleetData);
@@ -385,7 +423,7 @@ let fleetData = readSavedDrivers();
                 const broadcastsRef = db.ref('broadcasts');
                 broadcastsRef.on('value', (snapshot) => {
                     document.getElementById('connection-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live';
-                    const remoteData = snapshot.val() || {};
+                    const remoteData = filterBroadcastsForCurrentAccount(snapshot.val() || {});
                 const savedLocal = readSavedDrivers();
 const merged = remoteData;
                 window.fleetData = window.fleetData = fleetData = merged;
@@ -559,6 +597,7 @@ const merged = remoteData;
 
              await db.ref('broadcasts/' + newSid).set({
                  ownerUid: user.uid,
+                 ownerEmail: (user.email || "").toLowerCase(),
                  driverName: driverName,
                  driverPhone: driverPhone,
                  custName: custName,
@@ -846,6 +885,31 @@ const merged = remoteData;
   setInterval(wireAllFleetBtns, 1000);
   document.addEventListener('DOMContentLoaded', wireAllFleetBtns);
   window.addEventListener('load', wireAllFleetBtns);
+})();
+</script>
+<script id="smd-account-isolation-hook">
+(function() {
+  let lastAuthScope = null;
+  function syncAccountRoster() {
+    try {
+      const scope = (typeof getActiveAccountScope === 'function') ? getActiveAccountScope() : 'signed_out';
+      if (scope === lastAuthScope) return;
+      lastAuthScope = scope;
+      if (typeof activeMarkers !== 'undefined' && activeMarkers) {
+        Object.keys(activeMarkers).forEach((id) => {
+          try { if (activeMarkers[id] && activeMarkers[id].marker) activeMarkers[id].marker.remove(); } catch (e) {}
+        });
+        activeMarkers = {};
+      }
+      const nextData = (typeof readSavedDrivers === 'function') ? readSavedDrivers() : {};
+      window.fleetData = nextData;
+      if (typeof fleetData !== 'undefined') fleetData = nextData;
+      if (typeof renderFleetRosterAndMarkers === 'function') renderFleetRosterAndMarkers();
+      if (typeof attachBroadcastsListener === 'function' && scope !== 'signed_out') attachBroadcastsListener();
+    } catch (e) {}
+  }
+  setInterval(syncAccountRoster, 500);
+  document.addEventListener('DOMContentLoaded', syncAccountRoster);
 })();
 </script>
 </body>
