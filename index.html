@@ -85,6 +85,44 @@
         @media (min-width: 640px) { #brand-logo, .brand-logo { width: 4.5rem !important; height: 4.5rem !important; min-width: 4.5rem !important; min-height: 4.5rem !important; } }
         #driver-map-container, #customer-map-container, #landing-preview-map { min-height: 400px !important; height: 100% !important; width: 100% !important; }
     </style>
+<style id="smd-trial-banner-mobile-fix">
+  .smd-trial-banner {
+    display: inline-flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    max-width: 100% !important;
+  }
+  .smd-trial-banner .smd-fire-side {
+    font-size: 2.25rem !important;
+    line-height: 1 !important;
+    flex-shrink: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+  .smd-trial-banner .smd-trial-label {
+    font-size: clamp(1.1rem, 2.5vw, 2.2rem) !important;
+    line-height: 1.15 !important;
+    font-weight: 900 !important;
+    white-space: nowrap !important;
+  }
+  @media (max-width: 639px) {
+    .smd-trial-banner {
+      gap: 6px !important;
+      padding-left: 10px !important;
+      padding-right: 10px !important;
+    }
+    .smd-trial-banner .smd-fire-side {
+      font-size: 1.45rem !important;
+    }
+    .smd-trial-banner .smd-trial-label {
+      font-size: 12.5px !important;
+      letter-spacing: -0.015em !important;
+    }
+  }
+</style>
 </head>
 <body class="bg-black text-white min-h-screen flex flex-col font-sans selection:bg-amber-400 selection:text-black antialiased">
 
@@ -106,12 +144,11 @@
         <div id="landing-view" class="app-view w-full max-w-5xl flex flex-col items-center text-center gap-10 py-4 sm:py-8 px-3 sm:px-4 hidden" style="display: none;">
             <div class="relative w-full flex flex-col items-center gap-4 sm:gap-6 pt-1">
                 <div class="absolute -top-12 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
-                <div class="inline-flex items-center gap-2 bg-gradient-to-r from-neutral-900 via-[#12141c] to-neutral-900 border border-amber-400/30 text-amber-300 font-bold text-[11px] sm:text-sm py-1.5 px-4 sm:px-6 rounded-3xl flex-wrap justify-center shadow-[0_0_25px_rgba(251,191,36,0.1)] backdrop-blur-md">
-  <span class="smd-fire-4x" style="font-size: clamp(2.5rem, 8vw, 4rem); line-height: 1; display: inline-block; filter: drop-shadow(0 0 14px rgba(251, 191, 36, 0.55));">🔥</span>
-  <span class="smd-trial-3x" style="font-size: clamp(1.35rem, 4.5vw, 2.5rem); line-height: 1.15; font-weight: 900; letter-spacing: -0.02em;">30-Day Free Trial — Then $29/month Solo Plan</span>
-  <span class="smd-fire-4x" style="font-size: clamp(2.5rem, 8vw, 4rem); line-height: 1; display: inline-block; filter: drop-shadow(0 0 14px rgba(251, 191, 36, 0.55));">🔥</span>
-
-                </div>
+                <div class="smd-trial-banner bg-gradient-to-r from-neutral-900 via-[#12141c] to-neutral-900 border border-amber-400/30 text-amber-300 py-2 px-3 sm:px-6 rounded-full shadow-[0_0_25px_rgba(251,191,36,0.1)] backdrop-blur-md">
+  <span class="smd-fire-side">🔥</span>
+  <span class="smd-trial-label">30-Day Free Trial — Then $29/month Solo Plan</span>
+  <span class="smd-fire-side">🔥</span>
+</div>
                 <h1 class="text-4xl sm:text-7xl font-black tracking-tight text-white leading-[1.08] max-w-3xl">
                     Stop asking <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 drop-shadow-[0_0_35px_rgba(251,191,36,0.3)]">"Where are you?"</span>
                 </h1>
