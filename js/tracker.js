@@ -350,7 +350,7 @@ function setBadge(text, ok) {
 function watchGps() {
     if (!navigator.geolocation) return;
     if (gps.handle !== null) { try { navigator.geolocation.clearWatch(gps.handle); } catch (e) {} }
-    gps.handle = navigator.geolocation.watchPosition(ingest, () => {}, {
+    gps.handle = navigator.geolocation.watchPosition(ingest, (geoErr) => { const msg = (geoErr && geoErr.code === 1) ? 'GPS permission denied' : ((geoErr && geoErr.code === 3) ? 'GPS timeout' : 'GPS unavailable'); console.warn('Geolocation error:', geoErr); try { setBadge(msg, false); } catch (e) {} }, {
         enableHighAccuracy: true,
         maximumAge: 0,
         timeout: 15000
@@ -358,6 +358,8 @@ function watchGps() {
 }
 
 window.startRealTimeTracking = function () {
+    setTimeout(() => { try { if (typeof window.initDriverActiveMap === 'function') window.initDriverActiveMap(); if (D && D.map && typeof D.map.resize === 'function') D.map.resize(); } catch (e) {} }, 120);
+    setTimeout(() => { try { if (D && D.map && typeof D.map.resize === 'function') D.map.resize(); } catch (e) {} }, 500);
     try { if (typeof window.initDriverActiveMap === 'function' && (!D || !D.map)) window.initDriverActiveMap(); } catch (e) {}
     if (gps.running) return;
     gps.running = true;
@@ -507,6 +509,8 @@ window.initDriverActiveMap = function () {
         });
         try { window.soloMap = map; window.map = map; if (box) box._mapboxMap = map; } catch (e) {}
 } catch (err) {
+        console.error('initDriverActiveMap failed:', err);
+        try { setBadge('Map error: ' + (err && err.message ? err.message : 'init failed'), false); } catch (e) {}
         D = { map: null, engine: null, timer: null };
         return;
     }
