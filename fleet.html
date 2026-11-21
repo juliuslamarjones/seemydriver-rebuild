@@ -933,26 +933,42 @@ const merged = remoteData;
 </script>
 <script id="smd-clear-dispatch-ui">
 (function() {
-  function ensureClearBtn() {
-    if (document.getElementById('smd-clear-dispatch-btn')) return;
-    const addrInput = document.getElementById('modal-dest-address');
-    const formScope = (addrInput && (addrInput.closest('form') || addrInput.closest('div[class*="rounded"]')?.parentElement)) || document.body;
-    const deployBtn = Array.from(formScope.querySelectorAll('button')).find((b) => /deploy|dispatch/i.test(b.textContent || ''));
-    if (!deployBtn || !deployBtn.parentElement) return;
+  function placeClearInHeader() {
+    const sug = document.getElementById('address-suggestions');
+    if (sug) sug.style.zIndex = '60';
+
+    const existing = document.getElementById('smd-clear-dispatch-btn');
+    if (existing && existing.dataset.inHeader === '1') return;
+    if (existing) existing.remove();
+
+    const heading = Array.from(document.querySelectorAll('h1,h2,h3,h4,div,span,p')).find(
+      (el) => el.children.length === 0 && /NEW JOB DISPATCH CONTROL/i.test(el.textContent || '')
+    );
+    if (!heading || !heading.parentElement) return;
+
+    const row = heading.parentElement;
+    row.style.display = 'flex';
+    row.style.alignItems = 'center';
+    row.style.justifyContent = 'space-between';
+    row.style.gap = '8px';
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.id = 'smd-clear-dispatch-btn';
+    btn.dataset.inHeader = '1';
     btn.textContent = 'Clear Form';
-    btn.className = 'px-4 py-3 rounded-xl font-bold text-xs bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-700 transition cursor-pointer shrink-0';
+    btn.className = 'px-3 py-1 rounded-lg font-bold text-[11px] bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-700 transition cursor-pointer shrink-0';
     btn.addEventListener('click', function(e) {
       e.preventDefault();
+      e.stopPropagation();
       if (typeof window.clearFleetDispatchForm === 'function') window.clearFleetDispatchForm();
     });
-    deployBtn.parentElement.insertBefore(btn, deployBtn);
+    row.appendChild(btn);
   }
-  ensureClearBtn();
-  setInterval(ensureClearBtn, 800);
-  document.addEventListener('DOMContentLoaded', ensureClearBtn);
+
+  placeClearInHeader();
+  setInterval(placeClearInHeader, 800);
+  document.addEventListener('DOMContentLoaded', placeClearInHeader);
 })();
 </script>
 </body>
