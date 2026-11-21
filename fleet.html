@@ -130,11 +130,13 @@
         let map = null;
         function getActiveAccountScope() {
             try {
+                const email = (localStorage.getItem('smd_user_email') || '').trim().toLowerCase();
+                if (email) return 'email_' + email.replace(/[^a-z0-9]+/g, '_');
                 const u = (window.firebase && firebase.auth && firebase.auth().currentUser) || null;
+                if (u && u.email) return 'email_' + String(u.email).trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
                 if (u && u.uid) return 'uid_' + String(u.uid).replace(/[^a-zA-Z0-9_-]/g, '_');
-                if (u && u.email) return 'email_' + String(u.email).toLowerCase().replace(/[^a-z0-9_-]/g, '_');
             } catch (e) {}
-            return 'signed_out';
+            return 'default_guest';
         }
         function getScopedFleetStorageKey() {
             return 'smd_fleet_broadcasts_v2_' + getActiveAccountScope();
@@ -173,16 +175,13 @@
         }
         function filterBroadcastsForCurrentAccount(rawMap) {
             const out = {};
-            const u = (window.firebase && firebase.auth && firebase.auth().currentUser) || null;
-            if (!u || !u.uid) return out;
-            const myUid = String(u.uid);
-            const myEmail = u.email ? String(u.email).trim().toLowerCase() : '';
+            const activeEmail = (localStorage.getItem('smd_user_email') || '').trim().toLowerCase();
+            if (!activeEmail) return out;
             Object.keys(rawMap || {}).forEach((sid) => {
                 const item = rawMap[sid];
                 if (!item || typeof item !== 'object') return;
-                const itemUid = item.ownerUid ? String(item.ownerUid) : '';
-                const itemEmail = item.ownerEmail ? String(item.ownerEmail).trim().toLowerCase() : '';
-                if (itemUid === myUid || (myEmail && itemEmail && itemEmail === myEmail)) {
+                const itemEmail = (item.ownerEmail || item.email || '').trim().toLowerCase();
+                if (itemEmail && itemEmail === activeEmail) {
                     out[sid] = item;
                 }
             });
@@ -553,7 +552,8 @@ const merged = remoteData;
         window.submitManualDispatch = async function(sendSms) {
             if (Date.now() - lastGeocodePickAt < 450) { return; }
          try {
-             const user = firebase.auth().currentUser || { uid: "local-dispatcher", email: "dispatcher@seemydriver.com" };
+             const activeEmail = (localStorage.getItem('smd_user_email') || '').trim().toLowerCase() || 'dispatcher@seemydriver.com';
+             const user = firebase.auth().currentUser || { uid: 'email_' + activeEmail.replace(/[^a-z0-9]+/g, '_'), email: activeEmail };
              const driverName = (document.getElementById('modal-driver-name')?.value || '').trim();
              const driverPhone = (document.getElementById('modal-driver-phone')?.value || '').trim().replace(/[^\d+]/g, '');
              const custName = (document.getElementById('modal-cust-name')?.value || '').trim();
@@ -597,7 +597,7 @@ const merged = remoteData;
 
              await db.ref('broadcasts/' + newSid).set({
                  ownerUid: user.uid,
-                 ownerEmail: (user.email || "").toLowerCase(),
+                 ownerEmail: ((localStorage.getItem('smd_user_email') || user.email || '').trim().toLowerCase()),
                  driverName: driverName,
                  driverPhone: driverPhone,
                  custName: custName,

@@ -892,4 +892,3 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (e) {}
     }, 300);
-})();

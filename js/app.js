@@ -38,6 +38,7 @@ window.switchView = function (viewId) {
 window.handleSignOut = function () {
     localStorage.removeItem('smd_active_broadcast');
     localStorage.removeItem('smd_session_id');
+    localStorage.removeItem('smd_user_email');
     if (window.innerWidth >= 1024) {
         window.switchView('landing-view');
     } else {
@@ -46,12 +47,12 @@ window.handleSignOut = function () {
 };
 
 window.handleSignIn = function () {
-    const email = document.getElementById('signin-email') ? document.getElementById('signin-email').value.trim() : '';
+    const email = (document.getElementById('signin-email') ? document.getElementById('signin-email').value.trim() : '').toLowerCase();
     if (!email) {
         alert('Please enter your email address.');
         return;
     }
-    try { localStorage.setItem('smd_signed_in', '1'); if (window.SafeStorage) window.SafeStorage.setItem('smd_signed_in', '1'); } catch (e) {}
+    try { localStorage.setItem('smd_signed_in', '1'); if (email) localStorage.setItem('smd_user_email', email); if (window.SafeStorage) window.SafeStorage.setItem('smd_signed_in', '1'); } catch (e) {}
     window.switchView('job-setup-view');
 };
 
