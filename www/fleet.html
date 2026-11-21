@@ -117,6 +117,7 @@
                 <button id="fleet-recenter-btn" onclick="recenterFleetMap()" class="bg-[#12141c]/95 hover:bg-neutral-800 text-white font-bold px-3.5 py-2 rounded-xl border border-neutral-700 shadow-lg cursor-pointer transition">Re-Center</button>
                 <button id="fleet-fit-both-btn" onclick="fitBothFleetAndDest()" class="bg-amber-400 hover:bg-amber-300 text-black font-black px-3.5 py-2 rounded-xl shadow-lg cursor-pointer transition">Fit Both</button>
                 <button id="fleet-overview-btn" onclick="resetFleetView()" class="bg-[#12141c]/95 hover:bg-neutral-800 text-neutral-200 font-bold px-3.5 py-2 rounded-xl border border-neutral-700 shadow-lg cursor-pointer transition">Overview</button>
+                <button id="fleet-3d-btn" type="button" onclick="toggleFleet3D()" class="bg-[#12141c]/95 hover:bg-neutral-800 text-amber-400 font-bold px-3.5 py-2 rounded-xl border border-amber-400/40 shadow-lg cursor-pointer transition">3D: OFF</button>
             </div>
         </main>
     </div>
@@ -643,5 +644,134 @@ const merged = remoteData;
         if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', initMap); } else { initMap(); }
         window.addEventListener('load', initMap);
     </script>
+<script id="smd-fleet-map-controls-v1">
+(function() {
+  window.fleetIs3D = false;
+  let lastSelectedSid = null;
+
+  const origSelectDriver = window.selectDriver;
+  if (typeof origSelectDriver === 'function') {
+    window.selectDriver = function(sid) {
+      lastSelectedSid = sid;
+      return origSelectDriver.apply(this, arguments);
+    };
+  }
+
+  function applyFleet3DLayer(m) {
+    if (!m || typeof m.getLayer !== 'function') return;
+    try {
+      if (m.getLayer('smd-fleet-3d-buildings')) return;
+      const style = m.getStyle && m.getStyle();
+      const layers = (style && style.layers) || [];
+      let labelLayerId;
+      for (let i = 0; i < layers.length; i++) {
+        if (layers[i].type === 'symbol' && layers[i].layout && layers[i].layout['text-field']) {
+          labelLayerId = layers[i].id;
+          break;
+        }
+      }
+      const srcId = m.getSource('composite') ? 'composite' : null;
+      if (!srcId) return;
+      m.addLayer({
+        id: 'smd-fleet-3d-buildings',
+        source: srcId,
+        'source-layer': 'building',
+        filter: ['==', 'extrude', 'true'],
+        type: 'fill-extrusion',
+        minzoom: 14,
+        paint: {
+          'fill-extrusion-color': '#cbd5e1',
+          'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.5, ['get', 'height']],
+          'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.5, ['get', 'min_height']],
+          'fill-extrusion-opacity': 0.72
+        }
+      }, labelLayerId);
+    } catch (e) {}
+  }
+
+  window.toggleFleet3D = function() {
+    const m = window.map;
+    if (!m || typeof m.easeTo !== 'function') return;
+    window.fleetIs3D = !window.fleetIs3D;
+    const btn = document.getElementById('fleet-3d-btn');
+    if (btn) btn.textContent = window.fleetIs3D ? '3D: ON' : '3D: OFF';
+    if (window.fleetIs3D) {
+      applyFleet3DLayer(m);
+      m.easeTo({ pitch: 45, duration: 450 });
+    } else {
+      m.easeTo({ pitch: 0, bearing: 0, duration: 450 });
+    }
+  };
+
+  window.recenterFleetMap = function() {
+    const m = window.map;
+    if (!m || typeof m.easeTo !== 'function') return;
+    const keys = Object.keys(window.fleetData || {});
+    const sid = (lastSelectedSid && window.fleetData && window.fleetData[lastSelectedSid]) ? lastSelectedSid : keys[0];
+    const d = sid ? window.fleetData[sid] : null;
+    const lng = d ? parseFloat(d.lng || d.destLng) : NaN;
+    const lat = d ? parseFloat(d.lat || d.destLat) : NaN;
+    if (isFinite(lng) && isFinite(lat)) {
+      m.easeTo({ center: [lng, lat], zoom: 15.5, bearing: 0, pitch: window.fleetIs3D ? 45 : 0, duration: 500 });
+    } else if (typeof m.getCenter === 'function') {
+      const c = m.getCenter();
+      m.easeTo({ center: [c.lng, c.lat], zoom: 14, bearing: 0, pitch: window.fleetIs3D ? 45 : 0, duration: 450 });
+    }
+  };
+
+  window.resetFleetView = function() {
+    const m = window.map;
+    if (!m || typeof mapboxgl === 'undefined') return;
+    const bounds = new mapboxgl.LngLatBounds();
+    let count = 0;
+    Object.values(window.fleetData || {}).forEach((d) => {
+      const lat = parseFloat(d && d.lat), lng = parseFloat(d && d.lng);
+      if (isFinite(lat) && isFinite(lng)) { bounds.extend([lng, lat]); count++; }
+    });
+    if (count > 0 && typeof m.fitBounds === 'function') {
+      m.fitBounds(bounds, { padding: 70, maxZoom: 15, bearing: 0, pitch: window.fleetIs3D ? 45 : 0, duration: 600 });
+    } else if (typeof m.flyTo === 'function') {
+      m.flyTo({ center: [-95.2831, 29.9731], zoom: 12, bearing: 0, pitch: window.fleetIs3D ? 45 : 0, essential: true, duration: 1000 });
+    }
+  };
+
+  let lastTouch = 0;
+  function bindFleetBtn(id, fn) {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.smdFleetBound === '1') return;
+    el.dataset.smdFleetBound = '1';
+    el.style.touchAction = 'manipulation';
+    el.style.pointerEvents = 'auto';
+    el.style.zIndex = '30';
+    const run = (e) => {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      const now = Date.now();
+      if (now - lastTouch < 250) return;
+      lastTouch = now;
+      fn();
+    };
+    el.addEventListener('click', run, true);
+    el.addEventListener('pointerup', run, true);
+  }
+
+  function wireAllFleetBtns() {
+    bindFleetBtn('fleet-recenter-btn', window.recenterFleetMap);
+    bindFleetBtn('fleet-fit-both-btn', window.fitBothFleetAndDest);
+    bindFleetBtn('fleet-overview-btn', window.resetFleetView);
+    bindFleetBtn('fleet-3d-btn', window.toggleFleet3D);
+    if (window.map && typeof window.map.on === 'function' && !window.map._smdFleet3dHooked) {
+      window.map._smdFleet3dHooked = true;
+      window.map.on('style.load', () => {
+        if (window.fleetIs3D) applyFleet3DLayer(window.map);
+      });
+    }
+  }
+
+  wireAllFleetBtns();
+  setInterval(wireAllFleetBtns, 1000);
+  document.addEventListener('DOMContentLoaded', wireAllFleetBtns);
+  window.addEventListener('load', wireAllFleetBtns);
+})();
+</script>
 </body>
 </html>
