@@ -545,6 +545,8 @@ window.initDriverActiveMap = function () {
     setTimeout(() => { try { map.resize(); apply3DBuildingsLayer(map); } catch (e) {} }, 450);
     if (gps.last && Date.now() - gps.last.t < 30000) D.handleFix(gps.last);
 };
+}
+
 
 window.toggleDriver3D = function () {
         const m = (typeof resolveMobileMap === 'function' && resolveMobileMap()) ||
