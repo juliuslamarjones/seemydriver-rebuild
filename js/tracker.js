@@ -220,7 +220,7 @@ window.handleAddressInput = async function(value) {
     if (!suggestions) return;
 
     clearTimeout(geocodeTimer);
-    const query = value.trim();
+    const query = (value || '').trim();
     if (query.length < 3) {
         suggestions.classList.add('hidden');
         suggestions.style.display = 'none';
@@ -230,26 +230,51 @@ window.handleAddressInput = async function(value) {
 
     geocodeTimer = setTimeout(async () => {
         try {
-            const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&autocomplete=true&types=address,poi&limit=5`);
-            const data = await res.json();
+            let items = [];
+            const pRes = await fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(query) + '&limit=5');
+            if (pRes.ok) {
+                const pData = await pRes.json();
+                const feats = (pData && Array.isArray(pData.features)) ? pData.features : [];
+                items = feats
+                    .filter(f => f && f.geometry && Array.isArray(f.geometry.coordinates) && f.geometry.coordinates.length >= 2)
+                    .map(f => {
+                        const p = f.properties || {};
+                        const label = [p.housenumber, p.street || p.name, p.city || p.district, p.state, p.postcode]
+                            .filter(Boolean)
+                            .join(', ') || p.name || query;
+                        return { name: label, coords: [parseFloat(f.geometry.coordinates[0]), parseFloat(f.geometry.coordinates[1])] };
+                    });
+            }
+
+            if (items.length === 0 && typeof MAPBOX_TOKEN !== 'undefined' && MAPBOX_TOKEN) {
+                const mRes = await fetch('https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(query) + '.json?access_token=' + MAPBOX_TOKEN + '&autocomplete=true&types=address,poi&limit=5');
+                if (mRes.ok) {
+                    const mData = await mRes.json();
+                    const mFeats = (mData && Array.isArray(mData.features)) ? mData.features : [];
+                    items = mFeats
+                        .filter(f => f && Array.isArray(f.center) && f.center.length >= 2)
+                        .map(f => ({ name: f.place_name || f.text || query, coords: [parseFloat(f.center[0]), parseFloat(f.center[1])] }));
+                }
+            }
+
             suggestions.innerHTML = '';
-            if (!data.features || data.features.length === 0) {
+            if (!items || items.length === 0) {
                 suggestions.classList.add('hidden');
                 suggestions.style.display = 'none';
                 return;
             }
 
-            data.features.forEach(f => {
-                const name = f.place_name || f.text || '';
-                const coords = f.center || (f.geometry && f.geometry.coordinates) || [0, 0];
+            items.forEach(item => {
                 const div = document.createElement('div');
-                div.className = "px-4 py-3 text-xs text-neutral-200 hover:bg-neutral-800 hover:text-amber-400 cursor-pointer border-b border-neutral-800/80 transition font-medium";
-                div.innerText = name;
+                div.className = 'px-3.5 py-2.5 text-xs text-neutral-200 hover:bg-neutral-800 hover:text-amber-400 cursor-pointer border-b border-neutral-800/80 transition font-medium';
+                div.textContent = item.name;
                 div.onpointerdown = (e) => {
                     e.preventDefault();
-                    document.getElementById('job-cust-address').value = name;
-                    window.cachedDestLat = coords[1];
-                    window.cachedDestLng = coords[0];
+                    e.stopPropagation();
+                    const addrInput = document.getElementById('job-cust-address');
+                    if (addrInput) addrInput.value = item.name;
+                    window.cachedDestLng = item.coords[0];
+                    window.cachedDestLat = item.coords[1];
                     LS.setItem('smd_dest_lat', window.cachedDestLat);
                     LS.setItem('smd_dest_lng', window.cachedDestLng);
                     suggestions.classList.add('hidden');
@@ -257,12 +282,13 @@ window.handleAddressInput = async function(value) {
                 };
                 suggestions.appendChild(div);
             });
+
             suggestions.classList.remove('hidden');
             suggestions.style.display = 'block';
         } catch (e) {
             console.error('Geocoder lookup error:', e);
         }
-    }, 300);
+    }, 250);
 };
 
 const gps = { running: false, last: null, handle: null, lastSend: 0 };
