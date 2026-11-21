@@ -1176,5 +1176,39 @@ window.soloFitBoth = function() {
   };
 })();
 </script>
+<script id="smd-solo-3d-bind">
+(function() {
+  let last3dFire = 0;
+  function trigger3D(e) {
+    if (e) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+    }
+    const now = Date.now();
+    if (now - last3dFire < 250) return;
+    last3dFire = now;
+    if (typeof window.toggleDriver3D === 'function') {
+      window.toggleDriver3D();
+    }
+  }
+  function bind3DBtn() {
+    const btn = document.getElementById('driver-3d-btn');
+    if (!btn || btn.dataset.smd3dBound === '1') return;
+    btn.dataset.smd3dBound = '1';
+    btn.style.touchAction = 'manipulation';
+    btn.style.pointerEvents = 'auto';
+    btn.style.zIndex = '40';
+    btn.removeAttribute('onclick');
+    btn.onclick = null;
+    btn.addEventListener('click', trigger3D, true);
+    btn.addEventListener('pointerup', trigger3D, true);
+  }
+  bind3DBtn();
+  setInterval(bind3DBtn, 1000);
+  document.addEventListener('DOMContentLoaded', bind3DBtn);
+  window.addEventListener('load', bind3DBtn);
+})();
+</script>
 </body>
 </html>
