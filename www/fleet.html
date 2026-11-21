@@ -390,7 +390,8 @@ let fleetData = readSavedDrivers();
                 if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live';
                 const remoteData = filterBroadcastsForCurrentAccount(snapshot.val() || {});
                 const savedLocal = (typeof readSavedDrivers === 'function') ? readSavedDrivers() : {};
-                window.fleetData = window.fleetData = fleetData = remoteData;
+                const mergedRoster = Object.assign({}, savedLocal, remoteData);
+                window.fleetData = window.fleetData = fleetData = mergedRoster;
                 if (typeof writeSavedDrivers === 'function') writeSavedDrivers(fleetData);
                 renderFleetRosterAndMarkers();
             }, (error) => {
@@ -549,6 +550,18 @@ const merged = remoteData;
 
         function filterRoster() { renderFleetRosterAndMarkers(); }
 
+        
+        window.clearFleetDispatchForm = function () {
+            ['modal-driver-name', 'modal-driver-phone', 'modal-cust-name', 'modal-cust-phone', 'modal-dest-address', 'modal-lat', 'modal-lng'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            cachedDestLat = null;
+            cachedDestLng = null;
+            const sug = document.getElementById('address-suggestions');
+            if (sug) { sug.classList.add('hidden'); sug.style.display = 'none'; }
+        };
+
         window.submitManualDispatch = async function(sendSms) {
             if (Date.now() - lastGeocodePickAt < 450) { return; }
          try {
@@ -595,7 +608,7 @@ const merged = remoteData;
              window.crypto.getRandomValues(buffer);
              const newSid = 'smd_cmd_' + Array.from(buffer, b => b.toString(16).padStart(2, '0')).join('');
 
-             await db.ref('broadcasts/' + newSid).set({
+             const dispatchPayload = {
                  ownerUid: user.uid,
                  ownerEmail: ((localStorage.getItem('smd_user_email') || user.email || '').trim().toLowerCase()),
                  driverName: driverName,
@@ -610,7 +623,13 @@ const merged = remoteData;
                  speed: 0,
                  heading: 0,
                  timestamp: Date.now()
-             });
+             };
+             await db.ref('broadcasts/' + newSid).set(dispatchPayload);
+             fleetData[newSid] = Object.assign({ id: newSid, status: 'En Route', speed: 0, lat: lat, lng: lng }, dispatchPayload);
+             window.fleetData = fleetData;
+             if (typeof writeSavedDrivers === 'function') writeSavedDrivers(fleetData);
+             if (typeof renderFleetRosterAndMarkers === 'function') renderFleetRosterAndMarkers();
+             if (typeof window.clearFleetDispatchForm === 'function') window.clearFleetDispatchForm();
 
              fleetData[newSid] = {
                     ownerUid: user.uid,
@@ -910,6 +929,30 @@ const merged = remoteData;
   }
   setInterval(syncAccountRoster, 500);
   document.addEventListener('DOMContentLoaded', syncAccountRoster);
+})();
+</script>
+<script id="smd-clear-dispatch-ui">
+(function() {
+  function ensureClearBtn() {
+    if (document.getElementById('smd-clear-dispatch-btn')) return;
+    const addrInput = document.getElementById('modal-dest-address');
+    const formScope = (addrInput && (addrInput.closest('form') || addrInput.closest('div[class*="rounded"]')?.parentElement)) || document.body;
+    const deployBtn = Array.from(formScope.querySelectorAll('button')).find((b) => /deploy|dispatch/i.test(b.textContent || ''));
+    if (!deployBtn || !deployBtn.parentElement) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'smd-clear-dispatch-btn';
+    btn.textContent = 'Clear Form';
+    btn.className = 'px-4 py-3 rounded-xl font-bold text-xs bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-700 transition cursor-pointer shrink-0';
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      if (typeof window.clearFleetDispatchForm === 'function') window.clearFleetDispatchForm();
+    });
+    deployBtn.parentElement.insertBefore(btn, deployBtn);
+  }
+  ensureClearBtn();
+  setInterval(ensureClearBtn, 800);
+  document.addEventListener('DOMContentLoaded', ensureClearBtn);
 })();
 </script>
 </body>
