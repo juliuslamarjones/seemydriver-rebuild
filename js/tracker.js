@@ -835,4 +835,60 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof window.startRealTimeTracking === 'function') window.startRealTimeTracking();
 });
 
+
+    window.toggleDriver3D = function () {
+        const m = (typeof resolveMobileMap === 'function' && resolveMobileMap()) ||
+            (D && D.map) || window.soloMap || window.__smdSoloMap || window.map;
+        if (!m || typeof m.easeTo !== 'function') return;
+        window.is3DMode = (window.is3DMode === false) ? true : false;
+        const btn = $('driver-3d-btn');
+        if (btn) btn.textContent = window.is3DMode ? '\u{1F310} 3D: ON' : '\u{1F310} 3D: OFF';
+        if (window.is3DMode) {
+            try { if (typeof apply3DBuildingsLayer === 'function') apply3DBuildingsLayer(m); } catch (e) {}
+            m.easeTo({ pitch: 45, duration: 400 });
+        } else {
+            m.easeTo({ pitch: 0, bearing: 0, duration: 400 });
+        }
+    };
+
+    let userPanUntil = 0;
+    let lastFollowCamAt = 0;
+    setInterval(function smdKeepTruckInView() {
+        try {
+            const m = (typeof resolveMobileMap === 'function' && resolveMobileMap()) ||
+                (D && D.map) || window.soloMap || window.__smdSoloMap || window.map;
+            if (!m || typeof m.getBounds !== 'function' || typeof m.easeTo !== 'function') return;
+            if (!m._smdPanGuardBound && typeof m.on === 'function') {
+                m._smdPanGuardBound = true;
+                m.on('dragstart', function() { userPanUntil = Date.now() + 4500; });
+                m.on('zoomstart', function() { userPanUntil = Date.now() + 3000; });
+            }
+            const pos = (typeof resolveDriverPos === 'function') ? resolveDriverPos(m) : null;
+            if (!pos || !isFinite(pos.lng) || !isFinite(pos.lat)) return;
+            const b = m.getBounds();
+            if (!b) return;
+            const sw = b.getSouthWest(), ne = b.getNorthEast();
+            const spanLng = Math.max(1e-6, ne.lng - sw.lng);
+            const spanLat = Math.max(1e-6, ne.lat - sw.lat);
+            const marginX = spanLng * 0.18;
+            const marginY = spanLat * 0.18;
+            const outsideSafeBox =
+                pos.lng < sw.lng + marginX || pos.lng > ne.lng - marginX ||
+                pos.lat < sw.lat + marginY || pos.lat > ne.lat - marginY;
+            const following = !(D && D.engine && D.engine.follow === false);
+            const now = Date.now();
+            if ((following && now > userPanUntil) || outsideSafeBox) {
+                if (now - lastFollowCamAt < 320) return;
+                lastFollowCamAt = now;
+                const curZoom = typeof m.getZoom === 'function' ? m.getZoom() : 15.8;
+                const targetZoom = curZoom < 14.5 ? 15.8 : curZoom;
+                m.easeTo({
+                    center: [pos.lng, pos.lat],
+                    zoom: targetZoom,
+                    pitch: window.is3DMode ? 45 : 0,
+                    duration: 320
+                });
+            }
+        } catch (e) {}
+    }, 300);
 })();
