@@ -181,7 +181,7 @@
                 const item = rawMap[sid];
                 if (!item || typeof item !== 'object') return;
                 const itemEmail = (item.ownerEmail || item.email || '').trim().toLowerCase();
-                if (itemEmail && itemEmail === activeEmail) {
+                if (itemEmail === activeEmail) {
                     out[sid] = item;
                 }
             });
@@ -906,31 +906,6 @@ const merged = remoteData;
   window.addEventListener('load', wireAllFleetBtns);
 })();
 </script>
-<script id="smd-account-isolation-hook">
-(function() {
-  let lastAuthScope = null;
-  function syncAccountRoster() {
-    try {
-      const scope = (typeof getActiveAccountScope === 'function') ? getActiveAccountScope() : 'signed_out';
-      if (scope === lastAuthScope) return;
-      lastAuthScope = scope;
-      if (typeof activeMarkers !== 'undefined' && activeMarkers) {
-        Object.keys(activeMarkers).forEach((id) => {
-          try { if (activeMarkers[id] && activeMarkers[id].marker) activeMarkers[id].marker.remove(); } catch (e) {}
-        });
-        activeMarkers = {};
-      }
-      const nextData = (typeof readSavedDrivers === 'function') ? readSavedDrivers() : {};
-      window.fleetData = nextData;
-      if (typeof fleetData !== 'undefined') fleetData = nextData;
-      if (typeof renderFleetRosterAndMarkers === 'function') renderFleetRosterAndMarkers();
-      if (typeof attachBroadcastsListener === 'function' && scope !== 'signed_out') attachBroadcastsListener();
-    } catch (e) {}
-  }
-  setInterval(syncAccountRoster, 500);
-  document.addEventListener('DOMContentLoaded', syncAccountRoster);
-})();
-</script>
 <script id="smd-clear-dispatch-ui">
 (function() {
   function placeClearInHeader() {
@@ -969,6 +944,32 @@ const merged = remoteData;
   placeClearInHeader();
   setInterval(placeClearInHeader, 800);
   document.addEventListener('DOMContentLoaded', placeClearInHeader);
+})();
+</script>
+<script id="smd-account-isolation-hook">
+(function() {
+  let lastAuthScope = null;
+  function syncAccountRoster() {
+    try {
+      const scope = (typeof getActiveAccountScope === 'function') ? getActiveAccountScope() : 'default_guest';
+      if (scope === lastAuthScope) return;
+      lastAuthScope = scope;
+      if (typeof activeMarkers !== 'undefined' && activeMarkers) {
+        Object.keys(activeMarkers).forEach((id) => {
+          try { if (activeMarkers[id] && activeMarkers[id].marker) activeMarkers[id].marker.remove(); } catch (e) {}
+        });
+        activeMarkers = {};
+      }
+      const nextData = (typeof readSavedDrivers === 'function') ? readSavedDrivers() : {};
+      window.fleetData = nextData;
+      if (typeof fleetData !== 'undefined') fleetData = nextData;
+      if (typeof renderFleetRosterAndMarkers === 'function') renderFleetRosterAndMarkers();
+      if (typeof attachBroadcastsListener === 'function') attachBroadcastsListener();
+    } catch (e) {}
+  }
+  syncAccountRoster();
+  setInterval(syncAccountRoster, 500);
+  document.addEventListener('DOMContentLoaded', syncAccountRoster);
 })();
 </script>
 </body>
