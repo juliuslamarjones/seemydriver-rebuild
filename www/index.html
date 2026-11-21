@@ -556,6 +556,39 @@
   document.addEventListener('DOMContentLoaded', bindInput);
 })();
 </script>
+<script id="smd-broadcast-button-guard">
+(function() {
+  function ensureBroadcastHandler() {
+    const orig = window.launchLiveBroadcast;
+    if (typeof orig === 'function' && orig._smdWrapped) return;
+
+    window.launchLiveBroadcast = async function(...args) {
+      try {
+        const addrEl = document.getElementById('job-cust-address');
+        const addrVal = addrEl ? (addrEl.value || '').trim() : '';
+        if (typeof window.cachedDestLat === 'number' && isFinite(window.cachedDestLat)) {
+          try { localStorage.setItem('smd_dest_lat', String(window.cachedDestLat)); } catch (e) {}
+        }
+        if (typeof window.cachedDestLng === 'number' && isFinite(window.cachedDestLng)) {
+          try { localStorage.setItem('smd_dest_lng', String(window.cachedDestLng)); } catch (e) {}
+        }
+        if (typeof orig === 'function') {
+          return await orig.apply(this, args);
+        }
+        alert('Broadcast engine is still loading?please wait a moment and try again.');
+      } catch (err) {
+        console.error('Start Cloud Broadcast error:', err);
+        alert('Could not start broadcast: ' + (err && err.message ? err.message : err));
+      }
+    };
+    window.launchLiveBroadcast._smdWrapped = true;
+  }
+
+  ensureBroadcastHandler();
+  setInterval(ensureBroadcastHandler, 600);
+  document.addEventListener('DOMContentLoaded', ensureBroadcastHandler);
+})();
+</script>
 </body>
 </html>
 
