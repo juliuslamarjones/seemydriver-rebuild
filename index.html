@@ -1165,5 +1165,17 @@ window.soloFitBoth = function() {
   window.addEventListener('load', wireSoloBar);
 })();
 </script>
+<script id="smd-fleet-switch-fix">
+(function() {
+  window.checkFleetAccessAndSwitch = function(e) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    try {
+      window.location.href = 'fleet.html';
+    } catch (err) {
+      window.location.assign('fleet.html');
+    }
+  };
+})();
+</script>
 </body>
 </html>
