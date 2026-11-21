@@ -503,6 +503,7 @@ window.initDriverActiveMap = function () {
     const dest = getDest();
     let map;
     try {
+        if (typeof mapboxgl !== 'undefined' && !mapboxgl.accessToken) { mapboxgl.accessToken = window.MAPBOX_TOKEN || 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg'; }
         map = new mapboxgl.Map({
             container: box,
             style: LIGHT_STREETS_STYLE,
@@ -720,6 +721,7 @@ window.initCustomerMapLive = function () {
 
     let map;
     try {
+        if (typeof mapboxgl !== 'undefined' && !mapboxgl.accessToken) { mapboxgl.accessToken = window.MAPBOX_TOKEN || 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg'; }
         map = new mapboxgl.Map({ container: box, style: LIGHT_STREETS_STYLE, center: [-95.3698, 29.7604], zoom: 14, pitch: 40, bearing: 0, antialias: true });
     } catch (err) {
         return;

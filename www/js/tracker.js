@@ -830,6 +830,7 @@ window.initDriverActiveMap = function () {
 
     let map;
     try {
+        if (typeof mapboxgl !== 'undefined' && !mapboxgl.accessToken) { mapboxgl.accessToken = window.MAPBOX_TOKEN || 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg'; }
         map = new mapboxgl.Map({
             container: container,
             style: 'mapbox://styles/mapbox/navigation-day-v1',
@@ -1314,7 +1315,8 @@ window.initCustomerMapLive = function () {
 
         let map;
         try {
-            map = new mapboxgl.Map({
+            if (typeof mapboxgl !== 'undefined' && !mapboxgl.accessToken) { mapboxgl.accessToken = window.MAPBOX_TOKEN || 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg'; }
+        map = new mapboxgl.Map({
                 container: container,
                 style: STYLE_URL,
                 center: startCenter,
@@ -1443,7 +1445,8 @@ window.initCustomerMapLive = function () {
         mapboxgl.accessToken = window.MAPBOX_TOKEN || MAPBOX_TOKEN || '';
         if (custState && custState.map) { try { custState.map.remove(); } catch (e) {} }
 
-        const map = new mapboxgl.Map({ container: container, style: STYLE_URL, center: [0, 0], zoom: 2 });
+        const if (typeof mapboxgl !== 'undefined' && !mapboxgl.accessToken) { mapboxgl.accessToken = window.MAPBOX_TOKEN || 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg'; }
+        map = new mapboxgl.Map({ container: container, style: STYLE_URL, center: [0, 0], zoom: 2 });
         map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
         let truckMarker = null, truckRot = null, destMarker = null, fitted = false, lastRouteFetch = 0;
