@@ -201,14 +201,14 @@ let fleetData = readSavedDrivers();
             if (map) return;
             verifyUpgradeAccess();
             try {
-                window.map = map = new mapboxgl.Map({
+                window.map = window.map = map = new mapboxgl.Map({
                     container: 'map',
                     style: 'mapbox://styles/mapbox/streets-v12',
                     center: [-95.2831, 29.9731],
                     zoom: 12
                 });
             } catch (e) {
-                window.map = map = new mapboxgl.Map({
+                window.map = window.map = map = new mapboxgl.Map({
                     container: 'map',
                     style: {
                         version: 8,
@@ -353,14 +353,14 @@ let fleetData = readSavedDrivers();
                 if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Firebase Live';
                 const remoteData = snapshot.val() || {};
                 const savedLocal = (typeof readSavedDrivers === 'function') ? readSavedDrivers() : {};
-                window.fleetData = fleetData = remoteData;
+                window.fleetData = window.fleetData = fleetData = remoteData;
                 if (typeof writeSavedDrivers === 'function') writeSavedDrivers(fleetData);
                 renderFleetRosterAndMarkers();
             }, (error) => {
                 console.warn('RTDB read fallback to persisted local roster:', error && error.message ? error.message : error);
                 if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> Local Sync';
                 if (typeof readSavedDrivers === 'function') {
-                    window.fleetData = fleetData = readSavedDrivers();
+                    window.fleetData = window.fleetData = fleetData = readSavedDrivers();
                     renderFleetRosterAndMarkers();
                 }
             });
@@ -388,7 +388,7 @@ let fleetData = readSavedDrivers();
                     const remoteData = snapshot.val() || {};
                 const savedLocal = readSavedDrivers();
 const merged = remoteData;
-                window.fleetData = fleetData = merged;
+                window.fleetData = window.fleetData = fleetData = merged;
                 writeSavedDrivers(fleetData);
                     renderFleetRosterAndMarkers();
                 }, (error) => {
