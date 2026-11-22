@@ -81,20 +81,19 @@ function smdPromptAppDownload(email) {
             if (window.SafeStorage) window.SafeStorage.setItem('smd_user_email', email);
         }
     } catch (e) {}
-    const regView = document.getElementById('register-view');
-    if (regView && !document.getElementById('smd-apk-gate-box')) {
+    const hostView = document.getElementById('signin-view') && getComputedStyle(document.getElementById('signin-view')).display !== 'none'
+        ? document.getElementById('signin-view')
+        : document.getElementById('register-view');
+    if (hostView && !hostView.querySelector('.smd-signin-gate-box')) {
         const box = document.createElement('div');
-        box.id = 'smd-apk-gate-box';
-        box.className = 'mt-4 p-4 rounded-2xl bg-amber-400/10 border border-amber-400/40 text-amber-200 text-xs flex flex-col gap-3';
-        box.innerHTML = '<div class="font-bold text-amber-400">Install the SeeMyDriver app to continue</div>' +
-            '<div>Driver broadcast runs inside the installed app, not a mobile browser tab.</div>' +
-            '<a href="https://github.com/juliuslamarjones/seemydriver-rebuild/releases/download/v1.0.0/seemydriver.apk" download="seemydriver.apk" class="w-full text-center bg-amber-400 text-black font-black py-2.5 px-4 rounded-xl">Install SeeMyDriver</a>';
-        const card = regView.querySelector('.w-full.bg-\\[\\#12141c\\]') || regView.firstElementChild;
+        box.className = "smd-signin-gate-box mt-4 p-4 rounded-2xl bg-[#12141c] border border-amber-400/35 text-neutral-200 text-xs flex flex-col gap-3 shadow-lg";
+        box.innerHTML = "<div class=\"flex items-center gap-2 font-black text-amber-400 text-sm\"><span>&#128064;</span><span>SeeMyDriver</span></div>" +
+            "<button type=\"button\" onclick=\"if(typeof window.smdInstallSeeMyDriver==='function')window.smdInstallSeeMyDriver()\" class=\"w-full text-center bg-amber-400 hover:bg-amber-300 text-black font-black py-2.5 px-4 rounded-xl cursor-pointer transition\">Install SeeMyDriver</button>" +
+            "<button type=\"button\" onclick=\"if(typeof window.switchView==='function')window.switchView('job-setup-view')\" class=\"w-full text-center bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white font-bold py-2 px-4 rounded-xl cursor-pointer transition\">Continue to Job Setup &rarr;</button>";
+        const card = hostView.querySelector("[class*=\"bg-[#12141c]\"], [class*=\"bg-gradient-to-b\"]") || hostView.firstElementChild;
         if (card) card.appendChild(box);
     }
-     on your device instead of using the mobile browser.');
 }
-
 window.handleRegister = function () {
     const emailEl = document.getElementById('reg-email');
     const passEl = document.getElementById('reg-password');
