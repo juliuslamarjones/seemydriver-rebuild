@@ -323,17 +323,23 @@ function sendFirebase(out) {
     if (!sid) return;
     const now = Date.now();
     if (now - gps.lastSend < 1500) return;
+    const lat = Number(out.lat);
+    const lng = Number(out.lng);
+    if (!isFinite(lat) || !isFinite(lng)) return;
+    const speed = (typeof out.speedMph === "number" && isFinite(out.speedMph)) ? Math.round(out.speedMph) : 0;
+    const heading = (typeof out.heading === "number" && isFinite(out.heading))
+        ? Math.round(out.heading)
+        : ((gps && gps.last && typeof gps.last.heading === "number" && isFinite(gps.last.heading)) ? Math.round(gps.last.heading) : 0);
     gps.lastSend = now;
 
-    database.ref('broadcasts/' + sid).update({
-        lat: out.lat,
-        lng: out.lng,
-        speed: out.speedMph,
-        heading: out.heading,
+    database.ref("broadcasts/" + sid).update({
+        lat: lat,
+        lng: lng,
+        speed: speed,
+        heading: heading,
         timestamp: now
     }).catch(() => {});
 }
-
 function setBadge(text, ok) {
     const targets = Array.from(document.querySelectorAll('.smd-gps-badge'));
     const activeView = $('active-broadcast-view');
@@ -482,6 +488,187 @@ function createTripEngine(map, opts) {
     return ((deg % 360) + 360) % 360;
 }
 
+    function ensureMarker(lng, lat, bearing) {
+        if (E.marker) return E.marker;
+        if (typeof mapboxgl === "undefined" || !map) return null;
+        const m = new mapboxgl.Marker({ element: createTruckElement(), rotationAlignment: "map", pitchAlignment: "map" })
+            .setLngLat([lng, lat]);
+        if (typeof m.setRotation === "function" && isFinite(bearing)) m.setRotation(bearing);
+        m.addTo(map);
+        E.marker = m;
+        return m;
+    }
+
+    function feed(fix) {
+        if (!E.running || !fix || !isFinite(fix.lat) || !isFinite(fix.lng)) return null;
+        const lat = Number(fix.lat), lng = Number(fix.lng);
+        const speedMs = (typeof fix.speedMs === "number" && isFinite(fix.speedMs) && fix.speedMs >= 0)
+            ? fix.speedMs
+            : ((typeof fix.speed === "number" && isFinite(fix.speed) && fix.speed >= 0) ? fix.speed : 0);
+        const heading = (typeof fix.heading === "number" && isFinite(fix.heading))
+            ? alignToTravel(fix.heading)
+            : ((typeof fix.headingDeg === "number" && isFinite(fix.headingDeg)) ? alignToTravel(fix.headingDeg) : null);
+        const prevLng = E.hasFix ? E.drawLng : lng;
+        const prevLat = E.hasFix ? E.drawLat : lat;
+        const movedDeg = (E.hasFix && (Math.abs(lng - prevLng) > 1e-6 || Math.abs(lat - prevLat) > 1e-6))
+            ? bearingBetween(prevLng, prevLat, lng, lat) : null;
+        const deg = heading !== null ? heading : (movedDeg !== null ? movedDeg : (E.rBearing || 0));
+        E.hasFix = true;
+        E.fixLng = lng;
+        E.fixLat = lat;
+        E.speedMs = speedMs;
+        E.rBearing = deg;
+
+        let outLng = lng, outLat = lat;
+        if (E.route && E.route.length > 0) {
+            const sn = snapToRoute(E.route, lng, lat, E.rS || null, 80, 140);
+            if (sn.dist <= 160) {
+                E.snapped = true;
+                E.rS = sn.s;
+                const pt = pointAtS(E.route, sn.s);
+                outLng = pt.lng;
+                outLat = pt.lat;
+                const b = bearingAtS(E.route, sn.s);
+                if (b !== null) E.rBearing = alignToTravel(b);
+            } else {
+                E.snapped = false;
+            }
+        }
+
+        E.drawLng = outLng;
+        E.drawLat = outLat;
+        const marker = ensureMarker(outLng, outLat, E.rBearing);
+        if (marker) {
+            marker.setLngLat([outLng, outLat]);
+            if (typeof marker.setRotation === "function") marker.setRotation(E.rBearing);
+        }
+
+        if (dest && !E.route && !E.routeLoading && performance.now() >= (E.routeRetryAt || 0)) {
+            fetchRoute(lng, lat);
+        }
+
+                        if (E.follow && Date.now() >= (window.__smdFitLockUntil || 0) && map && typeof map.easeTo === "function") {
+            try {
+                const targetPitch = (window.is3DMode === false) ? 0 : ((opts && opts.camera && opts.camera.pitch) || 40);
+                map.easeTo({ center: [outLng, outLat], bearing: 0, pitch: targetPitch, duration: 450, essential: true });
+            } catch (e) {}
+        }
+
+        return {
+            lat: outLat,
+            lng: outLng,
+            speedMph: Math.round(speedMs * (typeof MPS_TO_MPH === "number" ? MPS_TO_MPH : 2.236936)),
+            snapped: E.snapped
+        };
+    }
+
+    function destroy() {
+        E.running = false;
+        if (E.raf) { try { cancelAnimationFrame(E.raf); } catch (e) {} E.raf = 0; }
+        if (E.marker) { try { E.marker.remove(); } catch (e) {} E.marker = null; }
+        try {
+            if (map) {
+                if (map.getLayer && map.getLayer("smd-route-line")) map.removeLayer("smd-route-line");
+                if (map.getSource && map.getSource("smd-route-src")) map.removeSource("smd-route-src");
+            }
+        } catch (e) {}
+    }
+
+    E.feed = feed;
+    E.destroy = destroy;
+    return E;
+
+    function ensureMarker(lng, lat, bearing) {
+        if (E.marker) return E.marker;
+        if (typeof mapboxgl === "undefined" || !map) return null;
+        const m = new mapboxgl.Marker({ element: createTruckElement(), rotationAlignment: "map", pitchAlignment: "map" })
+            .setLngLat([lng, lat]);
+        if (typeof m.setRotation === "function" && isFinite(bearing)) m.setRotation(bearing);
+        m.addTo(map);
+        E.marker = m;
+        return m;
+    }
+
+    function feed(fix) {
+        if (!E.running || !fix || !isFinite(fix.lat) || !isFinite(fix.lng)) return null;
+        const lat = Number(fix.lat), lng = Number(fix.lng);
+        const speedMs = (typeof fix.speedMs === "number" && isFinite(fix.speedMs) && fix.speedMs >= 0)
+            ? fix.speedMs
+            : ((typeof fix.speed === "number" && isFinite(fix.speed) && fix.speed >= 0) ? fix.speed : 0);
+        const heading = (typeof fix.heading === "number" && isFinite(fix.heading))
+            ? alignToTravel(fix.heading)
+            : ((typeof fix.headingDeg === "number" && isFinite(fix.headingDeg)) ? alignToTravel(fix.headingDeg) : null);
+        const prevLng = E.hasFix ? E.drawLng : lng;
+        const prevLat = E.hasFix ? E.drawLat : lat;
+        const movedDeg = (E.hasFix && (Math.abs(lng - prevLng) > 1e-6 || Math.abs(lat - prevLat) > 1e-6))
+            ? bearingBetween(prevLng, prevLat, lng, lat) : null;
+        const deg = heading !== null ? heading : (movedDeg !== null ? movedDeg : (E.rBearing || 0));
+        E.hasFix = true;
+        E.fixLng = lng;
+        E.fixLat = lat;
+        E.speedMs = speedMs;
+        E.rBearing = deg;
+
+        let outLng = lng, outLat = lat;
+        if (E.route && E.route.length > 0) {
+            const sn = snapToRoute(E.route, lng, lat, E.rS || null, 80, 140);
+            if (sn.dist <= 160) {
+                E.snapped = true;
+                E.rS = sn.s;
+                const pt = pointAtS(E.route, sn.s);
+                outLng = pt.lng;
+                outLat = pt.lat;
+                const b = bearingAtS(E.route, sn.s);
+                if (b !== null) E.rBearing = alignToTravel(b);
+            } else {
+                E.snapped = false;
+            }
+        }
+
+        E.drawLng = outLng;
+        E.drawLat = outLat;
+        const marker = ensureMarker(outLng, outLat, E.rBearing);
+        if (marker) {
+            marker.setLngLat([outLng, outLat]);
+            if (typeof marker.setRotation === "function") marker.setRotation(E.rBearing);
+        }
+
+        if (dest && !E.route && !E.routeLoading && performance.now() >= (E.routeRetryAt || 0)) {
+            fetchRoute(lng, lat);
+        }
+
+                if (E.follow && Date.now() >= (window.__smdFitLockUntil || 0) && map && typeof map.easeTo === "function") {
+            try {
+                const targetPitch = (window.is3DMode === false) ? 0 : ((opts && opts.camera && opts.camera.pitch) || 40);
+                map.easeTo({ center: [outLng, outLat], bearing: 0, pitch: targetPitch, duration: 450, essential: true });
+            } catch (e) {}
+        }
+
+        return {
+            lat: outLat,
+            lng: outLng,
+            speedMph: Math.round(speedMs * (typeof MPS_TO_MPH === "number" ? MPS_TO_MPH : 2.236936)),
+            snapped: E.snapped
+        };
+    }
+
+    function destroy() {
+        E.running = false;
+        if (E.raf) { try { cancelAnimationFrame(E.raf); } catch (e) {} E.raf = 0; }
+        if (E.marker) { try { E.marker.remove(); } catch (e) {} E.marker = null; }
+        try {
+            if (map) {
+                if (map.getLayer && map.getLayer("smd-route-line")) map.removeLayer("smd-route-line");
+                if (map.getSource && map.getSource("smd-route-src")) map.removeSource("smd-route-src");
+            }
+        } catch (e) {}
+    }
+
+    E.feed = feed;
+    E.destroy = destroy;
+    return E;
+}
+
 function teardownDriver() {
     if (D) {
         try { if (D.engine) D.engine.destroy(); } catch (e) {}
@@ -555,7 +742,6 @@ window.initDriverActiveMap = function () {
     setTimeout(() => { try { map.resize(); apply3DBuildingsLayer(map); } catch (e) {} }, 450);
     if (gps.last && Date.now() - gps.last.t < 30000) D.handleFix(gps.last);
 };
-}
 
 
 window.toggleDriver3D = function () {
@@ -574,27 +760,27 @@ window.toggleDriver3D = function () {
     };
 
 function resolveMobileMap() {
-    if (D && D.map && typeof D.map.easeTo === 'function') return D.map;
-    if (window.soloMap && typeof window.soloMap.easeTo === 'function') return window.soloMap;
-    if (window.__smdSoloMap && typeof window.__smdSoloMap.easeTo === 'function') return window.__smdSoloMap;
-    if (window.map && typeof window.map.easeTo === 'function') return window.map;
-    const box = $('driver-map-container');
-    if (box && box._mapboxMap && typeof box._mapboxMap.easeTo === 'function') return box._mapboxMap;
+    if (typeof D !== "undefined" && D && D.map && typeof D.map.easeTo === "function") return D.map;
+    if (window.soloMap && typeof window.soloMap.easeTo === "function") return window.soloMap;
+    if (window.__smdSoloMap && typeof window.__smdSoloMap.easeTo === "function") return window.__smdSoloMap;
+    if (window.map && typeof window.map.easeTo === "function") return window.map;
+    const box = $("driver-map-container");
+    if (box && box._mapboxMap && typeof box._mapboxMap.easeTo === "function") return box._mapboxMap;
     return null;
 }
 
 function resolveDriverPos(m) {
-    if (D && D.engine && typeof D.engine.position === 'function') {
+    if (typeof D !== "undefined" && D && D.engine && typeof D.engine.position === "function") {
         const p = D.engine.position();
         if (p && isFinite(p.lng) && isFinite(p.lat)) return p;
     }
-    if (gps && gps.last && isFinite(gps.last.lng) && isFinite(gps.last.lat)) {
+    if (typeof gps !== "undefined" && gps && gps.last && isFinite(gps.last.lng) && isFinite(gps.last.lat)) {
         return { lng: Number(gps.last.lng), lat: Number(gps.last.lat) };
     }
-    const lat = parseFloat(LS.getItem('smd_lat') || LS.getItem('smd_driver_lat'));
-    const lng = parseFloat(LS.getItem('smd_lng') || LS.getItem('smd_driver_lng'));
+    const lat = parseFloat(LS.getItem("smd_lat") || LS.getItem("smd_driver_lat"));
+    const lng = parseFloat(LS.getItem("smd_lng") || LS.getItem("smd_driver_lng"));
     if (isFinite(lat) && isFinite(lng)) return { lng, lat };
-    if (m && typeof m.getCenter === 'function') {
+    if (m && typeof m.getCenter === "function") {
         const c = m.getCenter();
         if (c && isFinite(c.lng) && isFinite(c.lat)) return { lng: c.lng, lat: c.lat };
     }
@@ -602,35 +788,34 @@ function resolveDriverPos(m) {
 }
 
 window.recenterDriverMap = function () {
-        const m = resolveMobileMap();
-        if (!m) return;
-        if (D && D.engine) D.engine.follow = true;
-        const pos = resolveDriverPos(m);
-        if (typeof m.stop === 'function') m.stop();
-        if (pos) {
-            m.easeTo({ center: [pos.lng, pos.lat], zoom: 15.8, bearing: 0, pitch: window.is3DMode ? 40 : 0, duration: 450 });
-        }
-    };
+    const m = resolveMobileMap();
+    if (!m) return;
+    if (typeof D !== "undefined" && D && D.engine) D.engine.follow = true;
+    const pos = resolveDriverPos(m);
+    if (typeof m.stop === "function") m.stop();
+    if (pos) {
+        m.easeTo({ center: [pos.lng, pos.lat], zoom: 15.8, bearing: 0, pitch: (window.is3DMode === false) ? 0 : 40, duration: 450 });
+    }
+};
 
 window.fitDriverMap = function () {
-        const m = resolveMobileMap();
-        if (!m || typeof mapboxgl === 'undefined') return;
-        const pos = resolveDriverPos(m);
-        const dest = getDest();
-        if (D && D.engine) D.engine.follow = false;
-        if (typeof m.stop === 'function') m.stop();
-        if (pos && dest && typeof m.fitBounds === 'function') {
-            const bounds = new mapboxgl.LngLatBounds();
-            bounds.extend([pos.lng, pos.lat]);
-            bounds.extend([dest.lng, dest.lat]);
-            m.fitBounds(bounds, { padding: { top: 70, bottom: 85, left: 55, right: 55 }, maxZoom: 15.5, bearing: 0, pitch: 0, duration: 500 });
-        } else if (pos) {
-            m.easeTo({ center: [pos.lng, pos.lat], zoom: 15.8, bearing: 0, pitch: window.is3DMode ? 40 : 0, duration: 450 });
-        } else if (dest) {
-            m.easeTo({ center: [dest.lng, dest.lat], zoom: 15, bearing: 0, pitch: 0, duration: 450 });
-        }
-    };
-
+    const m = resolveMobileMap();
+    if (!m || typeof mapboxgl === "undefined") return;
+    const pos = resolveDriverPos(m);
+    const dest = typeof getDest === "function" ? getDest() : null;
+    if (typeof D !== "undefined" && D && D.engine) D.engine.follow = false;
+    if (typeof m.stop === "function") m.stop();
+    if (pos && dest && typeof m.fitBounds === "function") {
+        const bounds = new mapboxgl.LngLatBounds();
+        bounds.extend([pos.lng, pos.lat]);
+        bounds.extend([dest.lng, dest.lat]);
+        m.fitBounds(bounds, { padding: { top: 70, bottom: 85, left: 55, right: 55 }, maxZoom: 15.5, bearing: 0, pitch: 0, duration: 500 });
+    } else if (pos) {
+        m.easeTo({ center: [pos.lng, pos.lat], zoom: 15.8, bearing: 0, pitch: (window.is3DMode === false) ? 0 : 40, duration: 450 });
+    } else if (dest) {
+        m.easeTo({ center: [dest.lng, dest.lat], zoom: 15, bearing: 0, pitch: 0, duration: 450 });
+    }
+};
 window.openDriverDirections = function () {
     const dest = getDest();
     if (dest) window.open('https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' + dest.lat + ',' + dest.lng, '_blank');
@@ -653,21 +838,26 @@ window.textTrackingLink = function () {
     a.remove();
 };
 
-window.endBroadcastAndHome = async function () {
-    if (!confirm('End this broadcast?')) return;
-    const sid = sessionId();
-    const database = getDb();
+window.endBroadcastAndHome = function () {
+    try {
+        if (typeof confirm === "function" && !confirm("End this broadcast?")) return;
+    } catch (e) {}
+    const sid = typeof sessionId === "function" ? sessionId() : null;
+    const database = typeof getDb === "function" ? getDb() : null;
     if (sid && database) {
-        try { await database.ref('broadcasts/' + sid).update({ ended: true, timestamp: Date.now() }); } catch (e) {}
+        try { database.ref("broadcasts/" + sid).update({ ended: true, timestamp: Date.now() }).catch(() => {}); } catch (e) {}
     }
-    window.stopRealTimeTracking();
-    teardownDriver();
-    gps.last = null;
-    LS.removeItem('smd_dest_lat');
-    LS.removeItem('smd_dest_lng');
-    LS.removeItem('smd_session_id');
+    try { if (typeof window.stopRealTimeTracking === "function") window.stopRealTimeTracking(); } catch (e) {}
+    try { if (typeof teardownDriver === "function") teardownDriver(); } catch (e) {}
+    try { gps.last = null; } catch (e) {}
+    try {
+        LS.removeItem("smd_active_broadcast");
+        LS.removeItem("smd_dest_lat");
+        LS.removeItem("smd_dest_lng");
+        LS.removeItem("smd_session_id");
+    } catch (e) {}
     window.activeSessionId = undefined;
-    window.switchView('job-setup-view');
+    try { if (typeof window.switchView === "function") window.switchView("job-setup-view"); } catch (e) {}
 };
 
 let C = null;
@@ -893,43 +1083,125 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     let userPanUntil = 0;
-    let lastFollowCamAt = 0;
-    setInterval(function smdKeepTruckInView() {
-        try {
-            const m = (typeof resolveMobileMap === 'function' && resolveMobileMap()) ||
-                (D && D.map) || window.soloMap || window.__smdSoloMap || window.map;
-            if (!m || typeof m.getBounds !== 'function' || typeof m.easeTo !== 'function') return;
-            if (!m._smdPanGuardBound && typeof m.on === 'function') {
-                m._smdPanGuardBound = true;
-                m.on('dragstart', function() { userPanUntil = Date.now() + 4500; });
-                m.on('zoomstart', function() { userPanUntil = Date.now() + 3000; });
-            }
-            const pos = (typeof resolveDriverPos === 'function') ? resolveDriverPos(m) : null;
-            if (!pos || !isFinite(pos.lng) || !isFinite(pos.lat)) return;
-            const b = m.getBounds();
-            if (!b) return;
-            const sw = b.getSouthWest(), ne = b.getNorthEast();
-            const spanLng = Math.max(1e-6, ne.lng - sw.lng);
-            const spanLat = Math.max(1e-6, ne.lat - sw.lat);
-            const marginX = spanLng * 0.18;
-            const marginY = spanLat * 0.18;
-            const outsideSafeBox =
-                pos.lng < sw.lng + marginX || pos.lng > ne.lng - marginX ||
-                pos.lat < sw.lat + marginY || pos.lat > ne.lat - marginY;
-            const following = !(D && D.engine && D.engine.follow === false);
-            const now = Date.now();
-            if ((following && now > userPanUntil) || outsideSafeBox) {
-                if (now - lastFollowCamAt < 320) return;
-                lastFollowCamAt = now;
-                const curZoom = typeof m.getZoom === 'function' ? m.getZoom() : 15.8;
-                const targetZoom = curZoom < 14.5 ? 15.8 : curZoom;
-                m.easeTo({
-                    center: [pos.lng, pos.lat],
-                    zoom: targetZoom,
-                    pitch: window.is3DMode ? 45 : 0,
-                    duration: 320
-                });
-            }
-        } catch (e) {}
-    }, 300);
+let lastFollowCamAt = 0;
+window.__smdFitLockUntil = window.__smdFitLockUntil || 0;
+
+function getActiveDriverMap() {
+    if (typeof resolveMobileMap === "function") {
+        const rm = resolveMobileMap();
+        if (rm) return rm;
+    }
+    if (typeof D !== "undefined" && D && D.map && typeof D.map.easeTo === "function") return D.map;
+    if (window.soloMap && typeof window.soloMap.easeTo === "function") return window.soloMap;
+    if (window.__smdSoloMap && typeof window.__smdSoloMap.easeTo === "function") return window.__smdSoloMap;
+    if (window.map && typeof window.map.easeTo === "function") return window.map;
+    const box = (typeof $ === "function") ? $("driver-map-container") : document.getElementById("driver-map-container");
+    if (box && box._mapboxMap && typeof box._mapboxMap.easeTo === "function") return box._mapboxMap;
+    return null;
+}
+
+function getActiveDriverPos(m) {
+    if (typeof resolveDriverPos === "function") {
+        const p = resolveDriverPos(m);
+        if (p && isFinite(Number(p.lng)) && isFinite(Number(p.lat))) {
+            return { lng: Number(p.lng), lat: Number(p.lat) };
+        }
+    }
+    if (typeof gps !== "undefined" && gps && gps.last && isFinite(Number(gps.last.lng)) && isFinite(Number(gps.last.lat))) {
+        return { lng: Number(gps.last.lng), lat: Number(gps.last.lat) };
+    }
+    if (m && typeof m.getCenter === "function") {
+        const c = m.getCenter();
+        if (c && isFinite(Number(c.lng)) && isFinite(Number(c.lat))) {
+            return { lng: Number(c.lng), lat: Number(c.lat) };
+        }
+    }
+    return null;
+}
+
+window.recenterDriverMap = function () {
+    window.__smdFitLockUntil = 0;
+    userPanUntil = 0;
+    const m = getActiveDriverMap();
+    if (!m || typeof m.easeTo !== "function") return;
+    if (typeof D !== "undefined" && D && D.engine) D.engine.follow = true;
+    const pos = getActiveDriverPos(m);
+    if (typeof m.stop === "function") m.stop();
+    if (pos) {
+        m.easeTo({
+            center: [pos.lng, pos.lat],
+            zoom: 15.8,
+            pitch: (window.is3DMode === false) ? 0 : 40,
+            duration: 450,
+            essential: true
+        });
+    }
+};
+
+window.fitDriverMap = function () {
+    window.__smdFitLockUntil = Date.now() + 5000;
+    const m = getActiveDriverMap();
+    if (!m || typeof mapboxgl === "undefined") return;
+    const pos = getActiveDriverPos(m);
+    const dest = (typeof getDest === "function") ? getDest() : null;
+    if (typeof D !== "undefined" && D && D.engine) D.engine.follow = false;
+    if (typeof m.stop === "function") m.stop();
+    if (pos && dest && isFinite(Number(dest.lng)) && isFinite(Number(dest.lat)) && typeof m.fitBounds === "function") {
+        const bounds = new mapboxgl.LngLatBounds();
+        bounds.extend([pos.lng, pos.lat]);
+        bounds.extend([Number(dest.lng), Number(dest.lat)]);
+        m.fitBounds(bounds, {
+            padding: { top: 70, bottom: 85, left: 55, right: 55 },
+            maxZoom: 15.5,
+            pitch: (window.is3DMode === false) ? 0 : 40,
+            duration: 500,
+            essential: true
+        });
+    } else if (pos && typeof m.easeTo === "function") {
+        m.easeTo({ center: [pos.lng, pos.lat], zoom: 15.8, pitch: (window.is3DMode === false) ? 0 : 40, duration: 450, essential: true });
+    } else if (dest && isFinite(Number(dest.lng)) && isFinite(Number(dest.lat)) && typeof m.easeTo === "function") {
+        m.easeTo({ center: [Number(dest.lng), Number(dest.lat)], zoom: 15, pitch: 0, duration: 450, essential: true });
+    }
+};
+
+setInterval(function smdKeepTruckInView() {
+    try {
+        const now = Date.now();
+        if (now < (window.__smdFitLockUntil || 0)) return;
+        const m = getActiveDriverMap();
+        if (!m || typeof m.getBounds !== "function" || typeof m.easeTo !== "function") return;
+        if (!m._smdPanGuardBound && typeof m.on === "function") {
+            m._smdPanGuardBound = true;
+            ["dragstart", "touchstart"].forEach(function(ev) { m.on(ev, function() { userPanUntil = Date.now() + 4500; }); });
+            m.on("zoomstart", function() { userPanUntil = Date.now() + 3000; });
+        }
+        const following = !(typeof D !== "undefined" && D && D.engine && D.engine.follow === false);
+        if (!following || now < userPanUntil) return;
+        const pos = getActiveDriverPos(m);
+        if (!pos) return;
+        const b = m.getBounds();
+        if (!b) return;
+        const sw = b.getSouthWest(), ne = b.getNorthEast();
+        const spanLng = Math.max(1e-6, ne.lng - sw.lng);
+        const spanLat = Math.max(1e-6, ne.lat - sw.lat);
+        const marginX = spanLng * 0.22;
+        const marginY = spanLat * 0.22;
+        const outsideSafeBox =
+            pos.lng < sw.lng + marginX || pos.lng > ne.lng - marginX ||
+            pos.lat < sw.lat + marginY || pos.lat > ne.lat - marginY;
+        if (!outsideSafeBox) return;
+        if (now - lastFollowCamAt < 500) return;
+        lastFollowCamAt = now;
+        const curZoom = typeof m.getZoom === "function" ? m.getZoom() : 15.8;
+        const targetZoom = curZoom < 14.5 ? 15.8 : curZoom;
+        m.easeTo({
+            center: [pos.lng, pos.lat],
+            zoom: targetZoom,
+            bearing: 0,
+            pitch: (window.is3DMode === false) ? 0 : 40,
+            duration: 400,
+            essential: true
+        });
+    } catch (e) {}
+}, 400);
 })();

@@ -11,29 +11,23 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
+    <!-- Secure Token Loader (Direct Raw Token for Instant Initialization) -->
+    <script>
+        window.MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+    </script>
+
     <!-- Embedded SafeStorage & Firebase Init -->
     <script>
         window.SafeStorage = {
-            getItem(key) {
-                try { return localStorage.getItem(key); } catch (e) { return null; }
-            },
-            setItem(key, val) {
-                try { localStorage.setItem(key, val); } catch (e) {}
-            },
-            removeItem(key) {
-                try { localStorage.removeItem(key); } catch (e) {}
-            },
-            clear() {
-                try { localStorage.clear(); } catch (e) {}
-            }
+            getItem(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
+            setItem(key, val) { try { localStorage.setItem(key, val); } catch (e) {} },
+            removeItem(key) { try { localStorage.removeItem(key); } catch (e) {} },
+            clear() { try { localStorage.clear(); } catch (e) {} }
         };
 
         const firebaseConfig = { apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI", authDomain: "seemydriver-prod.firebaseapp.com", databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com", projectId: "seemydriver-prod", storageBucket: "seemydriver-prod.firebasestorage.app", messagingSenderId: "16366013329", appId: "1:16366013329:web:7e993e6ee37f940a04a064"};
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.database();
-        window.db = db;
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+        window.db = firebase.database();
     </script>
 
     <!-- PWA Background Color Painter -->
@@ -44,21 +38,16 @@
         })();
     </script>
 
-    <!-- PWA Manifest Link -->
     <link rel="manifest" href="manifest.json">
-
-    <!-- Explicit Mobile & Apple Touch Icon Overrides -->
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
     <link rel="apple-touch-icon" href="/icon-192.png">
 
-    <!-- Service Worker Registration Script -->
+    <!-- Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then(reg => console.log('ServiceWorker registration successful with scope: ', reg.scope))
-                    .catch(err => console.log('ServiceWorker registration failed: ', err));
+                navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW failed: ', err));
             });
         }
     </script>
@@ -70,87 +59,70 @@
             darkMode: 'class',
             theme: {
                 extend: {
-                    colors: {
-                        amber: { 400: '#fbbf24', 500: '#f59e0b' }
-                    },
-                    keyframes: {
-                        wave: {
-                            '0%, 100%': { transform: 'rotate(0deg)' },
-                            '20%, 60%': { transform: 'rotate(18deg)' },
-                            '40%, 80%': { transform: 'rotate(-12deg)' },
-                        }
-                    },
-                    animation: {
-                        'wave-slow': 'wave 2.2s infinite ease-in-out',
-                    }
+                    colors: { amber: { 400: '#fbbf24', 500: '#f59e0b' } },
+                    keyframes: { wave: { '0%, 100%': { transform: 'rotate(0deg)' }, '20%, 60%': { transform: 'rotate(18deg)' }, '40%, 80%': { transform: 'rotate(-12deg)' } } },
+                    animation: { 'wave-slow': 'wave 2.2s infinite ease-in-out' }
                 }
             }
         }
     </script>
 
-    <!-- Mapbox GL JS CSS & JS -->
+    <!-- Mapbox GL JS -->
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
 
-    <!-- Custom Styling -->
     <link rel="stylesheet" href="css/style.css">
     <style>
         .mapboxgl-popup-content { background: #12141c !important; color: #fff !important; border-radius: 12px; border: 1px solid #262626; }
         .pro-vehicle-marker { background: transparent !important; border: none !important; }
-        
-        /* Force absolute touch responsiveness on Mapbox controls */
-        .mapboxgl-ctrl-top-right {
-            z-index: 9999 !important;
-            pointer-events: auto !important;
-        }
-        .mapboxgl-ctrl-group {
-            background: #000000 !important;
-            border: 1px solid #262626 !important;
-            border-radius: 12px !important;
-            overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
-            pointer-events: auto !important;
-        }
-        .mapboxgl-ctrl-group button {
-            background-color: #000000 !important;
-            cursor: pointer !important;
-            pointer-events: auto !important;
-            touch-action: manipulation !important;
-            -webkit-tap-highlight-color: transparent;
-        }
-        .mapboxgl-ctrl-group button + button {
-            border-top: 1px solid #262626 !important;
-        }
-        .mapboxgl-ctrl-icon {
-            filter: brightness(0) saturate(100%) invert(84%) sepia(49%) saturate(543%) hue-rotate(358deg) brightness(102%) contrast(102%) !important;
-        }
-        #driver-3d-btn {
-            touch-action: manipulation !important;
-            -webkit-tap-highlight-color: transparent;
-            pointer-events: auto !important;
-        }
-
-        #brand-logo, .brand-logo {
-            width: 4rem !important;
-            height: 4rem !important;
-            min-width: 4rem !important;
-            min-height: 4rem !important;
-        }
-        @media (min-width: 640px) {
-            #brand-logo, .brand-logo {
-                width: 4.5rem !important;
-                height: 4.5rem !important;
-                min-width: 4.5rem !important;
-                min-height: 4.5rem !important;
-            }
-        }
-        /* FIXED MOBILE MAP HEIGHT OVERRIDE */
-        #driver-map-container, #customer-map-container, #landing-preview-map {
-            min-height: 400px !important;
-            height: 100% !important;
-            width: 100% !important;
-        }
+        .mapboxgl-ctrl-top-right { z-index: 9999 !important; pointer-events: auto !important; }
+        .mapboxgl-ctrl-group { background: #000000 !important; border: 1px solid #262626 !important; border-radius: 12px !important; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important; pointer-events: auto !important; }
+        .mapboxgl-ctrl-group button { background-color: #000000 !important; cursor: pointer !important; pointer-events: auto !important; touch-action: manipulation !important; -webkit-tap-highlight-color: transparent; }
+        .mapboxgl-ctrl-group button + button { border-top: 1px solid #262626 !important; }
+        .mapboxgl-ctrl-icon { filter: brightness(0) saturate(100%) invert(84%) sepia(49%) saturate(543%) hue-rotate(358deg) brightness(102%) contrast(102%) !important; }
+        #driver-3d-btn { touch-action: manipulation !important; -webkit-tap-highlight-color: transparent; pointer-events: auto !important; }
+        #brand-logo, .brand-logo { width: 4rem !important; height: 4rem !important; min-width: 4rem !important; min-height: 4rem !important; }
+        @media (min-width: 640px) { #brand-logo, .brand-logo { width: 4.5rem !important; height: 4.5rem !important; min-width: 4.5rem !important; min-height: 4.5rem !important; } }
+        #driver-map-container, #customer-map-container, #landing-preview-map { min-height: 400px !important; height: 100% !important; width: 100% !important; }
     </style>
+<style id="smd-trial-banner-mobile-fix">
+  .smd-trial-banner {
+    display: inline-flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    max-width: 100% !important;
+  }
+  .smd-trial-banner .smd-fire-side {
+    font-size: 2.25rem !important;
+    line-height: 1 !important;
+    flex-shrink: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+  .smd-trial-banner .smd-trial-label {
+    font-size: clamp(1.1rem, 2.5vw, 2.2rem) !important;
+    line-height: 1.15 !important;
+    font-weight: 900 !important;
+    white-space: nowrap !important;
+  }
+  @media (max-width: 639px) {
+    .smd-trial-banner {
+      gap: 6px !important;
+      padding-left: 10px !important;
+      padding-right: 10px !important;
+    }
+    .smd-trial-banner .smd-fire-side {
+      font-size: 1.45rem !important;
+    }
+    .smd-trial-banner .smd-trial-label {
+      font-size: 12.5px !important;
+      letter-spacing: -0.015em !important;
+    }
+  }
+</style>
 </head>
 <body class="bg-black text-white min-h-screen flex flex-col font-sans selection:bg-amber-400 selection:text-black antialiased">
 
@@ -172,11 +144,11 @@
         <div id="landing-view" class="app-view w-full max-w-5xl flex flex-col items-center text-center gap-10 py-4 sm:py-8 px-3 sm:px-4 hidden" style="display: none;">
             <div class="relative w-full flex flex-col items-center gap-4 sm:gap-6 pt-1">
                 <div class="absolute -top-12 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
-                <div class="inline-flex items-center gap-2 bg-gradient-to-r from-neutral-900 via-[#12141c] to-neutral-900 border border-amber-400/30 text-amber-300 font-bold text-[11px] sm:text-sm py-1.5 px-4 sm:px-6 rounded-full shadow-[0_0_25px_rgba(251,191,36,0.1)] backdrop-blur-md">
-                    <span class="animate-pulse">🔥</span>
-                    <span>30-Day Free Trial — Then $29/month Solo Plan</span>
-                    <span>🔥</span>
-                </div>
+                <div class="smd-trial-banner bg-gradient-to-r from-neutral-900 via-[#12141c] to-neutral-900 border border-amber-400/30 text-amber-300 py-2 px-3 sm:px-6 rounded-full shadow-[0_0_25px_rgba(251,191,36,0.1)] backdrop-blur-md">
+  <span class="smd-fire-side">🔥</span>
+  <span class="smd-trial-label">Solo Free Forever — Fleet Command $49/mo</span>
+  <span class="smd-fire-side">🔥</span>
+</div>
                 <h1 class="text-4xl sm:text-7xl font-black tracking-tight text-white leading-[1.08] max-w-3xl">
                     Stop asking <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 drop-shadow-[0_0_35px_rgba(251,191,36,0.3)]">"Where are you?"</span>
                 </h1>
@@ -191,7 +163,6 @@
                         Sign In
                     </button>
                 </div>
-                <span class="text-[10px] sm:text-[11px] text-neutral-500">Works seamlessly on mobile browsers. Customers track instantly via any web link.</span>
             </div>
 
             <!-- PREVIEW CARD WITH REAL MAP CONTAINER -->
@@ -199,13 +170,13 @@
                 <div class="absolute top-0 right-0 bg-amber-400/10 text-amber-400 text-[10px] font-black uppercase tracking-widest px-3 sm:px-4 py-1.5 rounded-bl-2xl border-l border-b border-amber-400/20 z-30">Live Simulation Preview</div>
                 <div class="flex flex-col md:flex-row items-center justify-between gap-6">
                     <div class="flex flex-col gap-3 max-w-md">
-                        <div class="inline-block bg-emerald-500/10 text-emerald-400 text-xs font-bold py-1 px-3 rounded-full w-fit border border-emerald-500/20">● Live GPS Broadcast Active</div>
+                        <div class="inline-block bg-emerald-500/10 text-emerald-400 text-xs font-bold py-1 px-3 rounded-full w-fit border border-emerald-500/20">● Live GPS Broadcast Active</div>
                         <h3 class="text-xl sm:text-2xl font-bold text-white">Real-Time Client Telemetry</h3>
                         <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Your customers get a secure, clean web link showing your exact moving position, route distance, and live ETA without downloading a single app.</p>
                     </div>
                     <div class="w-full md:w-80 bg-black/80 border border-neutral-800 rounded-2xl p-3 flex flex-col gap-2.5 shadow-inner">
                         <div class="flex items-center justify-between text-[11px] text-neutral-400 px-1 font-mono">
-                            <span class="text-emerald-400 animate-pulse">● LIVE ROUTE TELEMETRY</span>
+                            <span class="text-emerald-400 animate-pulse">● LIVE ROUTE TELEMETRY</span>
                             <span id="preview-speed" class="text-amber-400 font-bold">45 mph</span>
                         </div>
                         <div id="landing-preview-map" class="w-full h-48 bg-neutral-900 rounded-xl border border-neutral-800 relative overflow-hidden z-10 shadow-inner"></div>
@@ -216,30 +187,22 @@
 
         <!-- SIGN IN VIEW -->
         <div id="signin-view" class="app-view w-full max-w-md flex flex-col items-center justify-center p-6 my-auto hidden" style="display: none;">
-            <div class="w-full bg-gradient-to-b from-[#161923] to-[#0f1117] border border-neutral-800 rounded-3xl p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex flex-col gap-8 text-left relative overflow-hidden">
+            <div class="w-full bg-gradient-to-b from-[#161923] to-[#0f1117] border border-neutral-800 rounded-3xl p-8 sm:p-10 shadow-2xl flex flex-col gap-8 text-left relative overflow-hidden">
                 <div class="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
                 <div class="flex flex-col gap-3">
-                    <div class="flex items-center gap-3">
-                        <h2 class="text-3xl sm:text-4xl font-black tracking-tight text-white">Welcome Back</h2>
-                        <span class="inline-block text-4xl sm:text-5xl animate-wave-slow origin-[70%_70%] drop-shadow-[0_0_15px_rgba(251,191,36,0.4)]">👋</span>
-                    </div>
-                    <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Sign in with your email and password to access your live broadcast and dispatch control panel.</p>
+                    <h2 class="text-3xl sm:text-4xl font-black tracking-tight text-white">Welcome Back</h2>
+                    <p class="text-xs sm:text-sm text-neutral-400">Sign in with your email and password to access your live broadcast.</p>
                 </div>
                 <div class="flex flex-col gap-5">
                     <div class="flex flex-col gap-2">
                         <label class="text-[11px] font-black uppercase tracking-wider text-neutral-300">Email Address</label>
-                        <input type="email" id="signin-email" placeholder="driver@business.com" class="w-full bg-neutral-900 border border-neutral-800 rounded-2xl px-4.5 py-3.5 text-sm text-white focus:outline-none focus:border-amber-400 transition shadow-inner">
+                        <input type="email" id="signin-email" placeholder="driver@business.com" class="w-full bg-neutral-900 border border-neutral-800 rounded-2xl px-4.5 py-3.5 text-sm text-white focus:outline-none focus:border-amber-400">
                     </div>
                     <div class="flex flex-col gap-2">
                         <label class="text-[11px] font-black uppercase tracking-wider text-neutral-300">Password</label>
-                        <div class="relative w-full">
-                            <input type="password" id="signin-password" placeholder="••••••••" class="w-full bg-neutral-900 border border-neutral-800 rounded-2xl px-4.5 py-3.5 pr-12 text-sm text-white focus:outline-none focus:border-amber-400 transition shadow-inner">
-                            <button type="button" onclick="const p = document.getElementById('signin-password'); p.type = p.type === 'password' ? 'text' : 'password'; this.textContent = p.type === 'password' ? '👁️' : '🙈';" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white text-base cursor-pointer select-none">👁️</button>
-                        </div>
+                        <input type="password" id="signin-password" placeholder="••••••••" class="w-full bg-neutral-900 border border-neutral-800 rounded-2xl px-4.5 py-3.5 text-sm text-white focus:outline-none focus:border-amber-400">
                     </div>
-                    <button onclick="window.handleSignIn()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition shadow-[0_0_25px_rgba(251,191,36,0.3)] cursor-pointer mt-2">
-                        Sign In to Broadcast →
-                    </button>
+                    <button onclick="window.handleSignIn()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition cursor-pointer">Sign In to Broadcast →</button>
                 </div>
             </div>
         </div>
@@ -247,171 +210,1143 @@
         <!-- REGISTER VIEW -->
         <div id="register-view" class="app-view w-full max-w-md flex flex-col items-center justify-center p-6 my-auto hidden" style="display: none;">
             <div class="w-full bg-[#12141c] border border-neutral-800 rounded-3xl p-8 shadow-2xl flex flex-col gap-6 text-left">
-                <div class="flex flex-col gap-2">
-                    <h2 class="text-2xl font-black text-white">Get Started Free</h2>
-                    <p class="text-xs text-neutral-400">30-Day Free Trial — Then $29/month Solo Plan.</p>
-                </div>
+                <h2 class="text-2xl font-black text-white">Get Started Free</h2>
                 <div class="flex flex-col gap-4">
-                    <div class="flex flex-col gap-1.5">
-                        <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Email Address</label>
-                        <input type="email" id="reg-email" placeholder="driver@business.com" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition">
-                    </div>
-                    <div class="flex flex-col gap-1.5">
-                        <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Password</label>
-                        <div class="relative w-full">
-                            <input type="password" id="reg-password" placeholder="••••••••" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 pr-12 text-sm text-white focus:outline-none focus:border-amber-400 transition">
-                            <button type="button" onclick="const p = document.getElementById('reg-password'); p.type = p.type === 'password' ? 'text' : 'password'; this.textContent = p.type === 'password' ? '👁️' : '🙈';" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white text-base cursor-pointer select-none">👁️</button>
-                        </div>
-                    </div>
-                    <button onclick="window.handleRegister()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-3.5 rounded-xl transition shadow-lg cursor-pointer">
-                        Create Free Account →
-                    </button>
+                    <input type="email" id="reg-email" placeholder="driver@business.com" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white">
+                    <input type="password" id="reg-password" placeholder="••••••••" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white">
+                    <button onclick="window.handleRegister()" class="w-full bg-amber-400 text-black font-black text-sm py-3.5 rounded-xl cursor-pointer">Create Free Account →</button>
                 </div>
             </div>
         </div>
 
         <!-- JOB SETUP VIEW -->
-        <div id="job-setup-view" class="app-view w-full max-w-xl flex flex-col items-center p-4 sm:p-6 my-auto hidden" style="display: none;">
+        <div id="job-setup-view" class="app-view w-full max-w-xl flex flex-col items-center p-4 sm:p-6 my-auto" style="display: none;">
             <div class="w-full max-w-md mx-auto mb-4">
-                <button onclick="window.checkFleetAccessAndSwitch()" class="w-full bg-gradient-to-r from-amber-500/20 to-amber-400/10 hover:from-amber-500/30 hover:to-amber-400/20 border border-amber-400/40 text-amber-400 text-xs font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-between shadow-lg cursor-pointer">
-                    <span class="flex items-center gap-2">🚀 Switch to Fleet Command</span>
+                <button onclick="window.checkFleetAccessAndSwitch()" class="w-full bg-gradient-to-r from-amber-500/20 to-amber-400/10 border border-amber-400/40 text-amber-400 text-xs font-bold py-3 px-4 rounded-xl flex items-center justify-between cursor-pointer">
+                    <span>🚀 Switch to Fleet Command</span>
                     <span class="text-[10px] bg-amber-400 text-black px-2 py-0.5 rounded-full font-black">UPGRADE</span>
                 </button>
             </div>
             <div class="w-full bg-[#12141c] border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col gap-6 text-left">
                 <div class="flex items-center justify-between">
-                    <div class="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/20 text-amber-300 font-bold text-xs py-1.5 px-4 rounded-full w-fit">
-                        📍 STEP 1 OF 2: JOB SETUP
-                    </div>
-                    <button onclick="window.handleSignOut()" class="text-xs text-neutral-400 hover:text-amber-400 font-bold transition cursor-pointer">
-                        Sign Out 🚪
-                    </button>
+                    <span class="bg-amber-400/10 border border-amber-400/20 text-amber-300 font-bold text-xs py-1.5 px-4 rounded-full">📝 STEP 1 OF 2: JOB SETUP</span>
+                    <button onclick="window.handleSignOut()" class="text-xs text-neutral-400 hover:text-amber-400 font-bold cursor-pointer">Sign Out 🚪</button>
                 </div>
                 <div class="flex flex-col gap-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div class="flex flex-col gap-1.5">
                             <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Driver Name</label>
-                            <input type="text" id="job-driver-name" placeholder="Driver Name" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition">
+                            <input type="text" id="job-driver-name" placeholder="Driver Name" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400">
                         </div>
                         <div class="flex flex-col gap-1.5">
                             <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Driver Phone</label>
-                            <input type="tel" id="job-driver-phone" placeholder="(555) 000-0000" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition">
+                            <input type="tel" id="job-driver-phone" placeholder="(555) 000-0000" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400">
                         </div>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div class="flex flex-col gap-1.5">
                             <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Client Name</label>
-                            <input type="text" id="job-cust-name" placeholder="John Smith" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition">
+                            <input type="text" id="job-cust-name" placeholder="John Smith" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400">
                         </div>
                         <div class="flex flex-col gap-1.5">
                             <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Client Mobile Number</label>
-                            <input type="tel" id="job-cust-phone" placeholder="(555) 000-0000" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition">
+                            <input type="tel" id="job-cust-phone" placeholder="(555) 000-0000" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400">
                         </div>
                     </div>
-                    <div class="flex flex-col gap-1.5">
-                        <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Company / Business Name (Optional)</label>
-                        <input type="text" id="job-company-name" placeholder="Leave blank if solo (Optional)" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition">
-                    </div>
-                    <!-- DESTINATION ADDRESS WITH ABSOLUTE SUGGESTIONS WRAPPER -->
                     <div class="flex flex-col gap-1.5 relative">
                         <label class="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Destination Address *</label>
-                        <input type="text" id="job-cust-address" placeholder="Enter street address..." oninput="window.handleAddressInput(this.value)" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400 transition" autocomplete="off">
+                        <input type="text" id="job-cust-address" placeholder="Enter street address..." oninput="window.handleAddressInput(this.value)" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-400" autocomplete="off">
                         <div id="address-suggestions" class="hidden absolute top-full left-0 right-0 mt-1.5 bg-[#161923] border border-neutral-800 rounded-xl shadow-2xl max-h-56 overflow-y-auto z-50"></div>
                     </div>
-                    <button onclick="window.launchLiveBroadcast()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl transition shadow-[0_0_30px_rgba(251,191,36,0.25)] cursor-pointer flex items-center justify-center gap-2 mt-2">
-                        <span>Start Cloud Broadcast</span> 🚀
-                    </button>
+                    <button onclick="window.launchLiveBroadcast()" class="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 rounded-2xl cursor-pointer flex items-center justify-center gap-2"><span>Start Cloud Broadcast</span> 🚀</button>
                 </div>
             </div>
         </div>
 
         <!-- ACTIVE BROADCAST VIEW -->
-        <div id="active-broadcast-view" class="app-view w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4 hidden" style="display: none;">
-            <div class="w-full max-w-4xl mx-auto">
-                <button onclick="window.checkFleetAccessAndSwitch()" class="w-full bg-gradient-to-r from-amber-500/20 to-amber-400/10 hover:from-amber-500/30 hover:to-amber-400/20 border border-amber-400/40 text-amber-400 text-xs font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-between shadow-lg cursor-pointer">
-                    <span class="flex items-center gap-2">🚀 Switch to Fleet Command</span>
-                    <span class="text-[10px] bg-amber-400 text-black px-2 py-0.5 rounded-full font-black">UPGRADE</span>
-                </button>
-            </div>
+        <div id="active-broadcast-view" class="app-view w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4" style="display: none;">
             <div class="w-full max-w-4xl h-[450px] bg-neutral-900 border border-neutral-800 rounded-3xl relative shadow-2xl flex flex-col overflow-hidden">
-                <div id="driver-map-container" class="w-full h-full rounded-3xl overflow-hidden z-10" style="pointer-events: auto !important;"></div>
-                
-                <!-- TOP LEFT: GPS Signal Badge -->
-                <div class="smd-gps-badge absolute top-3 left-3 z-20 bg-black/85 border border-neutral-800 rounded-xl px-3 py-1 font-mono text-[11px] font-bold text-amber-400 backdrop-blur-md pointer-events-none">
-                    GPS: searching…
-                </div>
-
-                <!-- TOP RIGHT: 3D Tilt Toggle Button -->
-                <button type="button" id="driver-3d-btn" onclick="window.toggleDriver3D()" class="absolute top-3 right-14 z-20 bg-[#12141c]/95 hover:bg-neutral-800 border border-neutral-800 text-amber-400 font-bold text-xs px-3 py-2 rounded-xl shadow-lg cursor-pointer backdrop-blur-md transition pointer-events-auto select-none">
-                    🌐 3D: ON
-                </button>
-
-                <div class="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
-                    <div class="flex items-center gap-2 pointer-events-auto">
-                        <button onclick="window.fitDriverMap()" class="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow cursor-pointer">Fit Both</button>
-                        <button onclick="window.recenterDriverMap()" class="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-amber-400 text-xs font-bold px-3.5 py-2 rounded-xl shadow cursor-pointer">Recenter</button>
-                    </div>
-                    <button onclick="window.openDriverDirections()" class="bg-amber-400 hover:bg-amber-300 text-black text-xs font-black px-4 py-2 rounded-xl shadow cursor-pointer pointer-events-auto">Directions</button>
-                </div>
+                <div id="driver-map-container" class="w-full h-full rounded-3xl overflow-hidden z-10"></div>
+                <div id="driver-gps-badge" class="smd-gps-badge absolute top-3 left-3 z-20 bg-black/85 border border-neutral-800 rounded-xl px-3 py-1 font-mono text-[11px] font-bold text-amber-400 pointer-events-none">GPS: searching…</div>
+                <button type="button" id="driver-3d-btn" onclick="window.toggleDriver3D()" class="absolute top-3 right-14 z-20 bg-[#12141c]/95 border border-neutral-800 text-amber-400 font-bold text-xs px-3 py-2 rounded-xl cursor-pointer">🌐 3D: ON</button>
             </div>
             <div class="w-full max-w-4xl flex flex-col gap-3">
-                <button onclick="window.textTrackingLink()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm py-4 rounded-2xl transition shadow-lg cursor-pointer">💬 Text Tracking Link to Client</button>
-                <button onclick="window.copyTrackingLink()" class="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white font-bold text-sm py-3.5 rounded-2xl transition cursor-pointer">📋 Copy Link to Clipboard</button>
-                <button onclick="window.endBroadcastAndHome()" class="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 font-bold text-sm py-3.5 rounded-2xl transition cursor-pointer">← End Broadcast & New Job</button>
+                <button onclick="window.textTrackingLink()" class="w-full bg-emerald-500 text-black font-black text-sm py-4 rounded-2xl cursor-pointer">💬 Text Tracking Link to Client</button>
+                <button onclick="window.copyTrackingLink()" class="w-full bg-neutral-900 border border-neutral-800 text-white font-bold text-sm py-3.5 rounded-2xl cursor-pointer">📋 Copy Link to Clipboard</button>
+                <button onclick="window.endBroadcastAndHome()" class="w-full bg-neutral-900 border border-neutral-800 text-neutral-300 font-bold text-sm py-3.5 rounded-2xl cursor-pointer">← End Broadcast & New Job</button>
             </div>
         </div>
 
         <!-- CUSTOMER TRACKING VIEW -->
-        <div id="customer-view" class="app-view w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4 hidden" style="display: none;">
+        <div id="customer-view" class="app-view w-full flex-1 flex flex-col items-center p-3 sm:p-6 gap-4" style="display: none;">
             <div class="w-full max-w-4xl bg-[#12141c] border border-neutral-800 rounded-2xl p-4 flex flex-col gap-3 shadow-lg">
                 <div class="flex items-center justify-between">
-                    <div class="flex flex-col">
-                        <span id="cust-driver-header" class="text-lg font-black text-white">Connecting to driver...</span>
-                        <span id="cust-eta-sub" class="text-xs font-mono text-amber-400">Calculating ETA...</span>
-                    </div>
-                    <div id="cust-status-pill" class="inline-flex items-center gap-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold px-3 py-1 rounded-full">
-                        ● Connecting
-                    </div>
+                    <span id="cust-driver-header" class="text-lg font-black text-white">Connecting to driver...</span>
+                    <span id="cust-status-pill" class="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold px-3 py-1 rounded-full">● Connecting</span>
                 </div>
-                <!-- Audio Greeting Button -->
-                <button id="customer-audio-btn" onclick="window.playCustomerAudio()" class="bg-amber-500 hover:bg-amber-400 text-black text-xs font-extrabold px-3.5 py-2.5 rounded-xl shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer w-full">
-                    🔊 Tap Here for Audio Greeting
-                </button>
             </div>
-
             <div class="w-full max-w-4xl h-[450px] bg-neutral-900 border border-neutral-800 rounded-3xl relative shadow-2xl flex flex-col overflow-hidden">
-                <div id="customer-map-container" class="w-full h-full rounded-3xl overflow-hidden z-10" style="pointer-events: auto !important;"></div>
-                <div class="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
-                    <div class="bg-black/80 backdrop-blur-md border border-neutral-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl pointer-events-auto shadow">
-                        Distance: <span id="cust-distance" class="text-amber-400 font-mono">-- mi</span>
-                    </div>
-                    <div class="flex items-center gap-2 pointer-events-auto">
-                        <span class="bg-black/80 backdrop-blur-md border border-neutral-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow">
-                            Speed: <span id="cust-speed" class="text-amber-400 font-mono">0 mph</span>
-                        </span>
-                        <button onclick="window.fitCustomerMap()" class="bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow cursor-pointer">Fit Route</button>
-                        <button onclick="window.recenterCustomerMap()" class="bg-amber-400 hover:bg-amber-300 text-black text-xs font-black px-4 py-2 rounded-xl shadow cursor-pointer">Recenter</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="w-full max-w-4xl grid grid-cols-2 gap-3">
-                <a id="cust-call-btn" href="#" class="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white font-bold text-xs sm:text-sm py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-center">📞 Call Driver</a>
-                <a id="cust-msg-btn" href="#" class="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white font-bold text-xs sm:text-sm py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-center">💬 Message Driver</a>
+                <div id="customer-map-container" class="w-full h-full rounded-3xl overflow-hidden z-10"></div>
             </div>
         </div>
 
     </main>
 
-    <!-- FOOTER -->
     <footer class="w-full border-t border-neutral-900 py-6 text-center text-xs text-neutral-500 flex flex-col gap-1">
         <div>© 2026 SeeMyDriver. All rights reserved. Secure Cloud GPS Telemetry.</div>
         <div class="font-bold text-neutral-400">Developed & Architected by Julius Jones</div>
     </footer>
 
-    <!-- Scripts bumped to v63 to force cache refresh -->
     <script src="js/app.js"></script>
     <script src="js/tracker.js"></script>
+<script>
+window.soloRecenterMap = function() {
+  try {
+    const m = window.soloMap || window.map || (typeof map !== 'undefined' ? map : null);
+    if (!m || typeof m.easeTo !== 'function') return;
+    const lat = parseFloat((window.SafeStorage && window.SafeStorage.getItem('smd_lat')) || localStorage.getItem('smd_lat') || '29.9731');
+    const lng = parseFloat((window.SafeStorage && window.SafeStorage.getItem('smd_lng')) || localStorage.getItem('smd_lng') || '-95.2831');
+    if (isFinite(lat) && isFinite(lng)) {
+      m.easeTo({ center: [lng, lat], zoom: 14, duration: 500 });
+    }
+  } catch (e) {}
+};
+window.soloFitBoth = function() {
+  try {
+    const m = window.soloMap || window.map || (typeof map !== 'undefined' ? map : null);
+    if (!m || typeof m.fitBounds !== 'function' || typeof mapboxgl === 'undefined') return;
+    const bounds = new mapboxgl.LngLatBounds();
+    let count = 0;
+    const dLat = parseFloat((window.SafeStorage && window.SafeStorage.getItem('smd_lat')) || localStorage.getItem('smd_lat'));
+    const dLng = parseFloat((window.SafeStorage && window.SafeStorage.getItem('smd_lng')) || localStorage.getItem('smd_lng'));
+    if (isFinite(dLat) && isFinite(dLng)) { bounds.extend([dLng, dLat]); count++; }
+    const tLat = parseFloat((window.SafeStorage && window.SafeStorage.getItem('smd_dest_lat')) || localStorage.getItem('smd_dest_lat'));
+    const tLng = parseFloat((window.SafeStorage && window.SafeStorage.getItem('smd_dest_lng')) || localStorage.getItem('smd_dest_lng'));
+    if (isFinite(tLat) && isFinite(tLng)) { bounds.extend([tLng, tLat]); count++; }
+    if (count >= 2 && !bounds.isEmpty()) {
+      m.fitBounds(bounds, { padding: 65, maxZoom: 15, duration: 600 });
+    } else if (count === 1) {
+      window.soloRecenterMap();
+    }
+  } catch (e) {}
+};</script>
+<script id="smd-solo-camera-controls">
+(function() {
+  function getSoloMap() {
+    const candidates = [
+      window.drvState && window.drvState.map,
+      window.soloMap,
+      window.map
+    ];
+    for (let i = 0; i < candidates.length; i++) {
+      const m = candidates[i];
+      if (m && (typeof m.flyTo === 'function' || typeof m.easeTo === 'function' || typeof m.fitBounds === 'function')) {
+        return m;
+      }
+    }
+    return null;
+  }
+
+  function getSoloCoords() {
+    const readKey = (k) => {
+      try {
+        return (window.SafeStorage && window.SafeStorage.getItem(k)) || localStorage.getItem(k);
+      } catch (e) { return null; }
+    };
+    let dLat = parseFloat(readKey('smd_lat') || readKey('smd_driver_lat'));
+    let dLng = parseFloat(readKey('smd_lng') || readKey('smd_driver_lng'));
+    let tLat = parseFloat(readKey('smd_dest_lat'));
+    let tLng = parseFloat(readKey('smd_dest_lng'));
+
+    if ((!isFinite(dLat) || !isFinite(dLng)) && window.drvState) {
+      dLat = Number(window.drvState.lat);
+      dLng = Number(window.drvState.lng);
+    }
+    if ((!isFinite(tLat) || !isFinite(tLng)) && window.drvState) {
+      tLat = Number(window.drvState.destLat);
+      tLng = Number(window.drvState.destLng);
+    }
+    return {
+      driver: (isFinite(dLat) && isFinite(dLng)) ? [dLng, dLat] : null,
+      dest: (isFinite(tLat) && isFinite(tLng)) ? [tLng, tLat] : null
+    };
+  }
+
+  window.soloRecenterMap = function() {
+    try {
+      const m = getSoloMap();
+      if (!m) return;
+      const c = getSoloCoords();
+      const target = c.driver || c.dest || [-95.4613, 29.9855];
+      if (typeof m.flyTo === 'function') {
+        m.flyTo({ center: target, zoom: 14, bearing: 0, essential: true, duration: 800 });
+      } else if (typeof m.easeTo === 'function') {
+        m.easeTo({ center: target, zoom: 14, bearing: 0, duration: 800 });
+      }
+    } catch (e) {}
+  };
+
+  window.soloFitBoth = function() {
+    try {
+      const m = getSoloMap();
+      if (!m) return;
+      const c = getSoloCoords();
+      if (c.driver && c.dest && typeof mapboxgl !== 'undefined' && typeof m.fitBounds === 'function') {
+        const bounds = new mapboxgl.LngLatBounds();
+        bounds.extend(c.driver);
+        bounds.extend(c.dest);
+        m.fitBounds(bounds, { padding: 65, maxZoom: 15, bearing: 0, duration: 850 });
+      } else if (c.driver || c.dest) {
+        window.soloRecenterMap();
+      }
+    } catch (e) {}
+  };
+
+  function mountSoloButtons() {
+    try {
+      if (document.getElementById('smd-solo-map-controls')) return;
+      const mapBox = document.getElementById('driver-map-container');
+      const container = (mapBox && mapBox.parentElement) || mapBox || document.getElementById('map');
+      if (!container) return;
+      if (getComputedStyle(container).position === 'static') {
+        container.style.position = 'relative';
+      }
+      const bar = document.createElement('div');
+      bar.id = 'smd-solo-map-controls';
+      bar.style.cssText = 'position:absolute;bottom:14px;left:14px;z-index:30;display:flex;gap:8px;align-items:center;pointer-events:auto;';
+      bar.innerHTML = [
+        '<button type="button" onclick="soloRecenterMap()" style="background:rgba(15,17,23,0.92);color:#f3f4f6;border:1px solid rgba(255,255,255,0.16);border-radius:10px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.45);">Re-Center</button>',
+        '<button type="button" onclick="soloFitBoth()" style="background:rgba(15,17,23,0.92);color:#fbbf24;border:1px solid rgba(251,191,36,0.35);border-radius:10px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.45);">Fit Both</button>'
+      ].join('');
+      container.appendChild(bar);
+    } catch (e) {}
+  }
+
+  setInterval(mountSoloButtons, 800);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mountSoloButtons);
+  } else {
+    mountSoloButtons();
+  }
+})();
+</script>
+<script id="smd-landing-preview-upgrade">
+(function() {
+  function hasGarbledChars(str) {
+    for (let i = 0; i < str.length; i++) {
+      const code = str.charCodeAt(i);
+      if (code === 0x00F0 || code === 0x0178 || code === 0x00E2 || code === 0x20AC || code === 0x00C3 || code === 0x00C2) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function fixMojibakeNodes() {
+    try {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const txt = node.nodeValue || '';
+        if (txt.indexOf('30-Day Free Trial') !== -1 || txt.indexOf('Solo Free Forever') !== -1) { node.nodeValue = 'Solo Free Forever \u2014 Fleet Command $49/mo'; } else if (hasGarbledChars(txt)) {
+          node.nodeValue = txt
+            .replace(/ðŸ[^s]*/g, '')
+            .replace(/â€”/g, '—')
+            .replace(/â€“/g, '–')
+            .replace(/Â/g, '')
+            .trim();
+        }
+      }
+    } catch (e) {}
+  }
+
+  function enhanceTelemetryCopy() {
+    try {
+      if (document.getElementById('smd-telemetry-copy-box')) return;
+      const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,p,div,span'));
+      const target = headings.find((el) => el.textContent && el.textContent.trim() === 'Real-Time Client Telemetry');
+      const host = target && target.parentElement;
+      if (!host) return;
+      const box = document.createElement('div');
+      box.id = 'smd-telemetry-copy-box';
+      box.style.cssText = 'margin-top:12px;color:#b8beca;font-size:14px;line-height:1.55;max-width:440px;';
+      box.innerHTML = [
+        '<p style="margin:0 0 10px 0;">Your live GPS position streams directly from your browser onto a light street map with a road-hugging route polyline and real-time speed telemetry.</p>',
+        '<p style="margin:0;color:#9ca3af;font-size:13px;">Share a single SMS or web link with your client so they watch your route progress along actual streets without downloading an app.</p>'
+      ].join('');
+      host.appendChild(box);
+    } catch (e) {}
+  }
+
+  function makeBlackTruckSvg() {
+    return '<div style="width:34px;height:46px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 6px 10px rgba(0,0,0,0.45));">' +
+      '<svg viewBox="0 0 40 56" width="34" height="46" xmlns="http://www.w3.org/2000/svg">' +
+        '<rect x="7" y="6" width="26" height="44" rx="7" fill="#0b0d12" stroke="#f59e0b" stroke-width="2.2"/>' +
+        '<rect x="10" y="12" width="20" height="10" rx="2.5" fill="#1f2937"/>' +
+        '<rect x="10" y="34" width="20" height="8" rx="2" fill="#18181b"/>' +
+        '<circle cx="11" cy="8" r="2.2" fill="#fde68a"/>' +
+        '<circle cx="29" cy="8" r="2.2" fill="#fde68a"/>' +
+      '</svg></div>';
+  }
+
+  function renderRoadHuggingPreview() {
+    try {
+      const previewLabel = Array.from(document.querySelectorAll('*')).find((el) => el.children.length === 0 && el.textContent && el.textContent.trim() === 'LIVE SIMULATION PREVIEW');
+      const card = previewLabel && (previewLabel.closest('div[class*="rounded"]') || (previewLabel.parentElement && previewLabel.parentElement.parentElement));
+      if (!card) return;
+      let stage = card.querySelector('#smd-light-road-map');
+      if (!stage) {
+        const darkBlank = Array.from(card.querySelectorAll('div')).find((d) => {
+          const r = d.getBoundingClientRect();
+          return r.height > 140 && r.width > 180 && d.id !== 'smd-light-road-map';
+        });
+        stage = document.createElement('div');
+        stage.id = 'smd-light-road-map';
+        stage.style.cssText = 'position:relative;width:100%;height:250px;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.12);background:#eef2f6;margin-top:8px;';
+        if (darkBlank && darkBlank.parentElement) {
+          darkBlank.replaceWith(stage);
+        } else {
+          card.appendChild(stage);
+        }
+      }
+      if (stage.dataset.smdMapReady === '1') return;
+      stage.dataset.smdMapReady = '1';
+
+      const start = [-95.3498, 29.9979];
+      const end = [-95.4446, 29.9854];
+      const token = window.MAPBOX_TOKEN || (window.mapboxgl && window.mapboxgl.accessToken) || '';
+
+      if (typeof mapboxgl !== 'undefined' && token) {
+        mapboxgl.accessToken = token;
+        const m = new mapboxgl.Map({
+          container: stage,
+          style: 'mapbox://styles/mapbox/streets-v12',
+          center: [-95.397, 29.991],
+          zoom: 11.4,
+          interactive: true
+        });
+        m.on('load', async () => {
+          let coords = [start, end];
+          try {
+            const url = 'https://api.mapbox.com/directions/v5/mapbox/driving/' +
+              start[0] + ',' + start[1] + ';' + end[0] + ',' + end[1] +
+              '?geometries=geojson&overview=full&access_token=' + encodeURIComponent(token);
+            const resp = await fetch(url);
+            const data = await resp.json();
+            if (data && data.routes && data.routes[0] && data.routes[0].geometry && Array.isArray(data.routes[0].geometry.coordinates)) {
+              coords = data.routes[0].geometry.coordinates;
+            }
+          } catch (e) {}
+
+          m.addSource('smd-road-route', {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: {},
+              geometry: { type: 'LineString', coordinates: coords }
+            }
+          });
+          m.addLayer({
+            id: 'smd-road-route-casing',
+            type: 'line',
+            source: 'smd-road-route',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#111827', 'line-width': 7, 'line-opacity': 0.85 }
+          });
+          m.addLayer({
+            id: 'smd-road-route-line',
+            type: 'line',
+            source: 'smd-road-route',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#f59e0b', 'line-width': 4 }
+          });
+
+          const truckEl = document.createElement('div');
+          truckEl.innerHTML = makeBlackTruckSvg();
+          new mapboxgl.Marker({ element: truckEl.firstChild })
+            .setLngLat(coords[Math.floor(coords.length * 0.45)] || start)
+            .addTo(m);
+        });
+      } else {
+        stage.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#111827;font-weight:700;font-size:13px;">Loading light road map...</div>';
+      }
+    } catch (e) {}
+  }
+
+  function runAll() {
+    fixMojibakeNodes();
+    enhanceTelemetryCopy();
+    renderRoadHuggingPreview();
+  }
+
+  setInterval(runAll, 900);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', runAll);
+  } else {
+    runAll();
+  }
+})();
+</script>
+<script id="smd-landing-default-boot">
+(function() {
+  function isStandaloneApp() {
+    try {
+      if (window.matchMedia && (
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches ||
+        window.matchMedia('(display-mode: minimal-ui)').matches
+      )) return true;
+      if (window.navigator && window.navigator.standalone === true) return true;
+      if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) return true;
+      if (window.cordova) return true;
+    } catch (e) {}
+    return false;
+  }
+
+  function showLandingDefault() {
+    try {
+      if (window.__smdUserOpenedSignIn) return;
+      if (isStandaloneApp()) return;
+      const landing = document.getElementById('landing-view');
+      if (landing) {
+        landing.classList.remove('hidden');
+        landing.style.display = 'flex';
+      }
+      if (typeof window.switchView === 'function') {
+        window.switchView('landing', true);
+      }
+    } catch (e) {}
+  }
+
+  document.addEventListener('click', function(ev) {
+    const btn = ev.target && ev.target.closest('button,a');
+    if (!btn) return;
+    const label = (btn.textContent || '').trim().toLowerCase();
+    if (label === 'sign in' || label.indexOf('sign in') === 0) {
+      window.__smdUserOpenedSignIn = true;
+    }
+  }, true);
+
+  showLandingDefault();
+  setTimeout(showLandingDefault, 120);
+  setTimeout(showLandingDefault, 450);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', showLandingDefault);
+  }
+  window.addEventListener('load', showLandingDefault);
+})();
+</script>
+<script id="smd-landing-road-preview-v2">
+(function() {
+  const DEFAULT_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+  const START_LNG_LAT = [-95.3498, 29.9979];
+  const END_LNG_LAT = [-95.4446, 29.9854];
+
+  function ensureMapboxAssets(cb) {
+    if (typeof mapboxgl !== 'undefined') {
+      if (!document.getElementById('smd-mapbox-css')) {
+        const link = document.createElement('link');
+        link.id = 'smd-mapbox-css';
+        link.rel = 'stylesheet';
+        link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css';
+        document.head.appendChild(link);
+      }
+      return cb();
+    }
+    if (!document.getElementById('smd-mapbox-css')) {
+      const link = document.createElement('link');
+      link.id = 'smd-mapbox-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css';
+      document.head.appendChild(link);
+    }
+    if (!document.getElementById('smd-mapbox-js')) {
+      const script = document.createElement('script');
+      script.id = 'smd-mapbox-js';
+      script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js';
+      script.onload = cb;
+      script.onerror = cb;
+      document.head.appendChild(script);
+    } else {
+      setTimeout(cb, 300);
+    }
+  }
+
+  async function fetchRoadRoute(token) {
+    const pair = START_LNG_LAT[0] + ',' + START_LNG_LAT[1] + ';' + END_LNG_LAT[0] + ',' + END_LNG_LAT[1];
+    if (token) {
+      try {
+        const mbUrl = 'https://api.mapbox.com/directions/v5/mapbox/driving/' + pair +
+          '?geometries=geojson&overview=full&access_token=' + encodeURIComponent(token);
+        const res = await fetch(mbUrl);
+        if (res.ok) {
+          const json = await res.json();
+          const coords = json && json.routes && json.routes[0] && json.routes[0].geometry && json.routes[0].geometry.coordinates;
+          if (Array.isArray(coords) && coords.length > 2) return coords;
+        }
+      } catch (e) {}
+    }
+    try {
+      const osrmUrl = 'https://router.project-osrm.org/route/v1/driving/' + pair +
+        '?geometries=geojson&overview=full';
+      const res = await fetch(osrmUrl);
+      if (res.ok) {
+        const json = await res.json();
+        const coords = json && json.routes && json.routes[0] && json.routes[0].geometry && json.routes[0].geometry.coordinates;
+        if (Array.isArray(coords) && coords.length > 2) return coords;
+      }
+    } catch (e) {}
+    return [START_LNG_LAT, END_LNG_LAT];
+  }
+
+  function createCustomBlackTruckEl() {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'width:40px;height:52px;display:flex;align-items:center;justify-content:center;cursor:pointer;filter:drop-shadow(0 8px 12px rgba(0,0,0,0.45));';
+    wrap.innerHTML = [
+      '<svg viewBox="0 0 44 58" width="40" height="52" xmlns="http://www.w3.org/2000/svg">',
+        '<rect x="8" y="5" width="28" height="48" rx="8" fill="#090b10" stroke="#fbbf24" stroke-width="2.4"/>',
+        '<rect x="11" y="11" width="22" height="11" rx="3" fill="#1e293b"/>',
+        '<rect x="11" y="25" width="22" height="14" rx="2" fill="#111827"/>',
+        '<rect x="11" y="42" width="22" height="7" rx="2" fill="#18181b"/>',
+        '<circle cx="12" cy="7" r="2.2" fill="#fde047"/>',
+        '<circle cx="32" cy="7" r="2.2" fill="#fde047"/>',
+        '<rect x="10" y="51" width="6" height="3" rx="1" fill="#ef4444"/>',
+        '<rect x="28" y="51" width="6" height="3" rx="1" fill="#ef4444"/>',
+      '</svg>'
+    ].join('');
+    return wrap;
+  }
+
+  function findTargetContainer() {
+    let el = document.getElementById('landing-preview-map');
+    if (el) return el;
+    const label = Array.from(document.querySelectorAll('*')).find(
+      (n) => n.children.length === 0 && n.textContent && n.textContent.trim() === 'LIVE ROUTE TELEMETRY'
+    );
+    const card = label && (label.closest('div[class*="rounded"]') || (label.parentElement && label.parentElement.parentElement));
+    if (!card) return null;
+    const existing = card.querySelector('#smd-landing-preview-stage');
+    if (existing) return existing;
+    const blank = Array.from(card.querySelectorAll('div')).find((d) => {
+      const r = d.getBoundingClientRect();
+      return r.height > 120 && r.width > 150;
+    });
+    const stage = document.createElement('div');
+    stage.id = 'smd-landing-preview-stage';
+    if (blank && blank.parentElement) {
+      blank.replaceWith(stage);
+    } else {
+      card.appendChild(stage);
+    }
+    return stage;
+  }
+
+  function mountPreviewMap() {
+    try {
+      const container = findTargetContainer();
+      if (!container) return;
+      container.style.minHeight = '260px';
+      container.style.height = '260px';
+      container.style.width = '100%';
+      container.style.position = 'relative';
+      container.style.borderRadius = '14px';
+      container.style.overflow = 'hidden';
+      container.style.backgroundColor = '#e5e7eb';
+
+      if (container.dataset.smdRendered === '1') return;
+      container.dataset.smdRendered = '1';
+
+      ensureMapboxAssets(async () => {
+        if (typeof mapboxgl === 'undefined') { container.dataset.smdRendered = '0'; return; }
+        const token = window.MAPBOX_TOKEN || DEFAULT_TOKEN;
+        mapboxgl.accessToken = token;
+
+        const map = new mapboxgl.Map({
+          container: container,
+          style: 'mapbox://styles/mapbox/streets-v12',
+          center: [-95.397, 29.991],
+          zoom: 11.3,
+          interactive: true
+        });
+
+        const coords = await fetchRoadRoute(token);
+
+        map.on('load', () => {
+          if (!map.getSource('smd-landing-route')) {
+            map.addSource('smd-landing-route', {
+              type: 'geojson',
+              data: {
+                type: 'Feature',
+                properties: {},
+                geometry: { type: 'LineString', coordinates: coords }
+              }
+            });
+          }
+          if (!map.getLayer('smd-landing-route-border')) {
+            map.addLayer({
+              id: 'smd-landing-route-border',
+              type: 'line',
+              source: 'smd-landing-route',
+              layout: { 'line-join': 'round', 'line-cap': 'round' },
+              paint: { 'line-color': '#0f172a', 'line-width': 7.5, 'line-opacity': 0.9 }
+            });
+          }
+          if (!map.getLayer('smd-landing-route-core')) {
+            map.addLayer({
+              id: 'smd-landing-route-core',
+              type: 'line',
+              source: 'smd-landing-route',
+              layout: { 'line-join': 'round', 'line-cap': 'round' },
+              paint: { 'line-color': '#f59e0b', 'line-width': 4.2 }
+            });
+          }
+
+          const truckPos = coords[Math.floor(coords.length * 0.45)] || START_LNG_LAT;
+          new mapboxgl.Marker({ element: createCustomBlackTruckEl() })
+            .setLngLat(truckPos)
+            .addTo(map);
+        });
+      });
+    } catch (e) {}
+  }
+
+  setInterval(mountPreviewMap, 1000);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(mountPreviewMap, 250));
+  } else {
+    setTimeout(mountPreviewMap, 250);
+  }
+})();
+</script>
+<script id="smd-landing-live-gps-preview">
+(function() {
+  const DEFAULT_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+  const FALLBACK_START = [-95.3498, 29.9979];
+  const FALLBACK_DEST = [-95.4446, 29.9854];
+
+  function ensureMapbox(cb) {
+    if (typeof mapboxgl !== 'undefined') return cb();
+    if (!document.getElementById('smd-mapbox-css')) {
+      const link = document.createElement('link');
+      link.id = 'smd-mapbox-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css';
+      document.head.appendChild(link);
+    }
+    if (!document.getElementById('smd-mapbox-js')) {
+      const script = document.createElement('script');
+      script.id = 'smd-mapbox-js';
+      script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js';
+      script.onload = cb;
+      script.onerror = cb;
+      document.head.appendChild(script);
+    } else {
+      setTimeout(cb, 250);
+    }
+  }
+
+  function getViewerLocation() {
+    return new Promise((resolve) => {
+      if (window.__smdGps && window.__smdGps.last && isFinite(window.__smdGps.last.lat) && isFinite(window.__smdGps.last.lng)) {
+        return resolve({ lng: Number(window.__smdGps.last.lng), lat: Number(window.__smdGps.last.lat), live: true });
+      }
+      if (!navigator.geolocation) {
+        return resolve({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false });
+      }
+      let done = false;
+      const finish = (payload) => {
+        if (done) return;
+        done = true;
+        resolve(payload);
+      };
+      setTimeout(() => finish({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false }), 4500);
+      try {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (pos && pos.coords && isFinite(pos.coords.latitude) && isFinite(pos.coords.longitude)) {
+              finish({ lng: Number(pos.coords.longitude), lat: Number(pos.coords.latitude), live: true });
+            } else {
+              finish({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false });
+            }
+          },
+          () => finish({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false }),
+          { enableHighAccuracy: true, maximumAge: 10000, timeout: 4000 }
+        );
+      } catch (e) {
+        finish({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false });
+      }
+    });
+  }
+
+  async function fetchRoadCoords(startLngLat, endLngLat, token) {
+    const pair = startLngLat[0] + ',' + startLngLat[1] + ';' + endLngLat[0] + ',' + endLngLat[1];
+    if (token) {
+      try {
+        const mbUrl = 'https://api.mapbox.com/directions/v5/mapbox/driving/' + pair +
+          '?geometries=geojson&overview=full&access_token=' + encodeURIComponent(token);
+        const res = await fetch(mbUrl);
+        if (res.ok) {
+          const json = await res.json();
+          const coords = json && json.routes && json.routes[0] && json.routes[0].geometry && json.routes[0].geometry.coordinates;
+          if (Array.isArray(coords) && coords.length > 2) return coords;
+        }
+      } catch (e) {}
+    }
+    try {
+      const osrmUrl = 'https://router.project-osrm.org/route/v1/driving/' + pair +
+        '?geometries=geojson&overview=full';
+      const res = await fetch(osrmUrl);
+      if (res.ok) {
+        const json = await res.json();
+        const coords = json && json.routes && json.routes[0] && json.routes[0].geometry && json.routes[0].geometry.coordinates;
+        if (Array.isArray(coords) && coords.length > 2) return coords;
+      }
+    } catch (e) {}
+    return [startLngLat, endLngLat];
+  }
+
+  function buildTruckEl(headingDeg, labelText) {
+    const deg = Number(headingDeg) || 0;
+    const wrap = document.createElement('div');
+    wrap.className = 'pro-vehicle-marker';
+    wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:none;filter:drop-shadow(0 8px 14px rgba(0,0,0,0.55));';
+    if (labelText) {
+      const tag = document.createElement('div');
+      tag.textContent = String(labelText).toUpperCase();
+      tag.style.cssText = 'font-size:10px;font-weight:900;color:#fff;background:rgba(0,0,0,0.82);padding:2px 7px;border-radius:6px;margin-bottom:3px;white-space:nowrap;letter-spacing:0.06em;border:1px solid rgba(251,191,36,0.55);';
+      wrap.appendChild(tag);
+    }
+    const rot = document.createElement('div');
+    rot.style.cssText = 'transform:rotate(' + deg.toFixed(1) + 'deg);transform-origin:50% 50%;width:44px;height:58px;display:flex;align-items:center;justify-content:center;';
+    rot.innerHTML = '<svg viewBox="0 0 24 36" width="38" height="54" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+      '<rect x="0.8" y="8.5" width="4.2" height="8" rx="1.2" fill="#090d16" stroke="#374151" stroke-width="0.7"/>' +
+      '<rect x="19" y="8.5" width="4.2" height="8" rx="1.2" fill="#090d16" stroke="#374151" stroke-width="0.7"/>' +
+      '<rect x="0.8" y="24.5" width="4.2" height="8" rx="1.2" fill="#090d16" stroke="#374151" stroke-width="0.7"/>' +
+      '<rect x="19" y="24.5" width="4.2" height="8" rx="1.2" fill="#090d16" stroke="#374151" stroke-width="0.7"/>' +
+      '<line x1="1.5" y1="12.5" x2="4.3" y2="12.5" stroke="#9ca3af" stroke-width="0.6"/>' +
+      '<line x1="19.7" y1="12.5" x2="22.5" y2="12.5" stroke="#9ca3af" stroke-width="0.6"/>' +
+      '<line x1="1.5" y1="28.5" x2="4.3" y2="28.5" stroke="#9ca3af" stroke-width="0.6"/>' +
+      '<line x1="19.7" y1="28.5" x2="22.5" y2="28.5" stroke="#9ca3af" stroke-width="0.6"/>' +
+      '<rect x="4" y="12" width="16" height="21" rx="2.5" fill="#0b0f19" stroke="#374151" stroke-width="1.5"/>' +
+      '<rect x="4" y="21" width="16" height="3.5" fill="#f59e0b"/>' +
+      '<line x1="4" y1="22.75" x2="20" y2="22.75" stroke="#ffffff" stroke-width="0.75" opacity="0.85"/>' +
+      '<path d="M6 12H18V5.5C18 3.84315 16.6569 2.5 15 2.5H9C7.34315 2.5 6 3.84315 6 5.5V12Z" fill="#111827" stroke="#4b5563" stroke-width="1.5"/>' +
+      '<path d="M7.5 8H16.5L15.5 4.5H8.5L7.5 8Z" fill="#38bdf8" fill-opacity="0.92" stroke="#bae6fd" stroke-width="0.5"/>' +
+      '<line x1="9" y1="6" x2="15" y2="6" stroke="#ffffff" stroke-width="0.75" opacity="0.65"/>' +
+      '<circle cx="7" cy="3.5" r="1.3" fill="#fbbf24"/>' +
+      '<circle cx="17" cy="3.5" r="1.3" fill="#fbbf24"/>' +
+      '<circle cx="7" cy="3.5" r="0.6" fill="#ffffff"/>' +
+      '<circle cx="17" cy="3.5" r="0.6" fill="#ffffff"/>' +
+    '</svg>';
+    wrap.appendChild(rot);
+    return wrap;
+  }
+
+  function getPreviewHost() {
+    let el = document.getElementById('landing-preview-map') || document.getElementById('smd-landing-preview-stage');
+    if (el) return el;
+    const label = Array.from(document.querySelectorAll('*')).find(
+      (n) => n.children.length === 0 && n.textContent && n.textContent.trim() === 'LIVE ROUTE TELEMETRY'
+    );
+    const card = label && (label.closest('div[class*="rounded"]') || (label.parentElement && label.parentElement.parentElement));
+    if (!card) return null;
+    const blank = Array.from(card.querySelectorAll('div')).find((d) => {
+      const r = d.getBoundingClientRect();
+      return r.height > 120 && r.width > 150;
+    });
+    const stage = document.createElement('div');
+    stage.id = 'smd-landing-preview-stage';
+    if (blank && blank.parentElement) {
+      blank.replaceWith(stage);
+    } else {
+      card.appendChild(stage);
+    }
+    return stage;
+  }
+
+  async function initLivePreview() {
+    try {
+      const host = getPreviewHost();
+      if (!host || host.dataset.smdLiveReady === '1') return;
+      host.dataset.smdLiveReady = '1';
+      host.style.minHeight = '260px';
+      host.style.height = '260px';
+      host.style.width = '100%';
+      host.style.position = 'relative';
+      host.style.borderRadius = '14px';
+      host.style.overflow = 'hidden';
+
+      const loc = await getViewerLocation();
+      const startPt = [loc.lng, loc.lat];
+      const destPt = loc.live ? [loc.lng - 0.055, loc.lat + 0.018] : FALLBACK_DEST;
+
+      ensureMapbox(async () => {
+        if (typeof mapboxgl === 'undefined') {
+          host.dataset.smdLiveReady = '0';
+          return;
+        }
+        const token = window.MAPBOX_TOKEN || DEFAULT_TOKEN;
+        mapboxgl.accessToken = token;
+
+        const map = new mapboxgl.Map({
+          container: host,
+          style: 'mapbox://styles/mapbox/streets-v12',
+          center: startPt,
+          zoom: 13.5,
+          interactive: true
+        });
+
+        const coords = await fetchRoadCoords(startPt, destPt, token);
+        const spawnPt = (Array.isArray(coords) && coords.length > 0) ? coords[0] : startPt;
+
+        map.on('load', () => {
+          map.jumpTo({ center: spawnPt, zoom: 13.5 });
+          if (!map.getSource('smd-landing-live-route')) {
+            map.addSource('smd-landing-live-route', {
+              type: 'geojson',
+              data: {
+                type: 'Feature',
+                properties: {},
+                geometry: { type: 'LineString', coordinates: coords }
+              }
+            });
+          }
+          if (!map.getLayer('smd-landing-live-route-casing')) {
+            map.addLayer({
+              id: 'smd-landing-live-route-casing',
+              type: 'line',
+              source: 'smd-landing-live-route',
+              layout: { 'line-join': 'round', 'line-cap': 'round' },
+              paint: { 'line-color': '#0f172a', 'line-width': 7.5, 'line-opacity': 0.9 }
+            });
+          }
+          if (!map.getLayer('smd-landing-live-route-line')) {
+            map.addLayer({
+              id: 'smd-landing-live-route-line',
+              type: 'line',
+              source: 'smd-landing-live-route',
+              layout: { 'line-join': 'round', 'line-cap': 'round' },
+              paint: { 'line-color': '#2563eb', 'line-width': 4.2 }
+            });
+          }
+
+          const marker = new mapboxgl.Marker({ element: buildTruckEl(0, 'LIVE DRIVER') })
+            .setLngLat(spawnPt)
+            .addTo(map);
+
+          if (loc.live && navigator.geolocation && navigator.geolocation.watchPosition) {
+            navigator.geolocation.watchPosition(
+              (pos) => {
+                if (!pos || !pos.coords) return;
+                const pLng = Number(pos.coords.longitude);
+                const pLat = Number(pos.coords.latitude);
+                if (isFinite(pLng) && isFinite(pLat)) {
+                  marker.setLngLat([pLng, pLat]);
+                  map.panTo([pLng, pLat], { duration: 400 });
+                }
+              },
+              () => {},
+              { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+            );
+          }
+        });
+      });
+    } catch (e) {}
+  }
+
+  setInterval(initLivePreview, 1000);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(initLivePreview, 200));
+  } else {
+    setTimeout(initLivePreview, 200);
+  }
+})();
+</script>
+<script id="smd-landing-3d-buildings-layer">
+(function() {
+  function applyLanding3D(map) {
+    try {
+      if (!map || typeof map.getStyle !== 'function' || typeof map.addLayer !== 'function') return;
+      if (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded()) {
+        if (typeof map.once === 'function') map.once('load', () => applyLanding3D(map));
+        return;
+      }
+      if (typeof map.easeTo === 'function') {
+        map.easeTo({ pitch: 55, zoom: 16, duration: 400 });
+      }
+      if (map.getLayer && map.getLayer('smd-landing-3d-buildings')) return;
+      const style = map.getStyle();
+      const layers = (style && style.layers) || [];
+      const labelLayer = layers.find((l) => l.type === 'symbol' && l.layout && l.layout['text-field']);
+      const compositeSource = style && style.sources && style.sources.composite ? 'composite' : null;
+      if (!compositeSource) return;
+
+      map.addLayer({
+        id: 'smd-landing-3d-buildings',
+        source: compositeSource,
+        'source-layer': 'building',
+        filter: ['==', 'extrude', 'true'],
+        type: 'fill-extrusion',
+        minzoom: 13,
+        paint: {
+          'fill-extrusion-color': '#94a3b8',
+          'fill-extrusion-height': ['coalesce', ['get', 'height'], 16],
+          'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
+          'fill-extrusion-opacity': 0.88
+        }
+      }, labelLayer ? labelLayer.id : undefined);
+    } catch (e) {}
+  }
+
+  setInterval(() => {
+    try {
+      const host = document.getElementById('landing-preview-map') || document.getElementById('smd-landing-preview-stage');
+      if (!host) return;
+      const maps = [];
+      if (window.__smdSoloMap) maps.push(window.__smdSoloMap);
+      if (Array.isArray(window.__smdSoloMaps)) {
+        window.__smdSoloMaps.forEach((m) => { if (m && maps.indexOf(m) === -1) maps.push(m); });
+      }
+      maps.forEach((m) => {
+        try {
+          const c = typeof m.getContainer === 'function' ? m.getContainer() : null;
+          if (c && (c.id === 'landing-preview-map' || c.id === 'smd-landing-preview-stage' || (c.closest && c.closest('#landing-view')))) {
+            applyLanding3D(m);
+          }
+        } catch (e) {}
+      });
+    } catch (e) {}
+  }, 600);
+})();
+</script>
+<script id="smd-landing-cta-card-spacing">
+(function() {
+  function separateCtaAndCard() {
+    try {
+      const heading = Array.from(document.querySelectorAll('#landing-view h1, #landing-view h2, #landing-view h3, #landing-view div')).find(
+        (el) => el.children.length === 0 && el.textContent && el.textContent.trim() === 'Real-Time Client Telemetry'
+      );
+      if (!heading) return;
+
+      const card = heading.closest('div[class*="rounded-2xl"], div[class*="rounded-3xl"], div[class*="rounded-xl"]') ||
+        (heading.parentElement && heading.parentElement.parentElement);
+      if (!card) return;
+
+      card.style.marginTop = '28px';
+
+      const signInBtn = Array.from(document.querySelectorAll('#landing-view button, #landing-view a')).find(
+        (el) => el.textContent && el.textContent.trim().toLowerCase() === 'sign in'
+      );
+      const ctaRow = signInBtn && signInBtn.parentElement;
+      if (ctaRow && ctaRow.parentElement === card.parentElement) {
+        ctaRow.style.marginBottom = '16px';
+      }
+    } catch (e) {}
+  }
+
+  separateCtaAndCard();
+  setInterval(separateCtaAndCard, 500);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', separateCtaAndCard);
+  }
+  window.addEventListener('load', separateCtaAndCard);
+})();
+</script>
+<script id="smd-hard-lock-controls">
+(function() {
+  let lastFire = 0;
+  function fireOnce(fn, e) {
+    if (e) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+    }
+    const now = Date.now();
+    if (now - lastFire < 250) return;
+    lastFire = now;
+    fn();
+  }
+  window.soloRecenterMap = function(e) {
+    fireOnce(() => {
+      if (typeof window.recenterDriverMap === 'function') window.recenterDriverMap();
+    }, e);
+  };
+  window.soloFitBoth = function(e) {
+    fireOnce(() => {
+      if (typeof window.fitDriverMap === 'function') window.fitDriverMap();
+    }, e);
+  };
+  function attachBtn(btn, handler) {
+    if (!btn || btn.dataset.smdMobileBound === '1') return;
+    btn.dataset.smdMobileBound = '1';
+    btn.style.touchAction = 'manipulation';
+    btn.style.pointerEvents = 'auto';
+    btn.style.zIndex = '40';
+    btn.removeAttribute('onclick');
+    btn.onclick = null;
+    btn.addEventListener('click', handler, true);
+    btn.addEventListener('pointerup', handler, true);
+  }
+  function wireSoloBar() {
+    const bar = document.getElementById('smd-solo-map-controls');
+    if (!bar) return;
+    bar.style.zIndex = '40';
+    bar.style.pointerEvents = 'auto';
+    const btns = bar.querySelectorAll('button');
+    if (btns[0]) attachBtn(btns[0], window.soloRecenterMap);
+    if (btns[1]) attachBtn(btns[1], window.soloFitBoth);
+  }
+  wireSoloBar();
+  setInterval(wireSoloBar, 1000);
+  document.addEventListener('DOMContentLoaded', wireSoloBar);
+  window.addEventListener('load', wireSoloBar);
+})();
+</script>
+<script id="smd-register-button-guard">
+(function() {
+  let deferredPrompt = null;
+  window.addEventListener("beforeinstallprompt", function(e) {
+    e.preventDefault();
+    deferredPrompt = e;
+  });
+  function isStandaloneMode() {
+    try {
+      if (window.matchMedia && (
+        window.matchMedia("(display-mode: standalone)").matches ||
+        window.matchMedia("(display-mode: fullscreen)").matches ||
+        window.matchMedia("(display-mode: minimal-ui)").matches
+      )) return true;
+      if (window.navigator && window.navigator.standalone === true) return true;
+      if (window.Capacitor && typeof window.Capacitor.isNativePlatform === "function" && window.Capacitor.isNativePlatform()) return true;
+      if (window.cordova) return true;
+    } catch (e) {}
+    return false;
+  }
+  function enterJobSetup(email) {
+    try {
+      localStorage.setItem("smd_signed_in", "1");
+      localStorage.setItem("smd_user_email", email);
+      if (window.SafeStorage) {
+        window.SafeStorage.setItem("smd_signed_in", "1");
+        window.SafeStorage.setItem("smd_user_email", email);
+      }
+    } catch (e) {}
+    if (typeof window.switchView === "function") window.switchView("job-setup-view");
+  }
+  window.smdInstallSeeMyDriver = async function() {
+    if (deferredPrompt) {
+      try {
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+      } catch (e) {}
+      return;
+    }
+    const hint = document.getElementById("smd-install-hint");
+    if (hint) hint.classList.remove("hidden");
+  };
+  function showInstallGate(email) {
+    try {
+      if (email) {
+        localStorage.setItem("smd_user_email", email);
+        if (window.SafeStorage) window.SafeStorage.setItem("smd_user_email", email);
+      }
+    } catch (e) {}
+    const regView = document.getElementById("register-view");
+    if (regView && !document.getElementById("smd-apk-gate-box")) {
+      const box = document.createElement("div");
+      box.id = "smd-apk-gate-box";
+      box.className = "mt-4 p-4 rounded-2xl bg-amber-400/10 border border-amber-400/40 text-amber-200 text-xs flex flex-col gap-3";
+      box.innerHTML = '<div class="font-bold text-amber-400">Install SeeMyDriver</div>' +
+        '<div>Add SeeMyDriver to your home screen for quick launch without browser file warnings.</div>' +
+        '<button type="button" onclick="window.smdInstallSeeMyDriver()" class="w-full text-center bg-amber-400 text-black font-black py-2.5 px-4 rounded-xl">Install SeeMyDriver</button>' +
+        '<div id="smd-install-hint" class="hidden text-[11px] text-amber-100/90">Tap Chrome\'s menu (?) and select <strong>Add to Home screen</strong> or <strong>Install app</strong> to place SeeMyDriver on your home screen.</div>' +
+        '<a href="https://github.com/juliuslamarjones/seemydriver-rebuild/releases/download/v1.0.0/seemydriver.apk" class="text-[11px] underline text-amber-300/80 text-center">Need the Android APK package instead?</a>';
+      const card = regView.querySelector(".w-full.bg-\\[\\#12141c\\]") || regView.firstElementChild;
+      if (card) card.appendChild(box);
+    }
+  }
+  function runRegister() {
+    const emailEl = document.getElementById("reg-email");
+    const passEl = document.getElementById("reg-password");
+    const email = (emailEl && emailEl.value ? emailEl.value.trim() : "").toLowerCase();
+    const password = passEl && passEl.value ? passEl.value : "";
+    if (!email) { alert("Please enter your email address."); return; }
+    if (!password || password.length < 4) { alert("Please enter a password (at least 4 characters)."); return; }
+    if (!isStandaloneMode()) {
+      showInstallGate(email);
+      return;
+    }
+    enterJobSetup(email);
+  }
+  window.handleRegister = runRegister;
+  function bindRegisterBtn() {
+    const btn = document.querySelector("#register-view button");
+    if (!btn || btn.dataset.smdRegBound === "1") return;
+    btn.dataset.smdRegBound = "1";
+    btn.style.setProperty("pointer-events", "auto", "important");
+    btn.style.setProperty("touch-action", "manipulation", "important");
+    btn.style.position = "relative";
+    btn.style.zIndex = "99";
+    btn.removeAttribute("onclick");
+    btn.onclick = null;
+    btn.addEventListener("click", function(ev) {
+      if (ev && typeof ev.preventDefault === "function") ev.preventDefault();
+      runRegister();
+    }, true);
+  }
+  bindRegisterBtn();
+  setInterval(bindRegisterBtn, 500);
+  document.addEventListener("DOMContentLoaded", bindRegisterBtn);
+  window.addEventListener("load", bindRegisterBtn);
+})();
+</script>
+<script id="smd-fleet-switch-fix">
+(function() {
+  window.checkFleetAccessAndSwitch = function(e) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    try {
+      window.location.href = 'fleet.html';
+    } catch (err) {
+      window.location.assign('fleet.html');
+    }
+  };
+})();
+</script>
+<script id="smd-solo-3d-bind">
+(function() {
+  let last3dFire = 0;
+  function trigger3D(e) {
+    if (e) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+    }
+    const now = Date.now();
+    if (now - last3dFire < 250) return;
+    last3dFire = now;
+    if (typeof window.toggleDriver3D === 'function') {
+      window.toggleDriver3D();
+    }
+  }
+  function bind3DBtn() {
+    const btn = document.getElementById('driver-3d-btn');
+    if (!btn || btn.dataset.smd3dBound === '1') return;
+    btn.dataset.smd3dBound = '1';
+    btn.style.touchAction = 'manipulation';
+    btn.style.pointerEvents = 'auto';
+    btn.style.zIndex = '40';
+    btn.removeAttribute('onclick');
+    btn.onclick = null;
+    btn.addEventListener('click', trigger3D, true);
+    btn.addEventListener('pointerup', trigger3D, true);
+  }
+  bind3DBtn();
+  setInterval(bind3DBtn, 1000);
+  document.addEventListener('DOMContentLoaded', bind3DBtn);
+  window.addEventListener('load', bind3DBtn);
+})();
+</script>
 <script id="smd-solo-geocoder-guard">
 (function() {
   let timer = null;
@@ -591,4 +1526,3 @@
 </script>
 </body>
 </html>
-

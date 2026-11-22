@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SeeMyDriver - Live Tracking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyByzuD-22vTdVwNdtlgL-RrhJHvdhdRuvg&libraries=geometry"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body class="bg-black text-white h-screen flex flex-col justify-between overflow-hidden selection:bg-yellow-400 selection:text-black">
+
+    <!-- Compact Mobile Header -->
+    <header class="w-full max-w-2xl mx-auto px-4 py-3 flex items-center justify-between border-b border-neutral-900 bg-black z-10">
+        <div class="flex items-center gap-2">
+            <span class="text-xl font-black tracking-tight text-white">See<span class="text-yellow-400">My</span>Driver</span>
+            <span class="text-sm">📡</span>
+        </div>
+        <div class="bg-neutral-900 border border-neutral-800 text-yellow-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider" id="tripStatus">Connecting...</div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="w-full max-w-2xl mx-auto px-4 py-3 flex-1 flex flex-col gap-3 overflow-hidden">
+        
+        <!-- Driver Info Card -->
+        <div class="bg-neutral-950 border border-neutral-900 p-3.5 rounded-2xl flex flex-col gap-0.5 shadow-lg shrink-0">
+            <div class="flex items-center justify-between">
+                <h1 class="text-xs font-black text-white truncate" id="driverTitle">Driver En Route</h1>
+                <span class="text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full font-bold">Live GPS</span>
+            </div>
+            <p class="text-[11px] text-neutral-400 truncate" id="addressText">Destination: Loading...</p>
+        </div>
+
+        <!-- Side-by-Side Stats Cards -->
+        <div class="grid grid-cols-2 gap-3 shrink-0">
+            <div class="bg-neutral-950 border border-neutral-900 p-3 rounded-2xl flex items-center gap-3 shadow-lg">
+                <span class="text-xl bg-neutral-900 p-2 rounded-xl">📍</span>
+                <div>
+                    <p class="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">Distance</p>
+                    <p class="text-sm font-black text-yellow-400" id="distanceDisplay">--</p>
+                </div>
+            </div>
+
+            <div class="bg-neutral-950 border border-neutral-900 p-3 rounded-2xl flex items-center gap-3 shadow-lg">
+                <span class="text-xl bg-neutral-900 p-2 rounded-xl">⏱️</span>
+                <div>
+                    <p class="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">Arrival ETA</p>
+                    <p class="text-sm font-black text-yellow-400" id="etaDisplay">--</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Full-Fill Map Container -->
+        <div class="bg-neutral-950 border border-neutral-900 rounded-2xl overflow-hidden flex-1 shadow-2xl relative min-h-[250px]">
+            <div id="map" class="w-full h-full"></div>
+        </div>
+
+    </main>
+
+    <!-- Minimal Mobile Footer -->
+    <footer class="w-full max-w-2xl mx-auto px-4 py-2 text-center text-[10px] text-neutral-600 border-t border-neutral-900 shrink-0">
+        &copy; 2026 SeeMyDriver. Powered by Quick Tap Solutions.
+    </footer>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        let rawCompanyId = urlParams.get('company') || 'Rabbit_Box';
+        const companyId = rawCompanyId.replace(/[.#$\/\[\]]/g, '_');
+        const driverName = urlParams.get('driver') || 'Driver';
+
+        document.getElementById('driverTitle').innerText = `${driverName} is En Route`;
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAfT3ZCE8DEMjsf4FLIqDgdYIQL1woIJOI",
+            authDomain: "seemydriver-prod.firebaseapp.com",
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",
+            projectId: "seemydriver-prod",
+            storageBucket: "seemydriver-prod.appspot.com",
+            messagingSenderId: "163660133229",
+            appId: "1:163660133229:web:7e993e6ee37f940a4a0464"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+
+        let map;
+        let driverMarker = null;
+        let directionsService;
+        let directionsRenderer;
+
+        function initMap() {
+            const defaultCenter = { lat: 29.9988, lng: -95.2621 };
+            map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 14,
+                center: defaultCenter,
+                disableDefaultUI: false,
+                zoomControl: true,
+                streetViewControl: false,
+                mapTypeControl: false
+            });
+
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer({
+                map: map,
+                suppressMarkers: false,
+                polylineOptions: {
+                    strokeColor: "#FACC15",
+                    strokeWeight: 5,
+                    strokeOpacity: 0.8
+                }
+            });
+
+            listenToDriverLocation();
+        }
+
+        window.onload = initMap;
+
+        function listenToDriverLocation() {
+            const sanitizedDriverKey = driverName.replace(/[.#$\/\[\]]/g, '_');
+            const tripRef = db.ref(`companies/${companyId}/trips/${sanitizedDriverKey}`);
+
+            tripRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (!data || !data.lat || !data.lng) {
+                    document.getElementById('tripStatus').innerText = "Waiting for GPS...";
+                    document.getElementById('addressText').innerText = "Driver has not started broadcasting yet.";
+                    return;
+                }
+
+                document.getElementById('tripStatus').innerText = "Active";
+                const destinationAddress = data.address || 'Destination';
+                document.getElementById('addressText').innerText = `Destination: ${destinationAddress}`;
+
+                const driverPos = { lat: parseFloat(data.lat), lng: parseFloat(data.lng) };
+
+                if (driverMarker) {
+                    driverMarker.setPosition(driverPos);
+                } else {
+                    driverMarker = new google.maps.Marker({
+                        position: driverPos,
+                        map: map,
+                        title: data.driverName || driverName,
+                        icon: {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: 10,
+                            fillColor: "#FACC15",
+                            fillOpacity: 1,
+                            strokeWeight: 3,
+                            strokeColor: "#FFFFFF"
+                        }
+                    });
+                }
+
+                if (destinationAddress && destinationAddress !== 'Destination') {
+                    directionsService.route(
+                        {
+                            origin: driverPos,
+                            destination: destinationAddress,
+                            travelMode: google.maps.TravelMode.DRIVING
+                        },
+                        (response, status) => {
+                            if (status === "OK") {
+                                directionsRenderer.setDirections(response);
+                                const leg = response.routes[0].legs[0];
+                                document.getElementById('distanceDisplay').innerText = leg.distance.text;
+                                document.getElementById('etaDisplay').innerText = leg.duration.text;
+                            } else {
+                                console.error("Directions request failed due to " + status);
+                            }
+                        }
+                    );
+                } else {
+                    map.panTo(driverPos);
+                }
+            });
+        }
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SeeMyDriver - Driver Dispatch Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+</head>
+<body class="bg-black text-white min-h-screen flex flex-col justify-between items-center selection:bg-yellow-400 selection:text-black">
+
+    <!-- HEADER -->
+    <header class="w-full px-6 py-4 flex items-center justify-between border-b border-neutral-900 bg-neutral-950">
+        <div class="flex items-center gap-3">
+            <span class="text-xl font-black tracking-tight text-white">See<span class="text-yellow-400">My</span>Driver</span>
+            <span class="text-[10px] bg-blue-500 text-white font-black px-2.5 py-0.5 rounded-full uppercase">Driver Terminal</span>
+        </div>
+        <div class="flex items-center gap-2 bg-neutral-900 px-3 py-1.5 rounded-full border border-neutral-800">
+            <span id="gps-dot" class="w-2.5 h-2.5 rounded-full bg-yellow-500 animate-pulse"></span>
+            <span id="gps-status-text" class="text-[10px] font-black uppercase text-yellow-400">Acquiring GPS...</span>
+        </div>
+    </header>
+
+    <!-- MAIN DISPATCH TERMINAL CONTAINER -->
+    <main class="w-full flex-1 flex items-center justify-center p-4">
+        <div class="bg-neutral-950 border border-neutral-800 w-full max-w-md p-8 rounded-3xl shadow-2xl flex flex-col gap-6">
+            
+            <div class="flex flex-col gap-1 text-center">
+                <span id="driver-id-display" class="text-xs font-black text-yellow-400 uppercase tracking-widest">Connecting Unit...</span>
+                <h1 class="text-2xl font-black text-white tracking-tight">Live GPS Broadcast</h1>
+                <p class="text-xs text-neutral-400">Keep this screen open while driving to stream your location back to dispatch.</p>
+            </div>
+
+            <!-- TRIP DETAILS CARD -->
+            <div class="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl flex flex-col gap-3">
+                <div class="flex justify-between items-center border-b border-neutral-800 pb-2">
+                    <span class="text-[10px] font-bold text-neutral-400 uppercase">Assigned Client</span>
+                    <span id="client-display" class="text-xs font-bold text-white">Loading...</span>
+                </div>
+                <div class="flex justify-between items-center border-b border-neutral-800 pb-2">
+                    <span class="text-[10px] font-bold text-neutral-400 uppercase">Destination</span>
+                    <span id="destination-display" class="text-xs font-bold text-white truncate max-w-[200px]">Loading...</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-bold text-neutral-400 uppercase">Current Status</span>
+                    <button onclick="toggleDriverStatus()" id="status-toggle-btn" class="text-[10px] bg-green-500/20 text-green-400 font-bold px-2.5 py-1 rounded-lg border border-green-500/30 transition cursor-pointer">En Route ⚡</button>
+                </div>
+            </div>
+
+            <!-- TELEMETRY METRICS -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl flex flex-col items-center justify-center">
+                    <span class="text-[10px] font-bold text-neutral-500 uppercase">Live Speed</span>
+                    <span id="speed-display" class="text-xl font-black text-yellow-400">0 <span class="text-xs font-normal text-neutral-400">MPH</span></span>
+                </div>
+                <div class="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl flex flex-col items-center justify-center">
+                    <span class="text-[10px] font-bold text-neutral-500 uppercase">Broadcast State</span>
+                    <span id="broadcast-state" class="text-xs font-black text-neutral-400 mt-1">Connecting</span>
+                </div>
+            </div>
+
+            <!-- ERROR BANNER -->
+            <div id="dispatch-alert" class="hidden p-3 rounded-xl text-xs font-bold border bg-red-500/10 border-red-500/30 text-red-400 text-center"></div>
+
+        </div>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="w-full px-6 py-3 text-center text-[10px] text-neutral-600 border-t border-neutral-900">
+        &copy; 2026 SeeMyDriver. Powered by Quick Tap Solutions.
+    </footer>
+
+    <script>
+        const firebaseConfig = { 
+            apiKey: "AIzaSyD3L_5ZYn84bCySfGKu7rynWSRFxFNbV9c",
+            authDomain: "seemydriver-prod.firebaseapp.com",
+            databaseURL: "seemydriver-prod-default-rtdb.firebaseio.com/",
+            projectId: "seemydriver-prod",
+            storageBucket: "seemydriver-prod.appspot.com",
+            messagingSenderId: "163660133229",
+            appId: "1:163660133229:web:7e993e6ee37f940a04a064"
+        };
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const auth = firebase.auth();
+        const db = firebase.database();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const dispatcherUid = urlParams.get('uid');
+        const driverName = urlParams.get('driver');
+
+        let currentStatus = "En Route";
+        let watchId = null;
+
+        document.getElementById('driver-id-display').textContent = driverName ? `Unit: ${driverName}` : "Unidentified Unit";
+
+        if (!dispatcherUid || !driverName) {
+            showError("Invalid or missing dispatch parameters. Please request a new link from your fleet manager.");
+        } else {
+            // Sign in anonymously to satisfy secure Firebase rules, then start tracking
+            auth.signInAnonymously()
+                .then(() => {
+                    initTripDataListener();
+                    startLocationBroadcast();
+                })
+                .catch((error) => {
+                    showError("Authentication error: " + error.message);
+                });
+        }
+
+        function initTripDataListener() {
+            const tripRef = db.ref(`users/${dispatcherUid}/trips/${driverName}`);
+            tripRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    document.getElementById('client-display').textContent = data.clientName || 'Standard Client';
+                    document.getElementById('destination-display').textContent = data.destination || 'Not Specified';
+                    if (data.status) {
+                        currentStatus = data.status;
+                        updateStatusButtonUI();
+                    }
+                }
+            });
+        }
+
+        function startLocationBroadcast() {
+            if (!navigator.geolocation) {
+                showError("Geolocation is not supported by your mobile browser.");
+                return;
+            }
+
+            const gpsDot = document.getElementById('gps-dot');
+            const gpsStatusText = document.getElementById('gps-status-text');
+            const broadcastState = document.getElementById('broadcast-state');
+
+            gpsDot.className = "w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse";
+            gpsStatusText.className = "text-[10px] font-black uppercase text-green-400";
+            gpsStatusText.textContent = "Broadcasting Live";
+            broadcastState.textContent = "Active ⚡";
+            broadcastState.className = "text-xs font-black text-green-400 mt-1";
+
+            watchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const speedMps = position.coords.speed || 0;
+                    const speedMph = Math.max(0, Math.round(speedMps * 2.23694));
+
+                    document.getElementById('speed-display').innerHTML = `${speedMph} <span class="text-xs font-normal text-neutral-400">MPH</span>`;
+
+                    // Push directly to the dispatcher's isolated database partition
+                    db.ref(`users/${dispatcherUid}/trips/${driverName}`).update({
+                        lat: lat,
+                        lng: lng,
+                        speed: speedMph,
+                        status: currentStatus,
+                        updatedAt: firebase.database.ServerValue.TIMESTAMP
+                    });
+                },
+                (error) => {
+                    console.error("GPS Error:", error);
+                    showError("GPS Signal Lost: " + error.message);
+                    gpsDot.className = "w-2.5 h-2.5 rounded-full bg-red-500";
+                    gpsStatusText.className = "text-[10px] font-black uppercase text-red-400";
+                    gpsStatusText.textContent = "Signal Lost";
+                    broadcastState.textContent = "Paused ❌";
+                    broadcastState.className = "text-xs font-black text-red-400 mt-1";
+                },
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 1000,
+                    timeout: 10000
+                }
+            );
+        }
+
+        function toggleDriverStatus() {
+            currentStatus = currentStatus === "En Route" ? "Arrived" : "En Route";
+            updateStatusButtonUI();
+
+            if (dispatcherUid && driverName) {
+                db.ref(`users/${dispatcherUid}/trips/${driverName}`).update({
+                    status: currentStatus,
+                    updatedAt: firebase.database.ServerValue.TIMESTAMP
+                });
+            }
+        }
+
+        function updateStatusButtonUI() {
+            const btn = document.getElementById('status-toggle-btn');
+            if (currentStatus === "Arrived") {
+                btn.className = "text-[10px] bg-blue-500/20 text-blue-400 font-bold px-2.5 py-1 rounded-lg border border-blue-500/30 transition cursor-pointer";
+                btn.textContent = "Arrived 🏁";
+            } else {
+                btn.className = "text-[10px] bg-green-500/20 text-green-400 font-bold px-2.5 py-1 rounded-lg border border-green-500/30 transition cursor-pointer";
+                btn.textContent = "En Route ⚡";
+            }
+        }
+
+        function showError(message) {
+            const alertBox = document.getElementById('dispatch-alert');
+            alertBox.textContent = message;
+            alertBox.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>

@@ -379,9 +379,9 @@ window.soloFitBoth = function() {
       const c = getSoloCoords();
       const target = c.driver || c.dest || [-95.4613, 29.9855];
       if (typeof m.flyTo === 'function') {
-        m.flyTo({ center: target, zoom: 14, essential: true, duration: 800 });
+        m.flyTo({ center: target, zoom: 14, bearing: 0, essential: true, duration: 800 });
       } else if (typeof m.easeTo === 'function') {
-        m.easeTo({ center: target, zoom: 14, duration: 800 });
+        m.easeTo({ center: target, zoom: 14, bearing: 0, duration: 800 });
       }
     } catch (e) {}
   };
@@ -395,7 +395,7 @@ window.soloFitBoth = function() {
         const bounds = new mapboxgl.LngLatBounds();
         bounds.extend(c.driver);
         bounds.extend(c.dest);
-        m.fitBounds(bounds, { padding: 65, maxZoom: 15, duration: 850 });
+        m.fitBounds(bounds, { padding: 65, maxZoom: 15, bearing: 0, duration: 850 });
       } else if (c.driver || c.dest) {
         window.soloRecenterMap();
       }
@@ -1200,6 +1200,105 @@ window.soloFitBoth = function() {
   setInterval(wireSoloBar, 1000);
   document.addEventListener('DOMContentLoaded', wireSoloBar);
   window.addEventListener('load', wireSoloBar);
+})();
+</script>
+<script id="smd-register-button-guard">
+(function() {
+  let deferredPrompt = null;
+  window.addEventListener("beforeinstallprompt", function(e) {
+    e.preventDefault();
+    deferredPrompt = e;
+  });
+  function isStandaloneMode() {
+    try {
+      if (window.matchMedia && (
+        window.matchMedia("(display-mode: standalone)").matches ||
+        window.matchMedia("(display-mode: fullscreen)").matches ||
+        window.matchMedia("(display-mode: minimal-ui)").matches
+      )) return true;
+      if (window.navigator && window.navigator.standalone === true) return true;
+      if (window.Capacitor && typeof window.Capacitor.isNativePlatform === "function" && window.Capacitor.isNativePlatform()) return true;
+      if (window.cordova) return true;
+    } catch (e) {}
+    return false;
+  }
+  function enterJobSetup(email) {
+    try {
+      localStorage.setItem("smd_signed_in", "1");
+      localStorage.setItem("smd_user_email", email);
+      if (window.SafeStorage) {
+        window.SafeStorage.setItem("smd_signed_in", "1");
+        window.SafeStorage.setItem("smd_user_email", email);
+      }
+    } catch (e) {}
+    if (typeof window.switchView === "function") window.switchView("job-setup-view");
+  }
+  window.smdInstallSeeMyDriver = async function() {
+    if (deferredPrompt) {
+      try {
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+      } catch (e) {}
+      return;
+    }
+    const hint = document.getElementById("smd-install-hint");
+    if (hint) hint.classList.remove("hidden");
+  };
+  function showInstallGate(email) {
+    try {
+      if (email) {
+        localStorage.setItem("smd_user_email", email);
+        if (window.SafeStorage) window.SafeStorage.setItem("smd_user_email", email);
+      }
+    } catch (e) {}
+    const regView = document.getElementById("register-view");
+    if (regView && !document.getElementById("smd-apk-gate-box")) {
+      const box = document.createElement("div");
+      box.id = "smd-apk-gate-box";
+      box.className = "mt-4 p-4 rounded-2xl bg-amber-400/10 border border-amber-400/40 text-amber-200 text-xs flex flex-col gap-3";
+      box.innerHTML = '<div class="font-bold text-amber-400">Install SeeMyDriver</div>' +
+        '<div>Add SeeMyDriver to your home screen for quick launch without browser file warnings.</div>' +
+        '<button type="button" onclick="window.smdInstallSeeMyDriver()" class="w-full text-center bg-amber-400 text-black font-black py-2.5 px-4 rounded-xl">Install SeeMyDriver</button>' +
+        '<div id="smd-install-hint" class="hidden text-[11px] text-amber-100/90">Tap Chrome\'s menu (?) and select <strong>Add to Home screen</strong> or <strong>Install app</strong> to place SeeMyDriver on your home screen.</div>' +
+        '<a href="https://github.com/juliuslamarjones/seemydriver-rebuild/releases/download/v1.0.0/seemydriver.apk" class="text-[11px] underline text-amber-300/80 text-center">Need the Android APK package instead?</a>';
+      const card = regView.querySelector(".w-full.bg-\\[\\#12141c\\]") || regView.firstElementChild;
+      if (card) card.appendChild(box);
+    }
+  }
+  function runRegister() {
+    const emailEl = document.getElementById("reg-email");
+    const passEl = document.getElementById("reg-password");
+    const email = (emailEl && emailEl.value ? emailEl.value.trim() : "").toLowerCase();
+    const password = passEl && passEl.value ? passEl.value : "";
+    if (!email) { alert("Please enter your email address."); return; }
+    if (!password || password.length < 4) { alert("Please enter a password (at least 4 characters)."); return; }
+    if (!isStandaloneMode()) {
+      showInstallGate(email);
+      return;
+    }
+    enterJobSetup(email);
+  }
+  window.handleRegister = runRegister;
+  function bindRegisterBtn() {
+    const btn = document.querySelector("#register-view button");
+    if (!btn || btn.dataset.smdRegBound === "1") return;
+    btn.dataset.smdRegBound = "1";
+    btn.style.setProperty("pointer-events", "auto", "important");
+    btn.style.setProperty("touch-action", "manipulation", "important");
+    btn.style.position = "relative";
+    btn.style.zIndex = "99";
+    btn.removeAttribute("onclick");
+    btn.onclick = null;
+    btn.addEventListener("click", function(ev) {
+      if (ev && typeof ev.preventDefault === "function") ev.preventDefault();
+      runRegister();
+    }, true);
+  }
+  bindRegisterBtn();
+  setInterval(bindRegisterBtn, 500);
+  document.addEventListener("DOMContentLoaded", bindRegisterBtn);
+  window.addEventListener("load", bindRegisterBtn);
 })();
 </script>
 <script id="smd-fleet-switch-fix">
