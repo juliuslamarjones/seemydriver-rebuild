@@ -1256,12 +1256,10 @@ window.soloFitBoth = function() {
     if (regView && !document.getElementById("smd-apk-gate-box")) {
       const box = document.createElement("div");
       box.id = "smd-apk-gate-box";
-      box.className = "mt-4 p-4 rounded-2xl bg-amber-400/10 border border-amber-400/40 text-amber-200 text-xs flex flex-col gap-3";
-      box.innerHTML = '<div class="font-bold text-amber-400">Install SeeMyDriver</div>' +
-        '<div>Add SeeMyDriver to your home screen for quick launch without browser file warnings.</div>' +
-        '<button type="button" onclick="window.smdInstallSeeMyDriver()" class="w-full text-center bg-amber-400 text-black font-black py-2.5 px-4 rounded-xl">Install SeeMyDriver</button>' +
-        '<div id="smd-install-hint" class="hidden text-[11px] text-amber-100/90">Tap Chrome\'s menu (&vellip;) and select <strong>Add to Home screen</strong> or <strong>Install app</strong> to place SeeMyDriver on your home screen.</div>';
-      const card = regView.querySelector(".w-full.bg-\\[\\#12141c\\]") || regView.firstElementChild;
+      box.className = "mt-4 p-4 rounded-2xl bg-[#12141c] border border-amber-400/35 text-neutral-200 text-xs flex flex-col gap-3 shadow-lg";
+      box.innerHTML = '<div class="flex items-center gap-2 font-black text-amber-400 text-sm"><span>&#128064;</span><span>SeeMyDriver</span></div>' +
+        '<button type="button" onclick="if(typeof window.smdInstallSeeMyDriver===\x27function\x27)window.smdInstallSeeMyDriver()" class="w-full text-center bg-amber-400 hover:bg-amber-300 text-black font-black py-2.5 px-4 rounded-xl cursor-pointer transition">Install SeeMyDriver</button>';
+      const card = regView.querySelector('[class*="bg-[#12141c]"]') || regView.firstElementChild;
       if (card) card.appendChild(box);
     }
   }
