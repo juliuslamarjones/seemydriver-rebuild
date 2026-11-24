@@ -651,8 +651,12 @@ const merged = remoteData;
                 selectDriver(newSid);
 
              if (sendSms && driverPhone) {
-                 const dispatchLink = `https://www.seemydriver.com/?owner=${user.uid}&session=${newSid}&driver=${encodeURIComponent(driverName)}`;
-                 const msg = `${driverName}, new dispatch to ${address}. Tap to connect to Fleet Command: ${dispatchLink}`;
+                 const compParam = encodeURIComponent(user.uid || 'default_fleet');
+                 const destParam = encodeURIComponent(address || 'Destination');
+                 const custPhoneParam = encodeURIComponent(custPhone || '');
+                 const custNameParam = encodeURIComponent(custName || '');
+                 const broadcastUrl = `${window.location.origin}/fleet/driver-broadcast.html?comp=${compParam}&session=${encodeURIComponent(newSid)}&driver=${encodeURIComponent(driverName)}&dest=${destParam}&lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&phone=${custPhoneParam}&cust=${custNameParam}`;
+                 const msg = `${driverName}, new dispatch to ${address}. Open Driver Broadcast console: ${broadcastUrl}`;
                  window.location.href = `sms:${driverPhone}?body=${encodeURIComponent(msg)}`;
              }
          } catch (err) {

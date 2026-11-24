@@ -358,10 +358,16 @@
                 fleetMap.flyTo({ center: [selectedCoords.lng, selectedCoords.lat], zoom: 15, pitch: 45, duration: 1500 });
             }
 
+            const customerTrackingUrl = `${window.location.origin}/?view=customer&session=${encodeURIComponent(sessionId)}&driver=${encodeURIComponent(driverName)}`;
             const driverBroadcastUrl = `${window.location.origin}/fleet/driver-broadcast.html?comp=${companyUuid}&session=${sessionId}&driver=${encodeURIComponent(driverName)}&dest=${encodeURIComponent(destAddress)}&lat=${selectedCoords.lat}&lng=${selectedCoords.lng}&phone=${encodeURIComponent(clientPhone)}`;
             
             const smsBody = encodeURIComponent(`SeeMyDriver Dispatch: Your destination is ${destAddress}. Open your driver broadcast console here: ${driverBroadcastUrl}`);
-            window.open(`sms:${driverPhone}?body=${smsBody}`);
+            const smsLink = document.createElement('a');
+            smsLink.href = `sms:${driverPhone}?body=${smsBody}`;
+            smsLink.rel = 'noopener noreferrer';
+            document.body.appendChild(smsLink);
+            smsLink.click();
+            smsLink.remove();
         }
 
         async function fetchBroadcasts() {

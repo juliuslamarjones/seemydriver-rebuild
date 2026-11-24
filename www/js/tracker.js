@@ -410,7 +410,7 @@ function createPinElement() {
 }
 
 function createTripEngine(map, opts) {
-    const dest = opts.dest || null;
+    const dest = (opts && opts.dest) || null;
     const E = {
         running: true, follow: true, raf: 0,
         route: null, routeLoading: false, routeRetryAt: 0,
@@ -425,14 +425,37 @@ function createTripEngine(map, opts) {
         lastLine: 0, arrived: false, arriveCount: 0, nearCount: 0
     };
 
+    let currentDest = (dest && isFinite(Number(dest.lat)) && isFinite(Number(dest.lng)) && !(Number(dest.lat) === 0 && Number(dest.lng) === 0))
+        ? { lat: Number(dest.lat), lng: Number(dest.lng) }
+        : null;
+
+    function getActiveDest() {
+        if (currentDest && isFinite(currentDest.lat) && isFinite(currentDest.lng)) return currentDest;
+        if (typeof getDest === 'function') {
+            const gd = getDest();
+            if (gd && isFinite(Number(gd.lat)) && isFinite(Number(gd.lng)) && !(Number(gd.lat) === 0 && Number(gd.lng) === 0)) {
+                currentDest = { lat: Number(gd.lat), lng: Number(gd.lng) };
+                return currentDest;
+            }
+        }
+        if (typeof C !== 'undefined' && C && C.destMarker && typeof C.destMarker.getLngLat === 'function') {
+            const ll = C.destMarker.getLngLat();
+            if (ll && isFinite(ll.lat) && isFinite(ll.lng)) {
+                currentDest = { lat: Number(ll.lat), lng: Number(ll.lng) };
+                return currentDest;
+            }
+        }
+        return null;
+    }
+
     function drawRoute(coords, attempt) {
-        if (!E.running) return;
+        if (!E.running || !map) return;
         const data = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } };
         try {
             const src = map.getSource('smd-route-src');
             if (src) {
                 src.setData(data);
-            } else {
+            } else if (typeof map.addSource === 'function' && typeof map.addLayer === 'function') {
                 map.addSource('smd-route-src', { type: 'geojson', data: data });
                 map.addLayer({
                     id: 'smd-route-line', type: 'line', source: 'smd-route-src',
@@ -446,14 +469,15 @@ function createTripEngine(map, opts) {
     }
 
     async function fetchRoute(fromLng, fromLat) {
-        if (!dest || E.routeLoading || !E.running) return;
+        const dPt = getActiveDest();
+        if (!dPt || E.routeLoading || !E.running) return;
         E.routeLoading = true;
         try {
-            const url = 'https://router.project-osrm.org/route/v1/driving/' + fromLng + ',' + fromLat + ';' + dest.lng + ',' + dest.lat + '?overview=full&geometries=geojson';
+            const url = 'https://router.project-osrm.org/route/v1/driving/' + fromLng + ',' + fromLat + ';' + dPt.lng + ',' + dPt.lat + '?overview=full&geometries=geojson';
             const res = await fetch(url);
             const data = await res.json();
             if (!E.running) return;
-            if (data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry.coordinates.length > 1) {
+            if (data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry && Array.isArray(data.routes[0].geometry.coordinates) && data.routes[0].geometry.coordinates.length > 1) {
                 const r = data.routes[0];
                 E.route = buildRoute(r.geometry.coordinates, r.duration);
                 E.snapped = false;
@@ -461,20 +485,8 @@ function createTripEngine(map, opts) {
                 E.refLat = E.freeLat = E.drawLat;
                 E.offCount = 0; E.offSince = 0; E.nearCount = 0; E.sRef = 0; E.rS = 0; E.offLng = 0; E.offLat = 0;
                 drawRoute(r.geometry.coordinates, 0);
-                if (E.hasFix) {
-                    const sn = snapToRoute(E.route, E.fixLng, E.fixLat, null, 0, E.route.length);
-                    if (sn.dist <= 160) {
-                        E.snapped = true;
-                        E.sRef = E.rS = Math.max(E.rS || 0, sn.s);
-                        const pt = pointAtS(E.route, sn.s);
-                        E.drawLng = E.freeLng = E.refLng = pt.lng;
-                        E.drawLat = E.freeLat = E.refLat = pt.lat;
-                        const b = bearingAtS(E.route, sn.s);
-                        if (b !== null) E.rBearing = alignToTravel(b);
-                        E.marker.setLngLat([E.drawLng, E.drawLat]);
-                        E.marker.setRotation(E.rBearing);
-                    }
-                }
+            } else {
+                E.routeRetryAt = performance.now() + 4000;
             }
         } catch (e) {
             E.routeRetryAt = performance.now() + 4000;
@@ -483,189 +495,288 @@ function createTripEngine(map, opts) {
         }
     }
 
-    function alignToTravel(deg) {
-    if (!isFinite(deg)) return null;
-    return ((deg % 360) + 360) % 360;
-}
-
-    function ensureMarker(lng, lat, bearing) {
-        if (E.marker) return E.marker;
-        if (typeof mapboxgl === "undefined" || !map) return null;
-        const m = new mapboxgl.Marker({ element: createTruckElement(), rotationAlignment: "map", pitchAlignment: "map" })
-            .setLngLat([lng, lat]);
-        if (typeof m.setRotation === "function" && isFinite(bearing)) m.setRotation(bearing);
-        m.addTo(map);
-        E.marker = m;
-        return m;
+    function alignToTravel(routeBearing) {
+        if (!isFinite(routeBearing)) return 0;
+        return E.dir < 0 ? normDeg(routeBearing + 180) : normDeg(routeBearing);
     }
 
-    function feed(fix) {
-        if (!E.running || !fix || !isFinite(fix.lat) || !isFinite(fix.lng)) return null;
-        const lat = Number(fix.lat), lng = Number(fix.lng);
-        const speedMs = (typeof fix.speedMs === "number" && isFinite(fix.speedMs) && fix.speedMs >= 0)
-            ? fix.speedMs
-            : ((typeof fix.speed === "number" && isFinite(fix.speed) && fix.speed >= 0) ? fix.speed : 0);
-        const heading = (typeof fix.heading === "number" && isFinite(fix.heading))
-            ? alignToTravel(fix.heading)
-            : ((typeof fix.headingDeg === "number" && isFinite(fix.headingDeg)) ? alignToTravel(fix.headingDeg) : null);
-        const prevLng = E.hasFix ? E.drawLng : lng;
-        const prevLat = E.hasFix ? E.drawLat : lat;
-        const movedDeg = (E.hasFix && (Math.abs(lng - prevLng) > 1e-6 || Math.abs(lat - prevLat) > 1e-6))
-            ? bearingBetween(prevLng, prevLat, lng, lat) : null;
-        const deg = heading !== null ? heading : (movedDeg !== null ? movedDeg : (E.rBearing || 0));
-        E.hasFix = true;
-        E.fixLng = lng;
-        E.fixLat = lat;
-        E.speedMs = speedMs;
-        E.rBearing = deg;
+    const clampS = (s) => (!E.route ? 0 : (s < 0 ? 0 : (s > E.route.length ? E.route.length : s)));
 
-        let outLng = lng, outLat = lat;
-        if (E.route && E.route.length > 0) {
-            const sn = snapToRoute(E.route, lng, lat, E.rS || null, 80, 140);
-            if (sn.dist <= 160) {
-                E.snapped = true;
-                E.rS = sn.s;
-                const pt = pointAtS(E.route, sn.s);
-                outLng = pt.lng;
-                outLat = pt.lat;
-                const b = bearingAtS(E.route, sn.s);
-                if (b !== null) E.rBearing = alignToTravel(b);
-            } else {
-                E.snapped = false;
+    function updateLine(now) {
+        if (!E.route || !map || now - E.lastLine < 200) return;
+        E.lastLine = now;
+        try {
+            const src = map.getSource('smd-route-src');
+            if (!src) return;
+            const r = E.route;
+            const s = E.snapped ? E.rS : E.sRef;
+            if (E.arrived || r.length - s < 25) {
+                src.setData({ type: 'FeatureCollection', features: [] });
+                return;
             }
+            let lo = 0, hi = r.cum.length - 1;
+            while (hi - lo > 1) {
+                const mid = (lo + hi) >> 1;
+                if (r.cum[mid] <= s) lo = mid; else hi = mid;
+            }
+            const p = pointAtS(r, s);
+            src.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[p.lng, p.lat]].concat(r.coords.slice(hi)) } });
+        } catch (e) {}
+    }
+
+    function applyCameraFollow(lng, lat) {
+        if (!E.follow || !map) return;
+        if (Date.now() < (window.__smdFitLockUntil || 0)) return;
+        try {
+            const targetPitch = (window.is3DMode === false) ? 0 : ((opts && opts.camera && typeof opts.camera.pitch === 'number') ? opts.camera.pitch : 40);
+            const targetBearing = HEADING_UP ? E.rBearing : ((opts && opts.camera && typeof opts.camera.bearing === 'number') ? opts.camera.bearing : 0);
+            if (typeof map.jumpTo === 'function') {
+                map.jumpTo({ center: [lng, lat], pitch: targetPitch, bearing: targetBearing });
+            } else if (typeof map.setCenter === 'function') {
+                map.setCenter([lng, lat]);
+            }
+        } catch (e) {}
+    }
+
+    function frame(now) {
+        if (!E.running) return;
+        E.raf = requestAnimationFrame(frame);
+        const dt = Math.min(0.1, Math.max(0.001, (now - E.lastFrame) / 1000));
+        E.lastFrame = now;
+        if (!E.hasFix || !E.marker) return;
+
+        const age = (now - E.fixAt) / 1000;
+        const v = age < 4 ? E.speedMs : 0;
+
+        let baseLng, baseLat, targetBearing;
+        if (E.snapped && E.route) {
+            const step = E.dir * v * dt;
+            E.sRef = clampS(E.sRef + step);
+            E.rS = clampS(E.rS + step);
+            const maxCatch = Math.max(12, v * 1.5) * dt;
+            const corr = (E.sRef - E.rS) * (1 - Math.exp(-dt / 0.5));
+            E.rS += Math.max(-maxCatch, Math.min(maxCatch, corr));
+            const p = pointAtS(E.route, E.rS);
+            baseLng = p.lng; baseLat = p.lat;
+            const b = bearingAtS(E.route, E.rS);
+            targetBearing = b !== null ? alignToTravel(b) : E.rBearing;
+        } else {
+            const h = E.headingDeg !== null ? E.headingDeg : E.rBearing;
+            const dLat = (v * dt * Math.cos(toRad(h))) / M_PER_DEG;
+            const dLng = (v * dt * Math.sin(toRad(h))) / (M_PER_DEG * Math.cos(toRad(E.refLat || 29.76)));
+            E.refLat += dLat; E.refLng += dLng;
+            E.freeLat += dLat; E.freeLng += dLng;
+            const k = 1 - Math.exp(-dt / 0.5);
+            let ex = (E.refLng - E.freeLng) * k, ey = (E.refLat - E.freeLat) * k;
+            const mag = Math.hypot(ex * M_PER_DEG * Math.cos(toRad(E.refLat || 29.76)), ey * M_PER_DEG);
+            const cap = Math.max(12, v * 1.5) * dt;
+            if (mag > cap) { ex *= cap / mag; ey *= cap / mag; }
+            E.freeLng += ex; E.freeLat += ey;
+            baseLng = E.freeLng; baseLat = E.freeLat;
+            targetBearing = h;
         }
 
-        E.drawLng = outLng;
-        E.drawLat = outLat;
-        const marker = ensureMarker(outLng, outLat, E.rBearing);
-        if (marker) {
-            marker.setLngLat([outLng, outLat]);
-            if (typeof marker.setRotation === "function") marker.setRotation(E.rBearing);
+        if (E.pendingBlend) {
+            E.offLng = E.drawLng - baseLng;
+            E.offLat = E.drawLat - baseLat;
+            E.pendingBlend = false;
         }
+        const decay = Math.exp(-dt / 0.45);
+        E.offLng *= decay; E.offLat *= decay;
 
-        if (dest && !E.route && !E.routeLoading && performance.now() >= (E.routeRetryAt || 0)) {
-            fetchRoute(lng, lat);
+        const lng = baseLng + E.offLng, lat = baseLat + E.offLat;
+        E.rBearing = normDeg(E.rBearing + angleDiff(E.rBearing, targetBearing) * (1 - Math.exp(-dt / 0.25)));
+        E.drawLng = lng; E.drawLat = lat;
+
+        E.marker.setLngLat([lng, lat]);
+        if (typeof E.marker.setRotation === 'function') E.marker.setRotation(E.rBearing);
+        updateLine(now);
+        applyCameraFollow(lng, lat);
+    }
+
+    function output() {
+        let lng = E.refLng, lat = E.refLat;
+        let heading = E.headingDeg !== null ? E.headingDeg : E.rBearing;
+        if (E.snapped && E.route) {
+            const p = pointAtS(E.route, E.sRef);
+            lng = p.lng; lat = p.lat;
+            const b = bearingAtS(E.route, E.sRef);
+            if (b !== null) heading = alignToTravel(b);
         }
-
-                        if (E.follow && Date.now() >= (window.__smdFitLockUntil || 0) && map && typeof map.easeTo === "function") {
-            try {
-                const targetPitch = (window.is3DMode === false) ? 0 : ((opts && opts.camera && opts.camera.pitch) || 40);
-                map.easeTo({ center: [outLng, outLat], bearing: 0, pitch: targetPitch, duration: 450, essential: true });
-            } catch (e) {}
-        }
-
         return {
-            lat: outLat,
-            lng: outLng,
-            speedMph: Math.round(speedMs * (typeof MPS_TO_MPH === "number" ? MPS_TO_MPH : 2.236936)),
+            lat: lat,
+            lng: lng,
+            heading: Math.round(normDeg(heading)),
+            speedMph: Math.round(E.speedMs * MPS_TO_MPH),
             snapped: E.snapped
         };
     }
 
-    function destroy() {
+    E.feed = function (fix) {
+        if (!E.running || !fix || !isFinite(fix.lat) || !isFinite(fix.lng)) return null;
+        const now = performance.now();
+        const fixLat = Number(fix.lat), fixLng = Number(fix.lng);
+        const acc = (typeof fix.acc === 'number' && isFinite(fix.acc) && fix.acc >= 0) ? fix.acc : 8;
+        if (E.hasFix && acc > 120) return output();
+
+        let sp = (fix.speedMs !== null && fix.speedMs !== undefined && isFinite(fix.speedMs) && fix.speedMs >= 0)
+            ? fix.speedMs
+            : ((typeof fix.speed === 'number' && isFinite(fix.speed) && fix.speed >= 0) ? fix.speed : null);
+        if (sp === null) {
+            const dtSec = (now - E.fixAt) / 1000;
+            sp = (E.hasFix && dtSec > 0.3) ? distM(E.fixLng, E.fixLat, fixLng, fixLat) / dtSec : 0;
+        }
+        sp = E.hasFix ? E.speedMs * 0.4 + sp * 0.6 : sp;
+        E.speedMs = sp < 0.8 ? 0 : sp;
+
+        const movedFar = !E.hasFix || distM(E.moveLng, E.moveLat, fixLng, fixLat) > 8;
+        let hd = E.headingDeg;
+        if (fix.heading !== null && fix.heading !== undefined && isFinite(fix.heading) && E.speedMs > 2) {
+            hd = normDeg(fix.heading);
+        } else if (E.hasFix && movedFar && E.speedMs > 1.5) {
+            hd = bearingBetween(E.moveLng, E.moveLat, fixLng, fixLat);
+        }
+        if (movedFar) { E.moveLng = fixLng; E.moveLat = fixLat; }
+        E.headingDeg = hd;
+
+        const dPt = getActiveDest();
+
+        if (!E.hasFix) {
+            E.hasFix = true;
+            E.fixAt = now; E.fixLng = fixLng; E.fixLat = fixLat;
+            E.refLng = E.freeLng = E.drawLng = fixLng;
+            E.refLat = E.freeLat = E.drawLat = fixLat;
+            E.rBearing = E.headingDeg !== null ? E.headingDeg : (dPt ? bearingBetween(fixLng, fixLat, dPt.lng, dPt.lat) : 0);
+            if (typeof mapboxgl !== 'undefined' && map) {
+                E.marker = new mapboxgl.Marker({ element: createTruckElement(), rotationAlignment: 'map', pitchAlignment: 'map' })
+                    .setLngLat([fixLng, fixLat]);
+                if (typeof E.marker.setRotation === 'function') E.marker.setRotation(E.rBearing);
+                E.marker.addTo(map);
+            }
+            const cam = Object.assign({ center: [fixLng, fixLat], zoom: 16 }, (opts && opts.camera) || {});
+            if (HEADING_UP) cam.bearing = E.rBearing;
+            if (map && typeof map.jumpTo === 'function') map.jumpTo(cam);
+            E.lastFrame = now;
+            E.raf = requestAnimationFrame(frame);
+            if (dPt) fetchRoute(fixLng, fixLat);
+            return output();
+        }
+
+        if (dPt && !E.route && !E.routeLoading && now >= (E.routeRetryAt || 0)) {
+            fetchRoute(fixLng, fixLat);
+        }
+
+        E.fixAt = now; E.fixLng = fixLng; E.fixLat = fixLat;
+
+        if (dPt) {
+            const dd = distM(fixLng, fixLat, dPt.lng, dPt.lat);
+            if (dd < 40 && E.speedMs < 3) { if (++E.arriveCount >= 2) E.arrived = true; }
+            else if (dd > 120) { E.arrived = false; E.arriveCount = 0; }
+            else if (dd >= 40) { E.arriveCount = 0; }
+        }
+
+        let onLine = false;
+        if (E.route) {
+            const maxOff = Math.max(40, acc * 1.5);
+            const sn = snapToRoute(E.route, fixLng, fixLat, E.snapped ? E.sRef : null, 150, 600);
+            const limit = E.snapped ? maxOff : maxOff * 0.6;
+            if (sn.dist <= limit) {
+                E.nearCount++;
+                E.offCount = 0; E.offSince = 0;
+                if (E.snapped || E.nearCount >= 2) {
+                    onLine = true;
+                    const justSnapped = !E.snapped;
+                    const b = bearingAtS(E.route, sn.s);
+                    if (b !== null && E.headingDeg !== null && E.speedMs > 2) {
+                        E.dir = Math.abs(angleDiff(b, E.headingDeg)) > 120 ? -1 : 1;
+                    }
+                    if (justSnapped) {
+                        E.snapped = true; E.sRef = sn.s; E.rS = sn.s; E.pendingBlend = true;
+                    } else if (E.speedMs > 0) {
+                        const r = sn.s - E.sRef;
+                        const safeAcc = Math.max(acc, 6);
+                        const trust = Math.max(25, safeAcc * 2.5);
+                        const alpha = Math.max(0.06, Math.min(0.25, 6 / safeAcc));
+                        E.sRef = clampS(Math.abs(r) > trust ? sn.s : E.sRef + alpha * r);
+                    }
+                }
+            } else {
+                E.nearCount = 0;
+                E.offCount++;
+                if (!E.offSince) E.offSince = now;
+                if (E.snapped && E.offCount < 2) {
+                    onLine = true;
+                } else if (E.snapped) {
+                    E.snapped = false;
+                    E.refLng = E.freeLng = E.drawLng; E.refLat = E.freeLat = E.drawLat;
+                    E.offLng = 0; E.offLat = 0;
+                }
+                if (dPt && !E.arrived && E.offCount >= 3 && now - E.offSince > 4000 && now - E.lastRerouteAt > 10000) {
+                    E.lastRerouteAt = now;
+                    fetchRoute(fixLng, fixLat);
+                }
+            }
+        }
+
+        if (!onLine) {
+            const safeAcc = Math.max(acc, 6);
+            const miss = distM(E.refLng, E.refLat, fixLng, fixLat);
+            if (E.speedMs > 0) {
+                const a = miss > Math.max(25, safeAcc * 2.5) ? 1 : Math.max(0.08, Math.min(0.3, 8 / safeAcc));
+                E.refLng += (fixLng - E.refLng) * a;
+                E.refLat += (fixLat - E.refLat) * a;
+            } else if (miss > Math.max(30, safeAcc * 3)) {
+                E.refLng = fixLng; E.refLat = fixLat;
+            }
+        }
+
+        return output();
+    };
+
+    E.position = function () {
+        if (E.hasFix && isFinite(E.drawLat) && isFinite(E.drawLng)) {
+            return { lat: E.drawLat, lng: E.drawLng };
+        }
+        if (E.hasFix && isFinite(E.fixLat) && isFinite(E.fixLng)) {
+            return { lat: E.fixLat, lng: E.fixLng };
+        }
+        return null;
+    };
+
+    E.setDest = function (d) {
+        if (d && isFinite(Number(d.lat)) && isFinite(Number(d.lng)) && !(Number(d.lat) === 0 && Number(d.lng) === 0)) {
+            currentDest = { lat: Number(d.lat), lng: Number(d.lng) };
+        }
+    };
+
+    E.remaining = function () {
+        const pos = E.position();
+        const activeDest = getActiveDest();
+        if (!pos || !activeDest) return null;
+        if (E.route && E.snapped) {
+            const meters = Math.max(0, E.route.length - E.rS);
+            const seconds = E.route.duration > 0 ? Math.max(1, Math.round(E.route.duration * (meters / E.route.length))) : Math.max(1, Math.round(meters / 12));
+            return { meters: meters, seconds: seconds };
+        }
+        const rawMeters = Math.max(0, distM(pos.lng, pos.lat, activeDest.lng, activeDest.lat));
+        if (rawMeters <= 50) return { meters: 0, seconds: 0 };
+        const effSpeedMs = (E.speedMs > 1.5) ? E.speedMs : (30 / MPS_TO_MPH);
+        const seconds = Math.max(1, Math.round(rawMeters / effSpeedMs));
+        return { meters: rawMeters, seconds: seconds };
+    };
+
+    E.destroy = function () {
         E.running = false;
         if (E.raf) { try { cancelAnimationFrame(E.raf); } catch (e) {} E.raf = 0; }
         if (E.marker) { try { E.marker.remove(); } catch (e) {} E.marker = null; }
         try {
             if (map) {
-                if (map.getLayer && map.getLayer("smd-route-line")) map.removeLayer("smd-route-line");
-                if (map.getSource && map.getSource("smd-route-src")) map.removeSource("smd-route-src");
+                if (map.getLayer && map.getLayer('smd-route-line')) map.removeLayer('smd-route-line');
+                if (map.getSource && map.getSource('smd-route-src')) map.removeSource('smd-route-src');
             }
         } catch (e) {}
-    }
+    };
 
-    E.feed = feed;
-    E.destroy = destroy;
-    return E;
-
-    function ensureMarker(lng, lat, bearing) {
-        if (E.marker) return E.marker;
-        if (typeof mapboxgl === "undefined" || !map) return null;
-        const m = new mapboxgl.Marker({ element: createTruckElement(), rotationAlignment: "map", pitchAlignment: "map" })
-            .setLngLat([lng, lat]);
-        if (typeof m.setRotation === "function" && isFinite(bearing)) m.setRotation(bearing);
-        m.addTo(map);
-        E.marker = m;
-        return m;
-    }
-
-    function feed(fix) {
-        if (!E.running || !fix || !isFinite(fix.lat) || !isFinite(fix.lng)) return null;
-        const lat = Number(fix.lat), lng = Number(fix.lng);
-        const speedMs = (typeof fix.speedMs === "number" && isFinite(fix.speedMs) && fix.speedMs >= 0)
-            ? fix.speedMs
-            : ((typeof fix.speed === "number" && isFinite(fix.speed) && fix.speed >= 0) ? fix.speed : 0);
-        const heading = (typeof fix.heading === "number" && isFinite(fix.heading))
-            ? alignToTravel(fix.heading)
-            : ((typeof fix.headingDeg === "number" && isFinite(fix.headingDeg)) ? alignToTravel(fix.headingDeg) : null);
-        const prevLng = E.hasFix ? E.drawLng : lng;
-        const prevLat = E.hasFix ? E.drawLat : lat;
-        const movedDeg = (E.hasFix && (Math.abs(lng - prevLng) > 1e-6 || Math.abs(lat - prevLat) > 1e-6))
-            ? bearingBetween(prevLng, prevLat, lng, lat) : null;
-        const deg = heading !== null ? heading : (movedDeg !== null ? movedDeg : (E.rBearing || 0));
-        E.hasFix = true;
-        E.fixLng = lng;
-        E.fixLat = lat;
-        E.speedMs = speedMs;
-        E.rBearing = deg;
-
-        let outLng = lng, outLat = lat;
-        if (E.route && E.route.length > 0) {
-            const sn = snapToRoute(E.route, lng, lat, E.rS || null, 80, 140);
-            if (sn.dist <= 160) {
-                E.snapped = true;
-                E.rS = sn.s;
-                const pt = pointAtS(E.route, sn.s);
-                outLng = pt.lng;
-                outLat = pt.lat;
-                const b = bearingAtS(E.route, sn.s);
-                if (b !== null) E.rBearing = alignToTravel(b);
-            } else {
-                E.snapped = false;
-            }
-        }
-
-        E.drawLng = outLng;
-        E.drawLat = outLat;
-        const marker = ensureMarker(outLng, outLat, E.rBearing);
-        if (marker) {
-            marker.setLngLat([outLng, outLat]);
-            if (typeof marker.setRotation === "function") marker.setRotation(E.rBearing);
-        }
-
-        if (dest && !E.route && !E.routeLoading && performance.now() >= (E.routeRetryAt || 0)) {
-            fetchRoute(lng, lat);
-        }
-
-                if (E.follow && Date.now() >= (window.__smdFitLockUntil || 0) && map && typeof map.easeTo === "function") {
-            try {
-                const targetPitch = (window.is3DMode === false) ? 0 : ((opts && opts.camera && opts.camera.pitch) || 40);
-                map.easeTo({ center: [outLng, outLat], bearing: 0, pitch: targetPitch, duration: 450, essential: true });
-            } catch (e) {}
-        }
-
-        return {
-            lat: outLat,
-            lng: outLng,
-            speedMph: Math.round(speedMs * (typeof MPS_TO_MPH === "number" ? MPS_TO_MPH : 2.236936)),
-            snapped: E.snapped
-        };
-    }
-
-    function destroy() {
-        E.running = false;
-        if (E.raf) { try { cancelAnimationFrame(E.raf); } catch (e) {} E.raf = 0; }
-        if (E.marker) { try { E.marker.remove(); } catch (e) {} E.marker = null; }
-        try {
-            if (map) {
-                if (map.getLayer && map.getLayer("smd-route-line")) map.removeLayer("smd-route-line");
-                if (map.getSource && map.getSource("smd-route-src")) map.removeSource("smd-route-src");
-            }
-        } catch (e) {}
-    }
-
-    E.feed = feed;
-    E.destroy = destroy;
     return E;
 }
 
@@ -872,14 +983,21 @@ function teardownCustomer() {
 
 window.playCustomerAudio = function () {
     if (!window.speechSynthesis) return;
-    const driverName = (document.getElementById('cust-driver-header') ? document.getElementById('cust-driver-header').textContent : 'Your driver');
-    const companyName = window.activeCompanyName || LS.getItem('smd_company_name') || '';
+    const etaText = (document.getElementById('cust-eta-sub') && document.getElementById('cust-eta-sub').textContent.trim()) || '';
+    const distText = (document.getElementById('cust-distance') && document.getElementById('cust-distance').textContent.trim()) || '';
+
+    const hasEta = etaText && etaText !== '--';
+    const hasDist = distText && distText !== '--';
 
     let text = '';
-    if (companyName && companyName.trim() !== '' && companyName.toLowerCase() !== 'null') {
-        text = `Hello from ${companyName}! We want to take a quick second to personally thank you and let you know how much we truly value your business. Your driver, ${driverName}, is currently en route and tracked down to the exact foot on your screen. Sit back, relax, and watch us roll right on up to you!`;
+    if (hasEta && hasDist) {
+        text = `Estimated arrival in ${etaText}, ${distText} away.`;
+    } else if (hasEta) {
+        text = `Estimated arrival in ${etaText}.`;
+    } else if (hasDist) {
+        text = `${distText} away.`;
     } else {
-        text = `Hello! We want to take a quick second to personally thank you and let you know how much we truly value your business. Your driver, ${driverName}, is currently en route and tracked down to the exact foot on your screen. Sit back, relax, and watch us roll right on up to you!`;
+        text = 'Estimated arrival is not available yet.';
     }
 
     window.speechSynthesis.cancel();
@@ -952,7 +1070,9 @@ window.initCustomerMapLive = function () {
             LS.removeItem('smd_company_name');
         }
 
-        if (head) head.textContent = data.driverName || 'Driver';
+        const resolvedName = resolveDriverName(data.driverName, urlDriver);
+        data.driverName = resolvedName;
+        if (head) head.textContent = resolvedName;
         if (data.driverPhone) {
             const tel = String(data.driverPhone).replace(/[^\d+]/g, '');
             if (callBtn) callBtn.href = 'tel:' + tel;
@@ -960,14 +1080,15 @@ window.initCustomerMapLive = function () {
         }
 
         const dLat = parseFloat(data.destLat), dLng = parseFloat(data.destLng);
-        const dest = (isFinite(dLat) && isFinite(dLng)) ? { lat: dLat, lng: dLng } : null;
+        const rawDest = (isFinite(dLat) && isFinite(dLng) && !(dLat === 0 && dLng === 0)) ? { lat: dLat, lng: dLng } : null;
+        const dest = rawDest || ((typeof getDest === 'function') ? getDest() : null);
         if (dest && !me.destMarker) {
             me.destMarker = new mapboxgl.Marker({ element: createPinElement() }).setLngLat([dest.lng, dest.lat]).addTo(map);
         }
 
         if (data.ended) {
             me.ended = true;
-            if (head) head.textContent = (data.driverName || 'Driver') + ' \u2014 trip ended';
+            if (head) head.textContent = resolveDriverName(data.driverName, urlDriver) + ' \u2014 trip ended';
             setPill('Trip ended', 'warn');
             return;
         }
@@ -980,29 +1101,211 @@ window.initCustomerMapLive = function () {
 
         if (data.timestamp !== me.lastTs) { me.lastTs = data.timestamp; me.lastChange = Date.now(); }
         if (!me.engine) me.engine = createTripEngine(map, { dest: dest, camera: { pitch: 40, bearing: 0 } });
+        if (dest && typeof me.engine.setDest === 'function') me.engine.setDest(dest);
 
         const mph = Number(data.speed) || 0;
         me.engine.feed({ lat: lat, lng: lng, speedMs: mph / MPS_TO_MPH, heading: Number(data.heading), acc: 5 });
         if (speedEl) speedEl.textContent = Math.round(mph) + ' mph';
 
-        const rem = me.engine.remaining();
+        let rem = null;
+        try { rem = me.engine && typeof me.engine.remaining === 'function' ? me.engine.remaining() : null; } catch (e) { rem = null; }
+        if (!rem) {
+            const fbDest = dest || ((typeof getDest === 'function') ? getDest() : null) || (() => {
+                try {
+                    const ll = me.destMarker && typeof me.destMarker.getLngLat === 'function' ? me.destMarker.getLngLat() : null;
+                    return (ll && isFinite(ll.lat) && isFinite(ll.lng)) ? { lat: ll.lat, lng: ll.lng } : null;
+                } catch (e) { return null; }
+            })();
+            if (fbDest && isFinite(Number(fbDest.lat)) && isFinite(Number(fbDest.lng))) {
+                const R = 6371000;
+                const toRad = (d) => d * Math.PI / 180;
+                const dLat = toRad(Number(fbDest.lat) - lat);
+                const dLng = toRad(Number(fbDest.lng) - lng);
+                const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat)) * Math.cos(toRad(Number(fbDest.lat))) * Math.sin(dLng / 2) ** 2;
+                const m = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                if (m <= 50) {
+                    rem = { meters: 0, seconds: 0 };
+                } else {
+                    const speedMs = mph > 3.35 ? (mph / MPS_TO_MPH) : (30 / MPS_TO_MPH);
+                    rem = { meters: m, seconds: Math.max(1, Math.round(m / speedMs)) };
+                }
+            }
+        }
         if (rem) {
-            if (etaEl) etaEl.textContent = formatEta(rem.seconds);
+            if (etaEl) etaEl.textContent = (rem.meters === 0 && rem.seconds === 0) ? 'Arrived' : formatEta(rem.seconds);
             if (distEl) distEl.textContent = (rem.meters / 1609.34).toFixed(1) + ' mi';
         }
     }
 
-    me.ref = database.ref('broadcasts/' + sid);
+    const compParam = q.get('comp') || '';
+    const primaryPath = compParam ? ('companies/' + compParam + '/broadcasts/' + sid) : ('broadcasts/' + sid);
+    const fallbackPath = 'broadcasts/' + sid;
+    const urlDriver = q.get('driver') || '';
+    const urlLat = parseFloat(q.get('lat'));
+    const urlLng = parseFloat(q.get('lng'));
+    const urlDest = q.get('dest') || '';
+
+    let lockedDriverName = '';
+    function resolveDriverName(candidate, fallback) {
+        const cleanCand = (typeof candidate === 'string') ? candidate.trim() : '';
+        const cleanFb = (typeof fallback === 'string') ? fallback.trim() : '';
+        const isGenericCand = !cleanCand || /^driver$/i.test(cleanCand);
+        const isGenericFb = !cleanFb || /^driver$/i.test(cleanFb);
+        if (!isGenericCand) {
+            lockedDriverName = cleanCand;
+            return cleanCand;
+        }
+        if (!isGenericFb) {
+            lockedDriverName = cleanFb;
+            return cleanFb;
+        }
+        if (lockedDriverName && !/^driver$/i.test(lockedDriverName)) {
+            return lockedDriverName;
+        }
+        return cleanCand || cleanFb || 'Driver';
+    }
+
+    function mergeUrlFallback(raw) {
+        const base = (raw && typeof raw === 'object') ? Object.assign({}, raw) : {};
+        base.driverName = resolveDriverName(base.driverName, urlDriver);
+        if (!base.destAddress && urlDest) base.destAddress = urlDest;
+        if ((!isFinite(parseFloat(base.destLat)) || !isFinite(parseFloat(base.destLng))) && isFinite(urlLat) && isFinite(urlLng)) {
+            base.destLat = urlLat;
+            base.destLng = urlLng;
+        }
+        const hasLiveLat = isFinite(parseFloat(base.lat));
+        const hasLiveLng = isFinite(parseFloat(base.lng));
+        if (!hasLiveLat || !hasLiveLng) {
+            const oLat = parseFloat(q.get('olat'));
+            const oLng = parseFloat(q.get('olng'));
+            const dLatF = parseFloat(base.destLat);
+            const dLngF = parseFloat(base.destLng);
+            if (isFinite(oLat) && isFinite(oLng)) {
+                base.lat = oLat;
+                base.lng = oLng;
+            } else if (isFinite(dLatF) && isFinite(dLngF) && !(dLatF === 0 && dLngF === 0)) {
+                base.lat = dLatF;
+                base.lng = dLngF;
+            }
+            if (!isFinite(Number(base.speed))) base.speed = 0;
+        }
+        return Object.keys(base).length ? base : null;
+    }
+
+    me.ref = database.ref(primaryPath);
+    const rootFallbackRef = (primaryPath !== fallbackPath) ? database.ref(fallbackPath) : null;
+
     me.ref.once('value').then((snap) => {
-        const data = snap.val();
+        const data = mergeUrlFallback(snap.val());
         if (data && data.companyName) {
             window.activeCompanyName = data.companyName;
             LS.setItem('smd_company_name', data.companyName);
         }
+        if (data) handleData(data);
+    }).catch(() => {});
+
+    me.cb = me.ref.on('value', (snap) => {
+        const val = snap.val();
+        if (val) {
+            const merged = mergeUrlFallback(val);
+            writeCustomerCard(merged);
+            handleData(merged);
+        } else if (rootFallbackRef) {
+            rootFallbackRef.once('value').then((rSnap) => {
+                if (rSnap && rSnap.val()) handleData(mergeUrlFallback(rSnap.val()));
+                else {
+                    const fb = mergeUrlFallback(null);
+                    if (fb) handleData(fb);
+                }
+            }).catch(() => {});
+        } else {
+            const fb = mergeUrlFallback(null);
+            if (fb) handleData(fb);
+        }
     });
 
-    me.cb = me.ref.on('value', (snap) => handleData(snap.val()));
-    me.resync = () => { me.ref.once('value').then((snap) => handleData(snap.val())).catch(() => {}); };
+    if (rootFallbackRef) {
+        rootFallbackRef.on('value', (snap) => {
+            const rVal = snap.val();
+            if (!rVal) return;
+            me.ref.once('value').then((cSnap) => {
+                if (!cSnap || !cSnap.val()) handleData(mergeUrlFallback(rVal));
+            }).catch(() => {});
+        });
+    }
+
+    function writeCustomerCard(d) {
+        if (!d) return;
+        const hEl = $('cust-driver-header');
+        const pEl = $('cust-status-pill');
+        const eEl = $('cust-eta-sub');
+        const dEl = $('cust-distance');
+        const sEl = $('cust-speed');
+
+        if (hEl) hEl.textContent = resolveDriverName(d.driverName, urlDriver);
+
+        const dLat = parseFloat(d.destLat), dLng = parseFloat(d.destLng);
+        const destPt = (isFinite(dLat) && isFinite(dLng) && !(dLat === 0 && dLng === 0))
+            ? { lat: dLat, lng: dLng }
+            : ((typeof getDest === 'function') ? getDest() : null);
+
+        const lat = parseFloat(d.lat), lng = parseFloat(d.lng);
+        const mph = Number(d.speed) || 0;
+        if (sEl && isFinite(mph)) sEl.textContent = Math.round(mph) + ' mph';
+
+        if (isFinite(lat) && isFinite(lng)) {
+            if (pEl) {
+                pEl.className = 'shrink-0 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold px-3 py-1 rounded-full';
+                pEl.textContent = 'Live';
+            }
+            if (destPt && isFinite(destPt.lat) && isFinite(destPt.lng)) {
+                const R = 6371000;
+                const toRad = (deg) => deg * Math.PI / 180;
+                const dLatRad = toRad(destPt.lat - lat);
+                const dLngRad = toRad(destPt.lng - lng);
+                const a = Math.sin(dLatRad / 2) ** 2 + Math.cos(toRad(lat)) * Math.cos(toRad(destPt.lat)) * Math.sin(dLngRad / 2) ** 2;
+                const meters = Math.max(0, 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+                if (dEl) dEl.textContent = (meters / 1609.344).toFixed(1) + ' mi';
+                if (eEl) {
+                    if (meters <= 50) {
+                        eEl.textContent = 'Arrived';
+                    } else {
+                        const effMps = mph > 3.35 ? (mph / MPS_TO_MPH) : (30 / MPS_TO_MPH);
+                        const secs = Math.max(60, Math.round(meters / effMps));
+                        eEl.textContent = (typeof formatEta === 'function') ? formatEta(secs) : (Math.round(secs / 60) + ' mins');
+                    }
+                }
+            }
+        } else if (pEl) {
+            pEl.className = 'shrink-0 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold px-3 py-1 rounded-full';
+            pEl.textContent = 'Connecting';
+        }
+    }
+
+    function runUrlParamBootstrap() {
+        const seed = mergeUrlFallback(null);
+        if (!seed) return;
+        const applySeed = () => {
+            if (!C || C !== me) return;
+            try { writeCustomerCard(seed); handleData(seed); } catch (e) {}
+        };
+        applySeed();
+        if (map && typeof map.once === 'function') {
+            map.once('load', applySeed);
+        }
+        setTimeout(applySeed, 300);
+        setTimeout(applySeed, 1000);
+    }
+
+    runUrlParamBootstrap();
+
+    me.resync = () => {
+        me.ref.once('value').then((snap) => {
+            const v = snap.val();
+            if (v) return handleData(mergeUrlFallback(v));
+            if (rootFallbackRef) return rootFallbackRef.once('value').then((rSnap) => handleData(mergeUrlFallback(rSnap.val())));
+        }).catch(() => {});
+    };
 
     me.timer = setInterval(() => {
         if (C !== me || me.ended || !me.lastTs) return;
@@ -1012,29 +1315,99 @@ window.initCustomerMapLive = function () {
     }, 2000);
 };
 
+function getCustomerMapAndPoints() {
+    const m = (C && C.map) || window.soloMap || window.map || null;
+    const qp = new URLSearchParams(window.location.search);
+    const qLat = parseFloat(qp.get('lat'));
+    const qLng = parseFloat(qp.get('lng'));
+    const qOLat = parseFloat(qp.get('olat'));
+    const qOLng = parseFloat(qp.get('olng'));
+
+    let drv = null;
+    try {
+        if (C && C.engine && typeof C.engine.position === 'function') {
+            const p = C.engine.position();
+            if (p && isFinite(Number(p.lat)) && isFinite(Number(p.lng))) {
+                drv = { lat: Number(p.lat), lng: Number(p.lng) };
+            }
+        }
+    } catch (e) {}
+    if (!drv && isFinite(qOLat) && isFinite(qOLng)) {
+        drv = { lat: qOLat, lng: qOLng };
+    }
+
+    let dst = null;
+    try {
+        if (C && C.destMarker && typeof C.destMarker.getLngLat === 'function') {
+            const ll = C.destMarker.getLngLat();
+            if (ll && isFinite(Number(ll.lat)) && isFinite(Number(ll.lng))) {
+                dst = { lat: Number(ll.lat), lng: Number(ll.lng) };
+            }
+        }
+    } catch (e) {}
+    if (!dst && typeof getDest === 'function') {
+        const gd = getDest();
+        if (gd && isFinite(Number(gd.lat)) && isFinite(Number(gd.lng))) {
+            dst = { lat: Number(gd.lat), lng: Number(gd.lng) };
+        }
+    }
+    if (!dst && isFinite(qLat) && isFinite(qLng)) {
+        dst = { lat: qLat, lng: qLng };
+    }
+
+    return { map: m, drv, dst };
+}
+
 window.recenterCustomerMap = function () {
-    if (!C || !C.map || !C.engine) return;
-    const pos = C.engine.position();
-    C.engine.follow = true;
-    if (typeof C.map.stop === 'function') C.map.stop();
-    if (pos) {
-        C.map.easeTo({ center: [pos.lng, pos.lat], zoom: 15.6, bearing: 0, pitch: 40, duration: 400 });
+    const { map: m, drv, dst } = getCustomerMapAndPoints();
+    if (!m || typeof m.easeTo !== 'function') return;
+    window.__smdFitLockUntil = 0;
+    if (C && C.engine) C.engine.follow = true;
+    if (typeof m.stop === 'function') m.stop();
+    const target = drv || dst;
+    if (target) {
+        m.easeTo({
+            center: [target.lng, target.lat],
+            zoom: 15.8,
+            bearing: 0,
+            pitch: 40,
+            duration: 450,
+            essential: true
+        });
     } else {
-        C.map.easeTo({ zoom: 15.6, bearing: 0, duration: 400 });
+        m.easeTo({ zoom: 15.8, bearing: 0, pitch: 40, duration: 450, essential: true });
     }
 };
 
 window.fitCustomerMap = function () {
-    if (!C || !C.engine) return;
-    const pos = C.engine.position();
-    const dLat = C.destMarker ? C.destMarker.getLngLat() : null;
-    if (!pos || !dLat) return;
-    C.engine.follow = false;
-    if (typeof C.map.stop === 'function') C.map.stop();
-    const bounds = new mapboxgl.LngLatBounds();
-    bounds.extend([pos.lng, pos.lat]);
-    bounds.extend([dLat.lng, dLat.lat]);
-    C.map.fitBounds(bounds, { padding: { top: 70, bottom: 85, left: 55, right: 55 }, maxZoom: 15.5, bearing: 0, pitch: 0, duration: 450 });
+    const { map: m, drv, dst } = getCustomerMapAndPoints();
+    if (!m) return;
+    if (C && C.engine) C.engine.follow = false;
+    window.__smdFitLockUntil = Date.now() + 20000;
+    if (typeof m.stop === 'function') m.stop();
+    if (drv && dst && typeof mapboxgl !== 'undefined' && typeof m.fitBounds === 'function') {
+        const bounds = new mapboxgl.LngLatBounds();
+        bounds.extend([drv.lng, drv.lat]);
+        bounds.extend([dst.lng, dst.lat]);
+        m.fitBounds(bounds, {
+            padding: { top: 70, bottom: 85, left: 55, right: 55 },
+            maxZoom: 15.5,
+            bearing: 0,
+            pitch: 0,
+            duration: 500,
+            essential: true
+        });
+    } else if (drv || dst) {
+        const only = drv || dst;
+        m.easeTo({
+            center: [only.lng, only.lat],
+            zoom: 15.5,
+            bearing: 0,
+            pitch: 0,
+            duration: 450,
+            essential: true
+        });
+    }
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1057,6 +1430,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
+    if (typeof window.__smdRestoreActiveBroadcast === 'function' && window.__smdRestoreActiveBroadcast()) return;
     if (!broadcasting()) return;
     const storedSessionId = sessionId();
     if (!storedSessionId) { LS.removeItem('smd_active_broadcast'); return; }

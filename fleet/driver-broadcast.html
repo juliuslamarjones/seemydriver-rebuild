@@ -297,7 +297,11 @@
             const params = new URLSearchParams(window.location.search);
             const compUuid = params.get('comp') || 'default_fleet';
             const sessionId = params.get('session');
-            const u = `${window.location.origin}/?view=customer&comp=${compUuid}&session=${sessionId}`;
+            const destText = encodeURIComponent(params.get('dest') || 'Destination');
+            const dLat = encodeURIComponent(params.get('lat') || '');
+            const dLng = encodeURIComponent(params.get('lng') || '');
+            const dName = encodeURIComponent(params.get('driver') || 'Driver');
+            const u = `${window.location.origin}/?view=customer&comp=${compUuid}&session=${sessionId}&driver=${dName}&dest=${destText}&lat=${dLat}&lng=${dLng}`;
             try { await navigator.clipboard.writeText(u); alert('Customer tracking link copied!'); } catch(e) {}
         };
 
@@ -305,7 +309,11 @@
             const params = new URLSearchParams(window.location.search);
             const compUuid = params.get('comp') || 'default_fleet';
             const sessionId = params.get('session');
-            const u = `${window.location.origin}/?view=customer&comp=${compUuid}&session=${sessionId}`;
+            const destText = encodeURIComponent(params.get('dest') || 'Destination');
+            const dLat = encodeURIComponent(params.get('lat') || '');
+            const dLng = encodeURIComponent(params.get('lng') || '');
+            const dName = encodeURIComponent(params.get('driver') || 'Driver');
+            const u = `${window.location.origin}/?view=customer&comp=${compUuid}&session=${sessionId}&driver=${dName}&dest=${destText}&lat=${dLat}&lng=${dLng}`;
             const clientPhone = params.get('phone') || '';
             window.open(`sms:${clientPhone}?body=` + encodeURIComponent(`Your service provider is on the way! Track live here: ${u}`));
         };

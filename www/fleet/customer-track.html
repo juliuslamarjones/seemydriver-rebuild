@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>SeeMyDriver - Live Customer Tracking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+    <style>
+        body { background-color: #090a0f; color: #f5f5f5; font-family: system-ui, -apple-system, sans-serif; }
+        .smd-driver-pin {
+            width: 22px; height: 22px; border-radius: 9999px;
+            background: #f59e0b; border: 3px solid #ffffff;
+            box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.28), 0 6px 16px rgba(0,0,0,0.65);
+        }
+        .smd-dest-pin {
+            width: 18px; height: 18px; border-radius: 9999px;
+            background: #10b981; border: 3px solid #ffffff;
+            box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.25), 0 6px 14px rgba(0,0,0,0.65);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col bg-[#090a0f]">
+    <header class="z-20 bg-[#12141c]/95 backdrop-blur border-b border-neutral-800 px-4 py-3 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2.5 min-w-0">
+            <span class="text-lg">??</span>
+            <div class="truncate">
+                <div class="font-black text-sm text-white leading-tight">SeeMy<span class="text-amber-400">Driver</span> <span class="text-neutral-400 font-semibold text-xs">Live</span></div>
+                <div id="lbl-driver-sub" class="text-[11px] text-neutral-400 truncate">Waiting for driver location...</div>
+            </div>
+        </div>
+        <div id="live-pill" class="shrink-0 bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[11px] font-black px-2.5 py-1 rounded-full">
+            CONNECTING
+        </div>
+    </header>
+
+    <main class="relative flex-1 w-full h-full">
+        <div id="customer-map" class="w-full h-full"></div>
+
+        <!-- Top-Right Camera Controls -->
+        <div class="absolute top-3 right-3 z-20 flex flex-col gap-2">
+            <button type="button" id="btn-3d" onclick="window.smdToggle3D()" class="bg-[#12141c]/95 hover:bg-neutral-800 border border-neutral-800 text-amber-400 font-bold text-xs px-3 py-2 rounded-xl shadow-lg cursor-pointer transition">
+                3D: ON
+            </button>
+            <button type="button" onclick="window.smdFitBoth()" class="bg-[#12141c]/95 hover:bg-neutral-800 border border-neutral-800 text-white font-bold text-xs px-3 py-2 rounded-xl shadow-lg cursor-pointer transition">
+                Fit Both
+            </button>
+            <button type="button" onclick="window.smdRecenter()" class="bg-[#12141c]/95 hover:bg-neutral-800 border border-amber-400/40 text-amber-300 font-bold text-xs px-3 py-2 rounded-xl shadow-lg cursor-pointer transition">
+                Recenter
+            </button>
+        </div>
+
+        <!-- Bottom Trip & ETA Card -->
+        <section class="absolute bottom-3 left-3 right-3 z-20 bg-[#12141c]/95 backdrop-blur border border-neutral-800 rounded-2xl p-4 shadow-2xl max-w-xl mx-auto">
+            <div class="flex items-baseline justify-between gap-3">
+                <div>
+                    <div class="text-[11px] uppercase tracking-wider text-neutral-400 font-bold">Estimated Arrival</div>
+                    <div id="lbl-eta" class="text-xl font-black text-amber-400">--</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-[11px] uppercase tracking-wider text-neutral-400 font-bold">Distance & Speed</div>
+                    <div id="lbl-dist-speed" class="text-xs font-mono font-bold text-white">-- · 0 mph</div>
+                </div>
+            </div>
+
+            <div class="mt-2.5 pt-2.5 border-t border-neutral-800/80 text-xs text-neutral-300 truncate">
+                <span class="text-neutral-500">Destination:</span> <strong id="lbl-dest" class="text-white">--</strong>
+            </div>
+
+            <div id="driver-actions" class="mt-3 flex gap-2 hidden">
+                <a id="btn-call-driver" href="#" class="flex-1 text-center bg-amber-400 hover:bg-amber-300 text-black font-black text-xs py-2.5 px-3 rounded-xl transition">
+                    Call Driver
+                </a>
+                <a id="btn-sms-driver" href="#" class="flex-1 text-center bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-white font-bold text-xs py-2.5 px-3 rounded-xl transition">
+                    Text Driver
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAfT3ZCE8DEmjsf4FLIqDgdYIQL1woIJOI",
+            authDomain: "seemydriver-prod.firebaseapp.com",
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com",
+            projectId: "seemydriver-prod",
+            storageBucket: "seemydriver-prod.firebasestorage.app",
+            messagingSenderId: "16366013329",
+            appId: "1:16366013329:web:7e993e6ee37f940a04a064"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        mapboxgl.accessToken = "pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg";
+
+        const params = new URLSearchParams(window.location.search);
+        const comp = params.get("comp") || "default_fleet";
+        const session = params.get("session") || params.get("id") || "";
+        const driverParam = params.get("driver") || "Driver";
+        const destParam = params.get("dest") || "Destination";
+        const destLat = parseFloat(params.get("lat"));
+        const destLng = parseFloat(params.get("lng"));
+        const driverPhone = (params.get("driverPhone") || "").replace(/[^+d]/g, "");
+
+        let destCoords = (Number.isFinite(destLat) && Number.isFinite(destLng)) ? [destLng, destLat] : null;
+        let driverCoords = null;
+        let map = null;
+        let driverMarker = null;
+        let destMarker = null;
+        let is3D = true;
+        let hasInitialFit = false;
+
+        document.getElementById("lbl-driver-sub").textContent = driverParam;
+        document.getElementById("lbl-dest").textContent = destParam;
+
+        if (driverPhone) {
+            document.getElementById("driver-actions").classList.remove("hidden");
+            document.getElementById("btn-call-driver").href = "tel:" + driverPhone;
+            document.getElementById("btn-sms-driver").href = "sms:" + driverPhone;
+        }
+
+        function setRouteGeoJson(geojson) {
+            if (!map || !map.getSource("smd-route")) return;
+            map.getSource("smd-route").setData({
+                type: "FeatureCollection",
+                features: geojson ? [{ type: "Feature", geometry: geojson }] : []
+            });
+        }
+
+        function haversineMeters(lng1, lat1, lng2, lat2) {
+            const R = 6371000;
+            const toRad = (d) => d * Math.PI / 180;
+            const dLat = toRad(lat2 - lat1);
+            const dLng = toRad(lng2 - lng1);
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+            return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        function applyTelemetryDisplay(meters, seconds) {
+            const speedText = document.getElementById("lbl-dist-speed").dataset.speed || "0 mph";
+            if (meters <= 50) {
+                document.getElementById("lbl-eta").textContent = "Arrived";
+                document.getElementById("lbl-dist-speed").textContent = "0.0 mi · " + speedText;
+                return;
+            }
+            const mins = Math.max(1, Math.round(seconds / 60));
+            const miles = (meters / 1609.344).toFixed(1);
+            document.getElementById("lbl-eta").textContent = mins + (mins === 1 ? " min" : " mins");
+            document.getElementById("lbl-dist-speed").textContent = miles + " mi · " + speedText;
+        }
+
+        async function refreshRouteAndEta() {
+            if (!driverCoords || !destCoords) return;
+            const directMeters = Math.max(0, haversineMeters(driverCoords[0], driverCoords[1], destCoords[0], destCoords[1]));
+            const speedText = document.getElementById("lbl-dist-speed").dataset.speed || "0 mph";
+            const speedMph = parseFloat(speedText) || 0;
+            const effMps = speedMph > 5 ? (speedMph * 0.44704) : (30 * 0.44704);
+            applyTelemetryDisplay(directMeters, Math.round(directMeters / effMps));
+            try {
+                const url = "https://api.mapbox.com/directions/v5/mapbox/driving/" +
+                    driverCoords[0] + "," + driverCoords[1] + ";" +
+                    destCoords[0] + "," + destCoords[1] +
+                    "?geometries=geojson&access_token=" + encodeURIComponent(mapboxgl.accessToken);
+                const res = await fetch(url);
+                const data = await res.json();
+                const route = data && data.routes && data.routes[0];
+                if (!route) return;
+                setRouteGeoJson(route.geometry);
+                applyTelemetryDisplay(route.distance, route.duration);
+            } catch (e) {}
+        }
+
+        function initMap() {
+            const center = driverCoords || destCoords || [-95.3698, 29.7604];
+            map = new mapboxgl.Map({
+                container: "customer-map",
+                style: "mapbox://styles/mapbox/dark-v11",
+                center: center,
+                zoom: 14,
+                pitch: 50,
+                bearing: -15
+            });
+            map.addControl(new mapboxgl.NavigationControl(), "top-left");
+            map.on("load", () => {
+                map.addSource("smd-route", {
+                    type: "geojson",
+                    data: { type: "FeatureCollection", features: [] }
+                });
+                map.addLayer({
+                    id: "smd-route-line",
+                    type: "line",
+                    source: "smd-route",
+                    layout: { "line-join": "round", "line-cap": "round" },
+                    paint: { "line-color": "#f59e0b", "line-width": 5, "line-opacity": 0.9 }
+                });
+                if (destCoords) ensureDestMarker();
+                if (driverCoords) ensureDriverMarker();
+                fitBothInternal(true);
+                refreshRouteAndEta();
+            });
+        }
+
+        function ensureDestMarker() {
+            if (!map || !destCoords) return;
+            if (!destMarker) {
+                const el = document.createElement("div");
+                el.className = "smd-dest-pin";
+                destMarker = new mapboxgl.Marker(el).setLngLat(destCoords).addTo(map);
+            } else {
+                destMarker.setLngLat(destCoords);
+            }
+        }
+
+        function ensureDriverMarker() {
+            if (!map || !driverCoords) return;
+            if (!driverMarker) {
+                const el = document.createElement("div");
+                el.className = "smd-driver-pin";
+                driverMarker = new mapboxgl.Marker(el).setLngLat(driverCoords).addTo(map);
+            } else {
+                driverMarker.setLngLat(driverCoords);
+            }
+        }
+
+        function fitBothInternal(immediate) {
+            if (!map) return;
+            if (driverCoords && destCoords) {
+                const bounds = new mapboxgl.LngLatBounds();
+                bounds.extend(driverCoords);
+                bounds.extend(destCoords);
+                map.fitBounds(bounds, { padding: 80, maxZoom: 16, duration: immediate ? 0 : 800 });
+            } else if (driverCoords) {
+                map.flyTo({ center: driverCoords, zoom: 15, duration: immediate ? 0 : 800 });
+            } else if (destCoords) {
+                map.flyTo({ center: destCoords, zoom: 14, duration: immediate ? 0 : 800 });
+            }
+        }
+
+        window.smdToggle3D = function() {
+            if (!map) return;
+            is3D = !is3D;
+            map.easeTo({ pitch: is3D ? 50 : 0, bearing: is3D ? -15 : 0, duration: 500 });
+            document.getElementById("btn-3d").textContent = is3D ? "3D: ON" : "2D: ON";
+        };
+
+        window.smdFitBoth = function() {
+            fitBothInternal(false);
+        };
+
+        window.smdRecenter = function() {
+            if (!map || !driverCoords) return;
+            map.flyTo({ center: driverCoords, zoom: 16, pitch: is3D ? 50 : 0, duration: 700 });
+        };
+
+        initMap();
+
+        if (session) {
+            const companyRef = db.ref("companies/" + comp + "/broadcasts/" + session);
+            const rootRef = db.ref("broadcasts/" + session);
+            const handleSnapshot = (snap) => {
+                const d = snap.val();
+                if (!d) return;
+                const dName = d.driverName || driverParam;
+                const speedMph = Number.isFinite(Number(d.speed)) ? Math.round(Number(d.speed)) : 0;
+                document.getElementById("lbl-driver-sub").textContent = dName;
+                document.getElementById("lbl-dist-speed").dataset.speed = speedMph + " mph";
+                if (d.destAddress) {
+                    document.getElementById("lbl-dest").textContent = d.destAddress;
+                }
+                if (Number.isFinite(Number(d.destLat)) && Number.isFinite(Number(d.destLng))) {
+                    destCoords = [Number(d.destLng), Number(d.destLat)];
+                    ensureDestMarker();
+                }
+                if (Number.isFinite(Number(d.lat)) && Number.isFinite(Number(d.lng))) {
+                    driverCoords = [Number(d.lng), Number(d.lat)];
+                    ensureDriverMarker();
+                    const pill = document.getElementById("live-pill");
+                    pill.textContent = "LIVE";
+                    pill.className = "shrink-0 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-black px-2.5 py-1 rounded-full";
+                    if (!hasInitialFit) {
+                        hasInitialFit = true;
+                        fitBothInternal(false);
+                    }
+                    refreshRouteAndEta();
+                }
+            };
+            companyRef.on("value", (snap) => {
+                if (snap && snap.val()) {
+                    handleSnapshot(snap);
+                } else {
+                    rootRef.once("value").then((rSnap) => { if (rSnap && rSnap.val()) handleSnapshot(rSnap); }).catch(() => {});
+                }
+            });
+            rootRef.on("value", (snap) => {
+                if (snap && snap.val()) {
+                    companyRef.once("value").then((cSnap) => {
+                        if (!cSnap || !cSnap.val()) handleSnapshot(snap);
+                    }).catch(() => handleSnapshot(snap));
+                }
+            });
+        }
+    </script>
+</body>
+</html>

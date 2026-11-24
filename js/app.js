@@ -36,6 +36,7 @@ window.switchView = function (viewId) {
 };
 
 window.handleSignOut = function () {
+    try { localStorage.setItem('smd_signed_out', '1'); localStorage.removeItem('smd_signed_in'); } catch (e) {}
     localStorage.removeItem('smd_active_broadcast');
     localStorage.removeItem('smd_session_id');
     localStorage.removeItem('smd_user_email');
@@ -52,7 +53,7 @@ window.handleSignIn = function () {
         alert('Please enter your email address.');
         return;
     }
-    try { localStorage.setItem('smd_signed_in', '1'); if (email) localStorage.setItem('smd_user_email', email); if (window.SafeStorage) window.SafeStorage.setItem('smd_signed_in', '1'); } catch (e) {}
+    try { localStorage.removeItem('smd_signed_out'); localStorage.setItem('smd_signed_in', '1'); if (email) localStorage.setItem('smd_user_email', email); if (window.SafeStorage) window.SafeStorage.setItem('smd_signed_in', '1'); } catch (e) {}
     if (!smdIsInstalledApp()) {
         smdPromptAppDownload(email);
         return;

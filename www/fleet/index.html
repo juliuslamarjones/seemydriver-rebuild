@@ -38,17 +38,44 @@
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #0f1117; }
         ::-webkit-scrollbar-thumb { background: #262626; border-radius: 3px; }
+        
+        /* Force Fleet Map Visibility on Mobile */
+        @media (max-width: 767px) {
+            body {
+                height: auto !important;
+                min-height: 100vh !important;
+                overflow-y: auto !important;
+                overflow-x: hidden !important;
+            }
+            main {
+                height: auto !important;
+                overflow: visible !important;
+            }
+            #fleet-map-wrapper {
+                min-height: 450px !important;
+                height: 450px !important;
+                width: 100% !important;
+                position: relative !important;
+                flex: none !important;
+            }
+            #fleet-map-container {
+                min-height: 450px !important;
+                height: 450px !important;
+                width: 100% !important;
+                position: relative !important;
+            }
+        }
     </style>
 </head>
-<body class="bg-black text-white h-screen w-screen overflow-hidden flex flex-col font-sans antialiased selection:bg-amber-400 selection:text-black">
+<body class="bg-black text-white md:h-screen w-screen md:overflow-hidden flex flex-col font-sans antialiased selection:bg-amber-400 selection:text-black">
 
     <!-- HEADER -->
-    <header class="w-full border-b border-neutral-900 bg-black/80 backdrop-blur-md px-4 py-3.5 flex items-center justify-between shrink-0 h-[65px]">
+    <header class="w-full border-b border-neutral-900 bg-black/80 backdrop-blur-md px-4 py-3.5 flex items-center justify-between shrink-0 h-[65px] sticky top-0 z-50">
         <div class="flex items-center gap-3">
             <div class="w-10 h-10 bg-amber-400 rounded-xl flex items-center justify-center font-black text-black text-xl shadow-[0_0_20px_rgba(251,191,36,0.3)]">👀</div>
             <div class="flex flex-col">
                 <span class="font-black text-base text-white">SeeMy<span class="text-amber-400">Driver</span></span>
-                <span class="text-[10px] font-mono text-neutral-400">Fleet Command Center v74</span>
+                <span class="text-[10px] font-mono text-neutral-400">Fleet Command Center v75</span>
             </div>
         </div>
         <div class="flex items-center gap-3">
@@ -59,10 +86,10 @@
     </header>
 
     <!-- MAIN INTERFACE -->
-    <main class="flex-1 flex flex-col md:flex-row w-full h-[calc(100vh-65px)] overflow-hidden">
+    <main class="flex-1 flex flex-col md:flex-row w-full md:h-[calc(100vh-65px)] md:overflow-hidden">
         
         <!-- LEFT PANEL: DISPATCH CONTROLS & ACTIVE ROSTER -->
-        <aside class="w-full md:w-[420px] bg-[#0c0d12] border-r border-neutral-900 flex flex-col h-full shrink-0 overflow-y-visible p-4 gap-4 relative z-30">
+        <aside class="w-full md:w-[420px] bg-[#0c0d12] border-b md:border-b-0 md:border-r border-neutral-900 flex flex-col md:h-full shrink-0 md:overflow-y-auto p-4 gap-4 relative z-30">
             
             <!-- NEW JOB DISPATCH CONTROL -->
             <div class="bg-[#12141c] border border-neutral-800 rounded-2xl p-4 flex flex-col gap-3 shadow-lg shrink-0 relative">
@@ -131,8 +158,8 @@
         </aside>
 
         <!-- RIGHT PANEL: MAP CONTAINER -->
-        <div class="flex-1 h-full relative bg-neutral-950 flex flex-col min-w-0">
-            <div id="fleet-map-container" class="w-full h-full absolute inset-0"></div>
+        <div id="fleet-map-wrapper" class="w-full md:flex-1 h-[450px] md:h-full relative bg-neutral-950 flex flex-col min-w-0 shrink-0">
+            <div id="fleet-map-container" class="w-full h-full md:absolute md:inset-0"></div>
             
             <!-- Map Overlay Info Badge -->
             <div class="absolute top-4 left-4 z-10 bg-black/85 border border-neutral-800 rounded-xl px-3.5 py-2 font-mono text-xs font-bold text-amber-400 backdrop-blur-md shadow-2xl flex items-center gap-2 pointer-events-none">
@@ -149,7 +176,7 @@
 
         let fleetMap;
         let activeMarkers = {};
-        let selectedCoords = { lat: 30.0024, lng: -95.2821 }; // Default Humble/FM 1960 fallback
+        let selectedCoords = { lat: 30.0024, lng: -95.2821 };
         const companyUuid = 'default_fleet';
         const RTDB_REST_URL = 'https://seemydriver-prod-default-rtdb.firebaseio.com/broadcasts';
 
@@ -168,9 +195,14 @@
                 antialias: true
             });
             fleetMap.addControl(new mapboxgl.NavigationControl(), 'top-right');
+            
+            fleetMap.on('load', () => {
+                fleetMap.resize();
+            });
+            setTimeout(() => { if (fleetMap) fleetMap.resize(); }, 400);
+            window.addEventListener('resize', () => { if (fleetMap) fleetMap.resize(); });
         }
 
-        // Helper: Get Secure Auth ID Token
         async function getAuthToken() {
             try {
                 let currentUser = auth.currentUser;
@@ -180,12 +212,11 @@
                 }
                 return await currentUser.getIdToken();
             } catch (err) {
-                console.error("Auth token error:", err);
+                console.warn("Anonymous auth unavailable, falling back to public REST:", err.message);
                 return null;
             }
         }
 
-        // Live Geocoder Autocomplete Listener
         const destInput = document.getElementById('input-destination');
         const suggestionsBox = document.getElementById('geocoder-suggestions');
         let debounceTimer;
@@ -253,9 +284,16 @@
             return el;
         }
 
-        // Deploy Truck Only: Uses secure authenticated REST call
+        async function rtdbFetch(pathSuffix, options = {}) {
+            const token = await getAuthToken();
+            if (token) {
+                const authRes = await fetch(`${RTDB_REST_URL}${pathSuffix}?auth=${token}`, options);
+                if (authRes.status !== 401) return authRes;
+            }
+            return await fetch(`${RTDB_REST_URL}${pathSuffix}`, options);
+        }
+
         async function handleDeployTruckOnly() {
-            console.log("🚀 Deploy Truck Only clicked!");
             const driverName = (document.getElementById('input-driver-name').value || 'Driver').trim();
             const destAddress = destInput.value || 'Destination';
             const sessionId = 'driver_' + driverName.toLowerCase().replace(/[^a-z0-9]/g, '_');
@@ -271,19 +309,15 @@
             };
 
             try {
-                const token = await getAuthToken();
-                if (!token) throw new Error("Authentication failed");
-
-                const response = await fetch(`${RTDB_REST_URL}/${sessionId}.json?auth=${token}`, {
+                const response = await rtdbFetch(`/${sessionId}.json`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(sessionData)
                 });
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                console.log("✅ Secure REST API deployed successfully for:", driverName);
                 fetchBroadcasts();
             } catch (err) {
-                console.error('❌ Secure REST API write error:', err);
+                console.error('❌ REST API write error:', err);
                 alert('Database write failed: ' + err.message);
             }
 
@@ -293,7 +327,6 @@
         }
 
         async function handleDeployAndTextDriver() {
-            console.log("📲 Deploy Truck & Text clicked!");
             const driverName = (document.getElementById('input-driver-name').value || 'Driver').trim();
             const driverPhone = document.getElementById('input-driver-phone').value || '';
             const destAddress = destInput.value || 'Destination';
@@ -311,35 +344,36 @@
             };
 
             try {
-                const token = await getAuthToken();
-                if (token) {
-                    await fetch(`${RTDB_REST_URL}/${sessionId}.json?auth=${token}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(sessionData)
-                    });
-                    fetchBroadcasts();
-                }
+                const res = await rtdbFetch(`/${sessionId}.json`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(sessionData)
+                });
+                if (res.ok) fetchBroadcasts();
             } catch (err) {
-                console.error('❌ Secure REST API write error:', err);
+                console.error('❌ REST API write error:', err);
             }
 
             if (fleetMap) {
                 fleetMap.flyTo({ center: [selectedCoords.lng, selectedCoords.lat], zoom: 15, pitch: 45, duration: 1500 });
             }
 
+            const customerTrackingUrl = `${window.location.origin}/?view=customer&session=${encodeURIComponent(sessionId)}&driver=${encodeURIComponent(driverName)}`;
             const driverBroadcastUrl = `${window.location.origin}/fleet/driver-broadcast.html?comp=${companyUuid}&session=${sessionId}&driver=${encodeURIComponent(driverName)}&dest=${encodeURIComponent(destAddress)}&lat=${selectedCoords.lat}&lng=${selectedCoords.lng}&phone=${encodeURIComponent(clientPhone)}`;
             
             const smsBody = encodeURIComponent(`SeeMyDriver Dispatch: Your destination is ${destAddress}. Open your driver broadcast console here: ${driverBroadcastUrl}`);
-            window.open(`sms:${driverPhone}?body=${smsBody}`);
+            const smsLink = document.createElement('a');
+            smsLink.href = `sms:${driverPhone}?body=${smsBody}`;
+            smsLink.rel = 'noopener noreferrer';
+            document.body.appendChild(smsLink);
+            smsLink.click();
+            smsLink.remove();
         }
 
-        // Fetch broadcasts via secure REST poll
         async function fetchBroadcasts() {
             try {
-                const token = await getAuthToken();
-                const url = token ? `${RTDB_REST_URL}.json?auth=${token}` : `${RTDB_REST_URL}.json`;
-                const res = await fetch(url);
+                const res = await rtdbFetch(`.json`);
+                if (!res.ok) return;
                 const data = await res.json() || {};
                 
                 const rosterContainer = document.getElementById('fleet-roster-container');
@@ -401,7 +435,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             initFleetMap();
 
-            // Initial fetch and poll
             fetchBroadcasts();
             setInterval(fetchBroadcasts, 2000);
 
@@ -422,15 +455,13 @@
             });
             document.getElementById('btn-purge-all').addEventListener('click', async () => {
                 if (confirm('Are you sure you want to purge all active sessions?')) {
-                    const token = await getAuthToken();
-                    await fetch(`${RTDB_REST_URL}.json?auth=${token}`, { method: 'DELETE' });
+                    await rtdbFetch(`.json`, { method: 'DELETE' });
                     fetchBroadcasts();
                 }
             });
 
             window.terminateSession = async function(sessionId) {
-                const token = await getAuthToken();
-                await fetch(`${RTDB_REST_URL}/${sessionId}.json?auth=${token}`, { method: 'DELETE' });
+                await rtdbFetch(`/${sessionId}.json`, { method: 'DELETE' });
                 if (activeMarkers[sessionId]) {
                     activeMarkers[sessionId].marker.remove();
                     delete activeMarkers[sessionId];
