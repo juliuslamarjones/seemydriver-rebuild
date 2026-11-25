@@ -11,7 +11,7 @@ const LS = window.SafeStorage || {
 };
 
 const MPS_TO_MPH = 2.23694;
-const ENGINE_VERSION = 'v68-route-lock';
+const ENGINE_VERSION = 'v69-route-lock';
 const HEADING_UP = false;
 
 const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
@@ -310,6 +310,11 @@ RouteFollower.prototype.pushFix = function (fix, now) {
     this.lastGoodS = p.s;
 };
 
+RouteFollower.prototype.freeze = function () {
+    this.vEst = 0; this.v = 0;
+    if (this.s != null) this.targetS = this.s;
+};
+
 RouteFollower.prototype.predictedSpeed = function (now) {
     const o = this.o;
     const gap = this.lastGoodTime ? ((now || Date.now()) - this.lastGoodTime) / 1000 : 0;
@@ -585,9 +590,26 @@ function sendFirebase(out) {
         speed: speed,
         heading: heading,
         acc: (typeof out.acc === "number" && isFinite(out.acc)) ? Math.round(out.acc) : 10,
+        paused: false,
         timestamp: now
     }).catch(() => {});
 }
+function smdSetPaused(hidden) {
+    try {
+        const q = new URLSearchParams(window.location.search);
+        if (q.get('view') === 'customer' || q.has('session')) return;
+        if (!broadcasting()) return;
+        const database = getDb();
+        const sid = sessionId();
+        if (!database || !sid) return;
+        if (hidden && D && D.engine && typeof D.engine.freeze === 'function') D.engine.freeze();
+        if (!hidden) gps.lastSend = 0;
+        database.ref('broadcasts/' + sid).update({ paused: !!hidden, timestamp: Date.now() }).catch(() => {});
+    } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => smdSetPaused(document.visibilityState === 'hidden'));
+window.addEventListener('pagehide', () => smdSetPaused(true));
+
 function setBadge(text, ok) {
     const targets = Array.from(document.querySelectorAll('.smd-gps-badge'));
     const activeView = $('active-broadcast-view');
@@ -910,6 +932,8 @@ function createTripEngine(map, opts) {
         if (E.hasFix && isFinite(E.rawLat) && isFinite(E.rawLng)) return { lat: E.rawLat, lng: E.rawLng };
         return null;
     };
+
+    E.freeze = function () { F.freeze(); E.speedMs = 0; };
 
     E.setDest = function (d) {
         if (d && isFinite(Number(d.lat)) && isFinite(Number(d.lng)) && !(Number(d.lat) === 0 && Number(d.lng) === 0)) {
@@ -1271,6 +1295,13 @@ window.initCustomerMapLive = function () {
         if (!me.engine) me.engine = createTripEngine(map, { dest: dest, camera: { pitch: 40, bearing: 0 } });
         if (dest && typeof me.engine.setDest === 'function') me.engine.setDest(dest);
 
+        me.paused = data.paused === true;
+        if (me.paused) {
+            if (typeof me.engine.freeze === 'function') me.engine.freeze();
+            setPill('Driver\u2019s location paused', 'warn');
+            if (speedEl) speedEl.textContent = '0 mph';
+            return;
+        }
         const mph = Number(data.speed) || 0;
         const fbAcc = Number(data.acc);
         me.engine.feed({ lat: lat, lng: lng, speedMs: mph / MPS_TO_MPH, acc: (isFinite(fbAcc) && fbAcc > 0) ? fbAcc : 10 });
@@ -1478,6 +1509,7 @@ window.initCustomerMapLive = function () {
 
     me.timer = setInterval(() => {
         if (C !== me || me.ended || !me.lastTs) return;
+        if (me.paused) { setPill('Driver\u2019s location paused', 'warn'); return; }
         const secs = Math.round((Date.now() - me.lastChange) / 1000);
         if (secs > 20) setPill('Driver\u2019s location paused \u00b7 last update ' + (secs >= 90 ? Math.round(secs / 60) + ' min' : secs + ' s') + ' ago', 'warn');
         else setPill('\u25cf Live', 'ok');
