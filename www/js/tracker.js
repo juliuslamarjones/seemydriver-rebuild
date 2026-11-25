@@ -11,7 +11,7 @@ const LS = window.SafeStorage || {
 };
 
 const MPS_TO_MPH = 2.23694;
-const ENGINE_VERSION = 'v66-route-lock';
+const ENGINE_VERSION = 'v68-route-lock';
 const HEADING_UP = false;
 
 const MAPBOX_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
@@ -21,6 +21,24 @@ const LIGHT_STREETS_STYLE = 'mapbox://styles/mapbox/streets-v12';
 
 const $ = (id) => document.getElementById(id);
 const getDb = () => window.db || (typeof db !== 'undefined' ? db : null);
+
+// Invisible anonymous sign-in: every phone gets its own Firebase ID so the
+// database rules can say "only the phone that started a trip can update it".
+window.smdEnsureAuth = function () {
+    if (!window.firebase || typeof window.firebase.auth !== 'function') return Promise.reject(new Error('Firebase auth not loaded'));
+    const a = window.firebase.auth();
+    if (a.currentUser) return Promise.resolve(a.currentUser);
+    if (window.__smdAuthPromise) return window.__smdAuthPromise;
+    window.__smdAuthPromise = new Promise((res, rej) => {
+        const un = a.onAuthStateChanged((u) => {
+            un();
+            if (u) res(u);
+            else a.signInAnonymously().then((c) => res(c.user)).catch(rej);
+        });
+    }).catch((e) => { window.__smdAuthPromise = null; throw e; });
+    return window.__smdAuthPromise;
+};
+try { window.smdEnsureAuth().catch(() => {}); } catch (e) {}
 
 const M_PER_DEG = 111194.9;
 const toRad = (d) => d * Math.PI / 180;
@@ -417,9 +435,9 @@ window.launchLiveBroadcast = function() {
     const database = getDb();
 
     if (database) {
-        database.ref('broadcasts/' + sid).set({
-            ownerUid: (authUser && authUser.uid) || 'browser-session',
-            ownerEmail: (authUser && authUser.email ? String(authUser.email).toLowerCase() : ''),
+        window.smdEnsureAuth().then((user) => database.ref('broadcasts/' + sid).set({
+            ownerUid: user.uid,
+            ownerEmail: (authUser && authUser.email ? String(authUser.email).toLowerCase() : (LS.getItem('smd_user_email') || '').toLowerCase()),
             driverName: driverName,
             driverPhone: driverPhone,
             companyName: companyName,
@@ -429,7 +447,7 @@ window.launchLiveBroadcast = function() {
             speed: 0,
             heading: 0,
             timestamp: Date.now()
-        }).catch(() => {});
+        })).catch((e) => console.error('Broadcast start failed:', e));
     }
 
     window.switchView('active-broadcast');
@@ -639,6 +657,27 @@ function createPinElement() {
     return el;
 }
 
+// Route lookup: Mapbox Directions first (built for business use), free OSRM demo server as a backup.
+async function getDirections(fromLng, fromLat, toLng, toLat) {
+    const pair = fromLng + ',' + fromLat + ';' + toLng + ',' + toLat;
+    const token = window.MAPBOX_TOKEN || MAPBOX_TOKEN;
+    if (token) {
+        try {
+            const res = await fetch('https://api.mapbox.com/directions/v5/mapbox/driving/' + pair + '?geometries=geojson&overview=full&access_token=' + encodeURIComponent(token));
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry && Array.isArray(data.routes[0].geometry.coordinates) && data.routes[0].geometry.coordinates.length > 1) return data;
+            }
+        } catch (e) {}
+    }
+    try {
+        const res = await fetch('https://router.project-osrm.org/route/v1/driving/' + pair + '?overview=full&geometries=geojson');
+        return await res.json();
+    } catch (e) {
+        return null;
+    }
+}
+
 function createTripEngine(map, opts) {
     const dest = (opts && opts.dest) || null;
     const E = {
@@ -704,11 +743,9 @@ function createTripEngine(map, opts) {
         if (!dPt || E.routeLoading || !E.running) return;
         E.routeLoading = true;
         try {
-            const url = 'https://router.project-osrm.org/route/v1/driving/' + fromLng + ',' + fromLat + ';' + dPt.lng + ',' + dPt.lat + '?overview=full&geometries=geojson';
-            const res = await fetch(url);
-            const data = await res.json();
+            const data = await getDirections(fromLng, fromLat, dPt.lng, dPt.lat);
             if (!E.running) return;
-            if (data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry && Array.isArray(data.routes[0].geometry.coordinates) && data.routes[0].geometry.coordinates.length > 1) {
+            if (data && data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry && Array.isArray(data.routes[0].geometry.coordinates) && data.routes[0].geometry.coordinates.length > 1) {
                 const r = data.routes[0];
                 const coords = r.geometry.coordinates;
                 // place the truck on the new line from the best position we have
