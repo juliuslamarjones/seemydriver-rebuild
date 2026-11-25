@@ -1,7 +1,7 @@
 // ==========================================
 // SEEMYDRIVER - PWA SERVICE WORKER
 // ==========================================
-const CACHE_NAME = 'seemydriver-v51-1795531935964';
+const CACHE_NAME = 'seemydriver-v75';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -36,6 +36,9 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
     if (e.request.method !== 'GET') return;
+    var u; try { u = new URL(e.request.url); } catch (x) { return; }
+    if (u.origin !== self.location.origin) return;
+    if (u.pathname.indexOf('/js/') === 0 || u.pathname.slice(-3) === '.js') { /* always network-first, no stale fallback to HTML */ }
 
     e.respondWith(
         fetch(e.request)
@@ -44,7 +47,7 @@ self.addEventListener('fetch', (e) => {
             })
             .catch(() => {
                 return caches.match(e.request).then((cachedResponse) => {
-                    return cachedResponse || caches.match('/');
+                    return cachedResponse || (e.request.mode === 'navigate' ? caches.match('/') : Response.error());
                 });
             })
     );
