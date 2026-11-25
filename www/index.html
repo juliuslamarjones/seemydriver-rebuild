@@ -318,8 +318,9 @@
         <div class="font-bold text-neutral-400">Developed & Architected by Julius Jones</div>
     </footer>
 
-    <script src="js/app.js"></script>
-    <script src="js/tracker.js?v=1795531935936"></script>
+    <script>window.__smdLandingVisible=function(){var l=document.getElementById("landing-view");return !!(l&&l.offsetParent!==null);};</script>
+    <script src="js/app.js?v=75"></script>
+    <script src="js/tracker.js?v=75"></script>
 <script>
 window.soloRecenterMap = function() {
   try {
@@ -600,7 +601,7 @@ window.soloFitBoth = function() {
     renderRoadHuggingPreview();
   }
 
-  setInterval(runAll, 900);
+  setInterval(function(){ if (window.__smdLandingVisible()) runAll(); }, 900);
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', runAll);
   } else {
@@ -831,7 +832,7 @@ window.soloFitBoth = function() {
     } catch (e) {}
   }
 
-  setInterval(mountPreviewMap, 1000);
+  setInterval(function(){ if (window.__smdLandingVisible()) mountPreviewMap(); }, 1000);
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => setTimeout(mountPreviewMap, 250));
   } else {
@@ -1075,7 +1076,7 @@ window.soloFitBoth = function() {
     } catch (e) {}
   }
 
-  setInterval(initLivePreview, 1000);
+  setInterval(function(){ if (window.__smdLandingVisible()) initLivePreview(); }, 1000);
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => setTimeout(initLivePreview, 200));
   } else {
@@ -1166,7 +1167,7 @@ window.soloFitBoth = function() {
   }
 
   separateCtaAndCard();
-  setInterval(separateCtaAndCard, 500);
+  setInterval(function(){ if (window.__smdLandingVisible()) separateCtaAndCard(); }, 500);
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', separateCtaAndCard);
   }
@@ -1390,6 +1391,25 @@ window.soloFitBoth = function() {
 
   async function lookupAddresses(q) {
     const encoded = encodeURIComponent(q);
+    const tok = window.MAPBOX_TOKEN || '';
+    if (tok) {
+      try {
+        const mRes = await fetch('https://api.mapbox.com/geocoding/v5/mapbox.places/' + encoded + '.json?access_token=' + tok + '&autocomplete=true&types=address,poi&limit=5');
+        if (mRes.ok) {
+          const mData = await mRes.json();
+          const mFeats = Array.isArray(mData && mData.features) ? mData.features : [];
+          const mm = mFeats
+            .filter(f => f && Array.isArray(f.center) && f.center.length >= 2)
+            .map(f => ({
+              name: f.place_name || f.text || q,
+              lng: parseFloat(f.center[0]),
+              lat: parseFloat(f.center[1])
+            }))
+            .filter(x => isFinite(x.lng) && isFinite(x.lat));
+          if (mm.length) return mm;
+        }
+      } catch (e) {}
+    }
     try {
       const pRes = await fetch('https://photon.komoot.io/api/?q=' + encoded + '&limit=5');
       if (pRes.ok) {
@@ -1413,24 +1433,6 @@ window.soloFitBoth = function() {
       }
     } catch (e) {}
 
-    const tok = (typeof MAPBOX_TOKEN !== 'undefined' && MAPBOX_TOKEN) ? MAPBOX_TOKEN : MAPBOX_FALLBACK;
-    if (tok) {
-      try {
-        const mRes = await fetch('https://api.mapbox.com/geocoding/v5/mapbox.places/' + encoded + '.json?access_token=' + tok + '&autocomplete=true&types=address,poi&limit=5');
-        if (mRes.ok) {
-          const mData = await mRes.json();
-          const mFeats = Array.isArray(mData && mData.features) ? mData.features : [];
-          return mFeats
-            .filter(f => f && Array.isArray(f.center) && f.center.length >= 2)
-            .map(f => ({
-              name: f.place_name || f.text || q,
-              lng: parseFloat(f.center[0]),
-              lat: parseFloat(f.center[1])
-            }))
-            .filter(x => isFinite(x.lng) && isFinite(x.lat));
-        }
-      } catch (e) {}
-    }
     return [];
   }
 

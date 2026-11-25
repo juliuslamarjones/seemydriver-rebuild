@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sign In - SeeMyDriver SaaS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script>
+        var firebaseConfig = { 
+            apiKey: "AIzaSyD3L_5ZYn84bCySfGKu7rynWSRFxFNbV9c",
+            authDomain: "seemydriver-prod.firebaseapp.com",
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com/",
+            projectId: "seemydriver-prod",
+            storageBucket: "seemydriver-prod.appspot.com",
+            messagingSenderId: "163660133229",
+            appId: "1:163660133229:web:7e993e6ee37f940a04a064"
+        };
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        var auth = firebase.auth();
+        var db = firebase.database();
+
+        var selectedLoginTier = 'solo';
+        function setLoginTier(tier) {
+            selectedLoginTier = tier;
+            var soloBtn = document.getElementById('login-tier-solo');
+            var fleetBtn = document.getElementById('login-tier-fleet');
+            
+            if (!soloBtn || !fleetBtn) return;
+
+            if (tier === 'solo') {
+                soloBtn.className = "bg-yellow-400 text-black font-black text-[10px] py-2.5 rounded-xl transition cursor-pointer text-center shadow-md";
+                fleetBtn.className = "bg-neutral-900 text-neutral-400 font-bold text-[10px] py-2.5 rounded-xl border border-neutral-800 transition cursor-pointer text-center";
+            } else {
+                fleetBtn.className = "bg-yellow-400 text-black font-black text-[10px] py-2.5 rounded-xl transition cursor-pointer text-center shadow-md";
+                soloBtn.className = "bg-neutral-900 text-neutral-400 font-bold text-[10px] py-2.5 rounded-xl border border-neutral-800 transition cursor-pointer text-center";
+            }
+        }
+
+        function togglePassword() {
+            var input = document.getElementById('signin-password');
+            var toggleBtn = document.getElementById('toggle-password-btn');
+            if (input.type === 'password') {
+                input.type = 'text';
+                toggleBtn.textContent = '🙈';
+            } else {
+                input.type = 'password';
+                toggleBtn.textContent = '👁️';
+            }
+        }
+
+        function handleSignIn() {
+            var email = document.getElementById('signin-email').value.trim();
+            var password = document.getElementById('signin-password').value.trim();
+
+            if (!email || !password) {
+                alert('Please provide your email and password.');
+                return;
+            }
+
+            auth.signInWithEmailAndPassword(email, password)
+                .then(function(cred) {
+                    // Update user's active tier preference in DB on sign-in if needed, or route directly based on selection
+                    return db.ref('users/' + cred.user.uid).update({ tier: selectedLoginTier })
+                        .then(function() {
+                            return cred.user.uid;
+                        });
+                })
+                .then(function() {
+                    if (selectedLoginTier === 'fleet') {
+                        window.location.href = 'dispatch.html';
+                    } else {
+                        window.location.href = 'driver.html';
+                    }
+                })
+                .catch(function(error) {
+                    alert('Sign in error: ' + error.message);
+                });
+        }
+    </script>
+</head>
+<body class="bg-black text-white min-h-screen flex flex-col justify-between overflow-x-hidden selection:bg-yellow-400 selection:text-black">
+    <header class="w-full max-w-4xl mx-auto px-4 py-3 flex items-center justify-between border-b border-neutral-900">
+        <div class="flex items-center gap-2">
+            <span class="text-[24px] font-black tracking-tight text-white cursor-pointer" onclick="window.location.href='index.html'">See<span class="text-yellow-400">My</span>Driver</span>
+            <span class="text-sm">👀</span>
+        </div>
+        <button onclick="window.location.href='index.html'" class="bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-white px-3 py-2 rounded-xl text-xs font-bold cursor-pointer">← Home</button>
+    </header>
+
+    <main class="w-full max-w-lg mx-auto px-4 py-3 flex-1 flex flex-col items-center justify-center">
+        <div class="w-full flex flex-col items-center text-center gap-3">
+            <div class="inline-flex items-center gap-2 bg-neutral-900 border border-neutral-800 px-3 py-1 rounded-full shadow-inner">
+                <span class="text-[10px] font-bold text-yellow-400 uppercase tracking-wider">Secure Account Access</span>
+            </div>
+            <h2 class="text-2xl font-black tracking-tight text-white">Sign in to <span class="text-yellow-400">SeeMyDriver</span></h2>
+            
+            <div class="w-full bg-neutral-950 border border-neutral-800 p-5 rounded-3xl text-left flex flex-col gap-3 shadow-xl max-w-xs">
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Select Login Portal</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" onclick="setLoginTier('solo')" id="login-tier-solo" class="bg-yellow-400 text-black font-black text-[10px] py-2.5 rounded-xl transition cursor-pointer text-center shadow-md">Solo Driver</button>
+                        <button type="button" onclick="setLoginTier('fleet')" id="login-tier-fleet" class="bg-neutral-900 text-neutral-400 font-bold text-[10px] py-2.5 rounded-xl border border-neutral-800 transition cursor-pointer text-center">Fleet Manager</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Email Address</label>
+                    <input type="email" id="signin-email" placeholder="name@company.com" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 transition">
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Password</label>
+                    <div class="relative">
+                        <input type="password" id="signin-password" placeholder="••••••••" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 pr-10 text-xs text-white focus:outline-none focus:border-yellow-400 transition">
+                        <button type="button" id="toggle-password-btn" onclick="togglePassword()" class="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white text-xs cursor-pointer">👁️</button>
+                    </div>
+                </div>
+                <button onclick="handleSignIn()" class="w-full bg-yellow-400 hover:bg-yellow-300 active:scale-95 text-black font-black text-xs py-3 rounded-xl transition shadow-md text-center cursor-pointer mt-1">Sign In →</button>
+            </div>
+        </div>
+    </main>
+
+    <footer class="w-full max-w-4xl mx-auto px-4 py-3 text-center text-[10px] text-neutral-500 border-t border-neutral-900">
+        © SeeMyDriver SaaS • All Rights Reserved
+    </footer>
+</body>
+</html>

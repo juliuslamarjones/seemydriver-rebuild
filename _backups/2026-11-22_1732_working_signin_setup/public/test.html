@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SeeMyDriver - Live Tracking SaaS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script>
+        var firebaseConfig = {
+            apiKey: "AIzaSyD3L_5ZYn84bCySfGKu7rynWSRFxFNbV9c",
+            authDomain: "seemydriver-prod.firebaseapp.com",
+            databaseURL: "https://seemydriver-prod-default-rtdb.firebaseio.com/",
+            projectId: "seemydriver-prod",
+            storageBucket: "seemydriver-prod.appspot.com",
+            messagingSenderId: "163660133229",
+            appId: "1:163660133229:web:7e993e6ee37f940a04a064"
+        };
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        var auth = firebase.auth();
+        var db = firebase.database();
+
+        var selectedRegTier = 'solo';
+        function setRegTier(tier) {
+            selectedRegTier = tier;
+            var descElem = document.getElementById('tier-description');
+            var soloCard = document.getElementById('solo-plan-card');
+            var fleetCard = document.getElementById('fleet-plan-card');
+
+            if (tier === 'solo') {
+                if (descElem) descElem.textContent = "✓ 1 Active Driver Device • Live GPS • Free Forever";
+                if (soloCard) soloCard.className = "w-full bg-neutral-950 border-2 border-yellow-400 p-5 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
+                if (fleetCard) fleetCard.className = "w-full bg-neutral-950 border border-neutral-800 p-5 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
+            } else {
+                if (descElem) descElem.textContent = "✓ Unlimited Drivers • Command Center • Geofencing • $49/mo";
+                if (soloCard) soloCard.className = "w-full bg-neutral-950 border border-neutral-800 p-5 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer";
+                if (fleetCard) fleetCard.className = "w-full bg-neutral-950 border-2 border-yellow-400 p-5 rounded-3xl text-left flex flex-col gap-3 transition shadow-2xl relative group cursor-pointer";
+            }
+        }
+
+        function selectAndRegister(tier) {
+            setRegTier(tier);
+            switchView('register');
+        }
+
+        function switchView(view) {
+            var landing = document.getElementById('landing-view');
+            var register = document.getElementById('register-view');
+            var plans = document.getElementById('plans-view');
+            var signin = document.getElementById('signin-view');
+            var guide = document.getElementById('guide-view');
+            var sandbox = document.getElementById('sandbox-view');
+            var jobSetup = document.getElementById('job-setup-view');
+            var activeBroadcast = document.getElementById('active-broadcast-view');
+            var customerView = document.getElementById('customer-view');
+            
+            if (landing) landing.classList.add('hidden');
+            if (register) register.classList.add('hidden');
+            if (plans) plans.classList.add('hidden');
+            if (signin) signin.classList.add('hidden');
+            if (guide) guide.classList.add('hidden');
+            if (sandbox) sandbox.classList.add('hidden');
+            if (jobSetup) jobSetup.classList.add('hidden');
+            if (activeBroadcast) activeBroadcast.classList.add('hidden');
+            if (customerView) customerView.classList.add('hidden');
+
+            if (view === 'register' && register) {
+                register.classList.remove('hidden');
+            } else if (view === 'plans' && plans) {
+                plans.classList.remove('hidden');
+                setRegTier(selectedRegTier);
+            } else if (view === 'signin' && signin) {
+                signin.classList.remove('hidden');
+            } else if (view === 'guide' && guide) {
+                guide.classList.remove('hidden');
+            } else if (view === 'job-setup' && jobSetup) {
+                jobSetup.classList.remove('hidden');
+            } else if (view === 'active-broadcast' && activeBroadcast) {
+                activeBroadcast.classList.remove('hidden');
+            } else if (view === 'sandbox' && sandbox) {
+                sandbox.classList.remove('hidden');
+                startSandboxSimulation();
+            } else if (view === 'customer' && customerView) {
+                customerView.classList.remove('hidden');
+                initCustomerMap();
+            } else if (landing) {
+                landing.classList.remove('hidden');
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        var simInterval = null;
+        var watchId = null;
+        var isRealGpsActive = false;
+
+        function startSandboxSimulation() {
+            isRealGpsActive = false;
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            var gpsBtn = document.getElementById('gps-toggle-btn');
+            if (gpsBtn) gpsBtn.textContent = "📍 Test With My Real Location";
+
+            var latElem = document.getElementById('sim-lat');
+            var lngElem = document.getElementById('sim-lng');
+            var statusElem = document.getElementById('sim-status');
+
+            var lat = 29.9736;
+            var lng = -95.2855;
+            var etaMinutes = 6;
+
+            if (simInterval) clearInterval(simInterval);
+            simInterval = setInterval(function() {
+                if (isRealGpsActive) return;
+                lat += (Math.random() - 0.3) * 0.001;
+                lng += (Math.random() - 0.4) * 0.001;
+
+                if (latElem) latElem.textContent = lat.toFixed(4);
+                if (lngElem) lngElem.textContent = lng.toFixed(4);
+                var currentEta = document.getElementById('sim-eta');
+                if (currentEta) currentEta.textContent = etaMinutes + ' mins';
+                if (statusElem) statusElem.textContent = 'Active Broadcast (Simulated)';
+            }, 2000);
+        }
+
+        function toggleRealGPS() {
+            var gpsBtn = document.getElementById('gps-toggle-btn');
+            var statusElem = document.getElementById('sim-status');
+            var latElem = document.getElementById('sim-lat');
+            var lngElem = document.getElementById('sim-lng');
+
+            if (!isRealGpsActive) {
+                if (!navigator.geolocation) {
+                    alert('Geolocation is not supported by your browser');
+                    return;
+                }
+                if (simInterval) clearInterval(simInterval);
+                statusElem.textContent = 'Acquiring GPS Signal...';
+                gpsBtn.textContent = "⏳ Requesting GPS Access...";
+
+                watchId = navigator.geolocation.watchPosition(function(position) {
+                    isRealGpsActive = true;
+                    statusElem.textContent = 'Broadcasting Real GPS';
+                    gpsBtn.textContent = "🔄 Switch Back to Demo Simulation";
+
+                    var currentLat = position.coords.latitude;
+                    var currentLng = position.coords.longitude;
+
+                    if (latElem) latElem.textContent = currentLat.toFixed(4);
+                    if (lngElem) lngElem.textContent = currentLng.toFixed(4);
+                }, function(error) {
+                    statusElem.textContent = 'Permission Denied / Error';
+                    gpsBtn.textContent = "📍 Test With My Real Location";
+                    alert('Unable to retrieve your location. Please check browser permissions.');
+                }, { enableHighAccuracy: true });
+            } else {
+                isRealGpsActive = false;
+                if (watchId !== null) {
+                    navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                }
+                startSandboxSimulation();
+            }
+        }
+
+        function togglePassword() {
+            var input = document.getElementById('password-input');
+            var toggleBtn = document.getElementById('toggle-password-btn');
+            if (input.type === 'password') {
+                input.type = 'text';
+                toggleBtn.textContent = '🙈';
+            } else {
+                input.type = 'password';
+                toggleBtn.textContent = '👁️';
+            }
+        }
+
+        function toggleSigninPassword() {
+            var input = document.getElementById('signin-password');
+            var toggleBtn = document.getElementById('toggle-signin-password');
+            if (input.type === 'password') {
+                input.type = 'text';
+                toggleBtn.textContent = '🙈';
+            } else {
+                input.type = 'password';
+                toggleBtn.textContent = '👁️';
+            }
+        }
+
+        var pendingAuth = { uid: '', fullName: '', email: '', tier: '' };
+
+        function handleRegister() {
+            var company = document.getElementById('reg-company').value.trim();
+            var fullName = document.getElementById('reg-name').value.trim();
+            var email = document.getElementById('reg-email').value.trim();
+            var password = document.getElementById('password-input').value.trim();
+
+            if (!email || !password) {
+                alert('Please provide an email and password.');
+                return;
+            }
+
+            auth.createUserWithEmailAndPassword(email, password)
+                .then(function(cred) {
+                    var uid = cred.user.uid;
+                    pendingAuth.uid = uid;
+                    pendingAuth.fullName = fullName || email.split('@')[0];
+                    pendingAuth.email = email;
+                    pendingAuth.tier = selectedRegTier;
+
+                    localStorage.setItem('smd_dispatcher_uid', uid);
+                    localStorage.setItem('smd_driver_id', pendingAuth.fullName);
+
+                    return db.ref('users/' + uid).set({
+                        company: company || 'Quick Tap Solutions',
+                        fullName: pendingAuth.fullName,
+                        email: email,
+                        tier: selectedRegTier,
+                        createdAt: Date.now()
+                    });
+                })
+                .then(function() {
+                    if (selectedRegTier === 'fleet') {
+                        window.location.href = 'fleet.html';
+                    } else {
+                        switchView('job-setup');
+                    }
+                })
+                .catch(function(error) {
+                    if (error.code === 'auth/email-already-in-use') {
+                        if (confirm('This email is already registered! Would you like to sign in instead?')) {
+                            document.getElementById('signin-email').value = email;
+                            switchView('signin');
+                        }
+                    } else {
+                        alert('Registration error: ' + error.message);
+                    }
+                });
+        }
+
+        function handleSignIn() {
+            var email = document.getElementById('signin-email').value.trim();
+            var password = document.getElementById('signin-password').value.trim();
+
+            if (!email || !password) {
+                alert('Please provide your email and password.');
+                return;
+            }
+
+            auth.signInWithEmailAndPassword(email, password)
+                .then(function(cred) {
+                    var uid = cred.user.uid;
+                    pendingAuth.uid = uid;
+                    pendingAuth.fullName = email.split('@')[0];
+                    pendingAuth.email = email;
+
+                    localStorage.setItem('smd_dispatcher_uid', uid);
+                    localStorage.setItem('smd_driver_id', pendingAuth.fullName);
+                    switchView('job-setup');
+                })
+                .catch(function(error) {
+                    alert('Sign in error: ' + error.message);
+                });
+        }
+
+        function launchLiveBroadcast() {
+            var custName = document.getElementById('job-cust-name').value.trim();
+            var custAddress = document.getElementById('job-cust-address').value.trim();
+            var custPhone = document.getElementById('job-cust-phone').value.trim();
+
+            if (!custName || !custAddress) {
+                alert('Please provide at least the Customer Name and Destination Address.');
+                return;
+            }
+
+            localStorage.setItem('smd_customer_name', custName);
+            localStorage.setItem('smd_customer_address', custAddress);
+            localStorage.setItem('smd_customer_phone', custPhone || '');
+
+            var uid = pendingAuth.uid || localStorage.getItem('smd_dispatcher_uid') || 'demo_uid';
+            var driverName = pendingAuth.fullName || localStorage.getItem('smd_driver_id') || 'juliuslamarjones';
+
+            var targetUrl = window.location.origin + window.location.pathname + 
+                            '?view=customer&uid=' + encodeURIComponent(uid) + 
+                            '&driver=' + encodeURIComponent(driverName) +
+                            '&customer=' + encodeURIComponent(custName) +
+                            '&address=' + encodeURIComponent(custAddress) +
+                            '&phone=' + encodeURIComponent(custPhone);
+
+            var linkOutput = document.getElementById('tracking-link-output');
+            if (linkOutput) linkOutput.value = targetUrl;
+
+            switchView('active-broadcast');
+            startBrowserGpsTelemetryStream(uid, driverName, custName, custAddress);
+        }
+
+        function startBrowserGpsTelemetryStream(uid, driverName, custName, custAddress) {
+            var coordDisplay = document.getElementById('active-coord-display');
+            if (!navigator.geolocation) {
+                if (coordDisplay) coordDisplay.textContent = "Geolocation is not supported by your browser.";
+                return;
+            }
+
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+            }
+
+            watchId = navigator.geolocation.watchPosition(function(position) {
+                var lat = position.coords.latitude;
+                var lng = position.coords.longitude;
+
+                if (coordDisplay) {
+                    coordDisplay.textContent = "Coordinates: " + lat.toFixed(4) + ", " + lng.toFixed(4);
+                }
+
+                db.ref('drivers/' + uid).set({
+                    driverName: driverName,
+                    customerName: custName,
+                    destinationAddress: custAddress,
+                    lat: lat,
+                    lng: lng,
+                    updatedAt: Date.now(),
+                    status: 'active'
+                });
+            }, function(error) {
+                if (coordDisplay) {
+                    coordDisplay.textContent = "GPS Error: " + error.message;
+                }
+            }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+        }
+
+        function copyTrackingLink() {
+            var linkInput = document.getElementById('tracking-link-output');
+            if (!linkInput) return;
+            linkInput.select();
+            linkInput.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(linkInput.value);
+            
+            var copyBtn = document.getElementById('copy-link-btn');
+            if (copyBtn) {
+                var originalText = copyBtn.innerText;
+                copyBtn.innerText = 'Copied! ✅';
+                setTimeout(function() {
+                    copyBtn.innerText = originalText;
+                }, 2000);
+            }
+        }
+
+        function textTrackingLink() {
+            var linkInput = document.getElementById('tracking-link-output');
+            var custPhone = localStorage.getItem('smd_customer_phone') || '';
+            var trackingUrl = linkInput ? linkInput.value : '';
+            var smsBody = encodeURIComponent("Track my live arrival here: " + trackingUrl);
+            window.location.href = "sms:" + custPhone + "?body=" + smsBody;
+        }
+
+        function endBroadcast() {
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            switchView('job-setup');
+        }
+
+        // Customer view map instance with clean destination pin and driver name badge circle over car
+        var customerMap = null;
+        var driverMarker = null;
+        var destinationMarker = null;
+
+        function initCustomerMap() {
+            var urlParams = new URLSearchParams(window.location.search);
+            var driverName = urlParams.get('driver') || 'juliuslamarjones';
+            var destinationAddress = urlParams.get('address') || '19842 Woodhill Cl';
+            var uid = urlParams.get('uid') || 'demo_uid';
+
+            var driverDisplay = document.getElementById('cust-driver-name');
+            var destDisplay = document.getElementById('cust-destination');
+            if (driverDisplay) driverDisplay.textContent = driverName;
+            if (destDisplay) destDisplay.textContent = destinationAddress;
+
+            setTimeout(function() {
+                if (!customerMap) {
+                    customerMap = L.map('customer-map-container', { zoomControl: false }).setView([29.9736, -95.2855], 14);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        maxZoom: 19,
+                        attribution: '© OpenStreetMap'
+                    }).addTo(customerMap);
+
+                    // Driver DivIcon with name badge in a circle above the car
+                    var driverDivIcon = L.divIcon({
+                        className: 'custom-driver-icon',
+                        html: '<div style="display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%);">' +
+                                '<div style="background: #facc15; color: #000; font-weight: 900; font-size: 10px; padding: 2px 8px; border-radius: 9999px; box-shadow: 0 4px 6px rgba(0,0,0,0.4); white-space: nowrap; margin-bottom: 4px; border: 1px solid #000;">' + driverName + '</div>' +
+                                '<div style="background: #000; border: 2px solid #facc15; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.6);">🚐</div>' +
+                              '</div>',
+                        iconSize: [0, 0],
+                        iconAnchor: [0, 0]
+                    });
+
+                    // Customer destination pin marker (Clean location pin icon only, NO extra text label)
+                    var destDivIcon = L.divIcon({
+                        className: 'custom-dest-icon',
+                        html: '<div style="background: #ef4444; width: 36px; height: 36px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.4); border: 2px solid white;"><div style="width: 10px; height: 10px; background: white; border-radius: 50%; transform: rotate(45deg);"></div></div>',
+                        iconSize: [36, 36],
+                        iconAnchor: [18, 36]
+                    });
+
+                    // Place destination marker
+                    destinationMarker = L.marker([29.9756, -95.2835], { icon: destDivIcon }).addTo(customerMap)
+                        .bindPopup('<b>Destination</b><br/>' + destinationAddress);
+
+                    // Place active driver marker
+                    driverMarker = L.marker([29.9736, -95.2855], { icon: driverDivIcon }).addTo(customerMap)
+                        .bindPopup('<b>' + driverName + '</b><br/>En Route')
+                        .openPopup();
+                } else {
+                    customerMap.invalidateSize();
+                }
+
+                db.ref('drivers/' + uid).on('value', function(snapshot) {
+                    var data = snapshot.val();
+                    if (data && data.lat && data.lng) {
+                        var newLatLng = [data.lat, data.lng];
+                        if (driverMarker) driverMarker.setLatLng(newLatLng);
+                        if (customerMap) customerMap.panTo(newLatLng);
+                    }
+                });
+            }, 200);
+        }
+
+        function openCustomerDirections() {
+            var urlParams = new URLSearchParams(window.location.search);
+            var destinationAddress = urlParams.get('address') || '19842 Woodhill Cl';
+            window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(destinationAddress), '_blank');
+        }
+
+        function refreshCustomerData() {
+            window.location.reload();
+        }
+
+        window.addEventListener('DOMContentLoaded', function() {
+            var urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('view') === 'customer') {
+                switchView('customer');
+            }
+        });
+    </script>
+</head>
+<body class="bg-black text-white min-h-screen flex flex-col justify-between overflow-x-hidden selection:bg-yellow-400 selection:text-black">
+    <header class="w-full max-w-4xl mx-auto px-4 py-3 flex items-center justify-between border-b border-neutral-900">
+        <div class="flex items-center gap-2">
+            <span class="text-[28px] font-black tracking-tight text-white cursor-pointer" onclick="switchView('landing')">See<span class="text-yellow-400">My</span>Driver</span>
+            <span class="text-2xl leading-none">🛑</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="switchView('plans')" class="bg-neutral-900 border border-neutral-800 p-2 rounded-xl text-yellow-400 hover:bg-neutral-800 transition shadow-md flex items-center justify-center relative z-10 cursor-pointer" title="View Plans">🛒</button>
+            <button onclick="switchView('guide')" class="bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-800 active:scale-95 font-bold text-xs px-3 py-2 rounded-xl transition cursor-pointer">📖 Guide</button>
+            <button onclick="switchView('signin')" class="bg-yellow-400 hover:bg-yellow-300 text-black active:scale-95 font-bold text-xs px-3 py-2 rounded-xl transition cursor-pointer">Sign In</button>
+        </div>
+    </header>
+
+    <main class="w-full max-w-lg mx-auto px-4 py-3 flex-1 flex flex-col items-center justify-center">
+        <!-- LANDING VIEW -->
+        <div id="landing-view" class="w-full flex flex-col items-center text-center gap-3">
+            <div class="inline-flex items-center gap-2 bg-neutral-900 border border-neutral-800 px-3 py-1 rounded-full shadow-inner mt-1">
+                <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
+                <span class="text-[10px] font-bold text-neutral-300 uppercase tracking-wider">Zero App Downloads Required</span>
+            </div>
+            
+            <h1 class="text-3xl sm:text-4xl font-black tracking-tight text-white leading-tight">
+                <span class="inline-block animate-bounce mr-1">🛑</span>Stop asking <br><span class="text-yellow-400">"Where are you?"</span> 👀
+            </h1>
+            
+            <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed max-w-sm">
+                Stream your exact live location straight from your browser to your clients with secure, one-click tracking links.
+            </p>
+
+            <div class="w-full bg-neutral-950 border border-yellow-400/40 p-4 rounded-3xl flex flex-col gap-3 shadow-2xl relative overflow-hidden text-left">
+                <div class="absolute top-0 right-0 bg-yellow-400 text-black font-black text-[9px] px-3 py-1 rounded-bl-xl uppercase tracking-wider">Live Demo Feed</div>
+                <div class="flex items-center gap-2 text-xs font-bold text-yellow-400">
+                    <span class="w-2.5 h-2.5 rounded-full bg-green-500 animate-ping"></span>
+                    <span>Driver Unit #101 En Route</span>
+                </div>
+                <div class="bg-neutral-900 border border-neutral-800 rounded-2xl p-3 flex flex-col gap-2">
+                    <div class="flex justify-between text-[11px] text-neutral-400">
+                        <span>Latitude: <strong class="text-white" id="sim-lat">29.9736</strong></span>
+                        <span>Longitude: <strong class="text-white" id="sim-lng">-95.2855</strong></span>
+                    </div>
+                    <div class="w-full bg-neutral-950 rounded-xl p-2.5 flex items-center justify-between border border-neutral-800">
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg">🚐</span>
+                            <div>
+                                <div class="text-xs font-bold text-white">Client Destination</div>
+                                <div class="text-[10px] text-neutral-400">Humble, TX • Est. Arrival: <span id="sim-eta" class="text-yellow-400 font-bold">4 mins</span></div>
+                            </div>
+                        </div>
+                        <span class="text-xs bg-green-500/20 text-green-400 font-bold px-2 py-1 rounded-lg">Live</span>
+                    </div>
+                </div>
+                <button onclick="switchView('sandbox')" class="w-full bg-yellow-400 hover:bg-yellow-300 active:scale-95 text-black font-black text-xs py-3 rounded-xl transition shadow-lg text-center cursor-pointer">Test Live Tracking Sandbox Instantly →</button>
+            </div>
+
+            <div class="flex flex-col gap-2 w-full max-w-xs mt-1">
+                <button onclick="switchView('plans')" class="w-full bg-yellow-400 hover:bg-yellow-300 active:scale-95 text-black font-black text-xs py-3 rounded-2xl transition text-center cursor-pointer shadow-md">View Plans & Pricing (Solo Free / Fleet $49)</button>
+                <button onclick="switchView('job-setup')" class="w-full bg-neutral-900 hover:bg-neutral-800 active:scale-95 border border-neutral-800 text-white font-bold text-xs py-3 rounded-2xl transition text-center cursor-pointer">Start Live Broadcast Now</button>
+                <button onclick="switchView('register')" class="text-xs text-neutral-400 hover:text-white transition cursor-pointer pt-1">Create Permanent Account</button>
+            </div>
+        </div>
+
+        <!-- LIVE SANDBOX VIEW -->
+        <div id="sandbox-view" class="w-full flex flex-col items-center text-center gap-3 hidden">
+            <div class="w-full flex items-center justify-between mb-1">
+                <button onclick="switchView('landing')" class="text-xs text-neutral-400 hover:text-white flex items-center gap-1 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-xl cursor-pointer">← Back</button>
+                <span class="text-xs font-bold text-green-400 uppercase tracking-wider animate-pulse">● Sandbox Active</span>
+                <div class="w-12"></div>
+            </div>
+            <h2 class="text-2xl font-black tracking-tight text-white">Live Tracking <span class="text-yellow-400">Sandbox</span></h2>
+            <p class="text-xs text-neutral-400 mb-1">Experience live map telemetry streaming in real time.</p>
+
+            <div class="w-full bg-neutral-950 border border-neutral-800 p-5 rounded-3xl text-left flex flex-col gap-3 shadow-xl max-w-xs">
+                <div class="bg-neutral-900 p-3 rounded-2xl border border-neutral-800 flex flex-col gap-2">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-neutral-400">Broadcast Status:</span>
+                        <span id="sim-status" class="text-green-400 font-bold">Connecting...</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-neutral-400">Live Coordinates:</span>
+                        <span class="text-white font-mono text-[11px]"><span id="sandbox-lat">29.9736</span>, <span id="sandbox-lng">-95.2855</span></span>
+                    </div>
+                </div>
+
+                <button id="gps-toggle-btn" onclick="toggleRealGPS()" class="w-full bg-neutral-900 border border-yellow-400/40 hover:bg-neutral-800 text-yellow-400 font-bold text-xs py-2.5 rounded-xl transition shadow-md text-center cursor-pointer">📍 Test With My Real Location</button>
+                <button onclick="switchView('plans')" class="w-full bg-yellow-400 hover:bg-yellow-300 active:scale-95 text-black font-black text-xs py-3 rounded-xl transition shadow-md text-center cursor-pointer">View Plans & Choose Tier →</button>
+            </div>
+        </div>
+
+        <!-- PLANS VIEW -->
+        <div id="plans-view" class="w-full flex flex-col items-center text-center gap-4 hidden">
+            <div class="w-full flex items-center justify-between mb-1">
+                <button onclick="switchView('landing')" class="text-xs text-neutral-400 hover:text-white flex items-center gap-1 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-xl cursor-pointer">← Back</button>
+                <span class="text-xs font-bold text-yellow-400 uppercase tracking-wider">Pricing Tiers</span>
+                <div class="w-12"></div>
+            </div>
+            <h2 class="text-3xl font-black tracking-tight text-white">Choose Your <span class="text-yellow-400">Plan</span></h2>
+            <p id="tier-description" class="text-xs text-neutral-400 max-w-xs">Select the ideal tier for your operations.</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-xl text-left">
+                <!-- Solo Plan Card -->
+                <div id="solo-plan-card" onclick="setRegTier('solo')" class="w-full bg-neutral-950 border-2 border-yellow-400 p-5 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Solo Driver</span>
+                            <h3 class="text-xl font-black text-white">Free Forever</h3>
+                        </div>
+                        <span class="bg-yellow-400/20 text-yellow-400 text-[10px] font-bold px-2 py-1 rounded-full border border-yellow-400/30">Starter</span>
+                    </div>
+                    <p class="text-xs text-neutral-400">Perfect for independent drivers and service pros sharing live location with clients.</p>
+                    <ul class="space-y-1.5 text-xs text-neutral-300">
+                        <li>✓ 1 Active Driver Device</li>
+                        <li>✓ Live GPS Telemetry Stream</li>
+                        <li>✓ Instant Customer Share Link</li>
+                    </ul>
+                    <button onclick="selectAndRegister('solo')" class="w-full bg-yellow-400 hover:bg-yellow-300 text-black font-black text-xs py-2.5 rounded-xl transition mt-2 cursor-pointer">Select Solo Free</button>
+                </div>
+
+                <!-- Fleet Enterprise Plan Card -->
+                <div id="fleet-plan-card" onclick="setRegTier('fleet')" class="w-full bg-neutral-950 border border-neutral-800 p-5 rounded-3xl text-left flex flex-col gap-3 transition shadow-xl relative group cursor-pointer">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="text-[10px] font-bold text-yellow-400 uppercase tracking-wider">Fleet Enterprise</span>
+                            <h3 class="text-xl font-black text-white">$49<span class="text-xs text-neutral-400 font-normal">/mo</span></h3>
+                        </div>
+                        <span class="bg-neutral-900 border border-neutral-800 text-neutral-300 text-[10px] font-bold px-2 py-1 rounded-full">Multi-Driver</span>
+                    </div>
+                    <p class="text-xs text-neutral-400">Complete command center for growing fleets and service teams.</p>
+                    <ul class="space-y-2 text-xs text-neutral-300">
+                        <li>✓ <strong>Live Multi-Vehicle Command Map</strong></li>
+                        <li>✓ <strong>Custom Subdomain & White-Label Suite</strong></li>
+                        <li>✓ <strong>Automated Geofence Arrival Alerts</strong></li>
+                    </ul>
+                    <button onclick="selectAndRegister('fleet')" class="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-yellow-400 font-bold text-xs py-2.5 rounded-xl transition mt-2 cursor-pointer">Select Fleet $49/mo</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 1: JOB SETUP VIEW -->
+        <div id="job-setup-view" class="w-full flex flex-col items-center text-center gap-3 hidden">
+            <div class="w-full flex items-center justify-between mb-1">
+                <button onclick="switchView('landing')" class="text-xs text-neutral-400 hover:text-white flex items-center gap-1 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-xl cursor-pointer">← Back</button>
+                <span class="text-xs font-bold text-yellow-400 uppercase tracking-wider">Step 1: Job Info</span>
+                <div class="w-12"></div>
+            </div>
+
+            <div class="w-full">
+                <h2 class="text-2xl font-black tracking-tight text-white mb-1">Enter <span class="text-yellow-400">Customer Details</span></h2>
+                <p class="text-xs text-neutral-400 mb-3">Set your destination before starting your live GPS broadcast.</p>
+
+                <div class="w-full bg-neutral-950 border border-neutral-800 p-5 rounded-3xl text-left flex flex-col gap-3 shadow-xl max-w-xs mx-auto">
+                    <div>
+                        <label class="block text-[11px] font-bold text-neutral-300 mb-1">Customer / Client Name *</label>
+                        <input type="text" id="job-cust-name" placeholder="John Smith" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 transition">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-neutral-300 mb-1">Destination Address *</label>
+                        <input type="text" id="job-cust-address" placeholder="19842 Woodhill Cl" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 transition">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-neutral-300 mb-1">Customer Phone Number</label>
+                        <input type="tel" id="job-cust-phone" placeholder="(555) 000-0000" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 transition">
+                    </div>
+                    <button onclick="launchLiveBroadcast()" class="w-full bg-yellow-400 hover:bg-yellow-300 active:scale-95 text-black font-black text-xs py-3 rounded-xl transition shadow-md text-center cursor-pointer mt-1">Start Live GPS Broadcast 🚀</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 2: ACTIVE BROADCAST VIEW -->
+        <div id="active-broadcast-view" class="w-full flex flex-col items-center text-center gap-3 hidden">
+            <div class="text-[13px] font-bold text-yellow-400 tracking-wider mb-1">STEP 2: CUSTOMER & JOB INFO</div>
+            <h2 class="text-3xl font-black tracking-tight text-white mb-1">Live Broadcast <span class="text-green-400">Active!</span></h2>
+            <p class="text-xs text-neutral-400 mb-4 max-w-sm">Your GPS is broadcasting live from this screen. Send the link below to your client.</p>
+
+            <div class="w-full bg-neutral-950 border border-neutral-800 p-5 rounded-3xl text-left flex flex-col gap-4 shadow-xl max-w-md mx-auto">
+                <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-green-500 animate-ping"></span>
+                    <span class="text-xs font-bold text-green-400">Live GPS Broadcast Active</span>
+                </div>
+
+                <div id="active-coord-display" class="text-xs font-mono text-neutral-300">Coordinates: Acquiring GPS...</div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-400 mb-1.5">Customer Tracking Link</label>
+                    <input type="text" id="tracking-link-output" readonly class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-yellow-400 font-mono focus:outline-none" />
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-2 pt-1">
+                    <button id="copy-link-btn" onclick="copyTrackingLink()" class="flex-1 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white font-bold text-xs py-3 rounded-xl transition cursor-pointer shadow-md">Copy Link</button>
+                    <button onclick="textTrackingLink()" class="flex-1 bg-green-500 hover:bg-green-400 text-black font-bold text-xs py-3 rounded-xl transition text-center shadow-md cursor-pointer">💬 Text SMS</button>
+                </div>
+
+                <button onclick="endBroadcast()" class="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 font-bold text-xs py-3 rounded-xl transition cursor-pointer mt-1">← End Broadcast & New Job</button>
+            </div>
+        </div>
+
+        <!-- CUSTOMER VIEW (Card layout + map container below with clean destination pin and driver name badge circle over car) -->
+        <div id="customer-view" class="w-full flex flex-col items-center gap-4 hidden">
+            <!-- Header status badge matching screenshot -->
+            <div class="w-full flex items-center justify-center mb-1">
+                <div class="bg-neutral-900 border border-neutral-800 text-yellow-400 font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-2 shadow-md">
+                    <span class="w-2 h-2 rounded-full bg-green-500 animate-ping"></span>
+                    <span>DRIVER ONLINE OR TRIP ORDER</span>
+                </div>
+            </div>
+
+            <!-- Customer Card -->
+            <div class="w-full bg-neutral-950 border border-neutral-800 p-5 rounded-3xl flex flex-col gap-4 shadow-2xl relative max-w-md mx-auto">
+                <div class="flex justify-between items-center bg-neutral-900 p-3 rounded-2xl border border-neutral-800">
+                    <div>
+                        <span class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Active Driver</span>
+                        <span id="cust-driver-name" class="text-sm font-black text-white">juliuslamarjones</span>
+                    </div>
+                    <div class="bg-green-500/20 border border-green-500/40 text-green-400 font-bold text-[10px] px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-ping"></span>
+                        Live Tracking
+                    </div>
+                </div>
+
+                <div class="bg-neutral-900 p-3 rounded-2xl border border-neutral-800 flex flex-col gap-1">
+                    <span class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Destination</span>
+                    <span id="cust-destination" class="text-xs font-bold text-yellow-400">19842 Woodhill Cl</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-neutral-900 p-3 rounded-2xl border border-neutral-800 text-center">
+                        <span class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">Est. Arrival</span>
+                        <span class="text-lg font-black text-white">4 mins</span>
+                    </div>
+                    <div class="bg-neutral-900 p-3 rounded-2xl border border-neutral-800 text-center">
+                        <span class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">Distance</span>
+                        <span class="text-lg font-black text-white">1.2 mi</span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 pt-1">
+                    <button onclick="switchView('landing')" class="flex-1 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 font-bold text-xs py-2.5 rounded-xl transition text-center cursor-pointer">← Back</button>
+                    <button onclick="openCustomerDirections()" class="flex-1 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-yellow-400 font-bold text-xs py-2.5 rounded-xl transition text-center cursor-pointer shadow-md">📍 Directions</button>
+                    <button onclick="refreshCustomerData()" class="flex-1 bg-yellow-400 hover:bg-yellow-300 text-black font-black text-xs py-2.5 rounded-xl transition text-center cursor-pointer shadow-md">🔄 Refresh</button>
+                </div>
+            </div>
+
+            <!-- Map Container Below Card (Driver name badge circle over car + Clean destination pin icon only) -->
+            <div class="w-full bg-neutral-950 border border-neutral-800 rounded-3xl overflow-hidden shadow-2xl relative h-72 max-w-md mx-auto">
+                <div id="customer-map-container" class="w-full h-full z-10"></div>
+            </div>
+        </div>
+
+        <!-- SIGN IN VIEW -->
+        <div id="signin-view" class="w-full flex flex-col items-center text-center gap-3 hidden">
+            <div class="w-full flex items-center justify-between mb-1">
+                <button onclick="switchView('landing')" class="text-xs text-neutral-400 hover:text-white flex items-center gap-1 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-xl cursor-pointer">← Back</button>
+                <span class="text-xs font-bold text-yellow-400 uppercase tracking-wider">Welcome Back</span>
+                <div class="w-12"></div>
+            </div>
+
+            <div class="w-full max-w-md bg-neutral-950 border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-4 shadow-xl">
+                <div class="text-center">
+                    <h2 class="text-2xl font-black tracking-tight text-white">Sign in to <span class="text-yellow-400">SeeMyDriver</span></h2>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Email Address</label>
+                    <input type="email" id="signin-email" placeholder="name@company.com" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 transition">
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Password</label>
+                    <div class="relative">
+                        <input type="password" id="signin-password" placeholder="••••••••" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 transition pr-10">
+                        <button type="button" id="toggle-signin-password" onclick="toggleSigninPassword()" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400 hover:text-white cursor-pointer">👁️</button>
+                    </div>
+                </div>
+                <button onclick="handleSignIn()" class="w-full bg-yellow-400 hover:bg-yellow-300 active:scale-95 text-black font-black text-xs py-3 rounded-xl transition shadow-md text-center cursor-pointer">Sign In →</button>
+                <div class="text-center pt-1">
+                    <button onclick="switchView('register')" class="text-xs text-neutral-400 hover:text-white transition cursor-pointer">Don't have an account? Create one</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- REGISTER VIEW -->
+        <div id="register-view" class="w-full flex flex-col items-center text-center gap-3 hidden">
+            <div class="w-full flex items-center justify-between mb-1">
+                <button onclick="switchView('landing')" class="text-xs text-neutral-400 hover:text-white flex items-center gap-1 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-xl cursor-pointer">← Back</button>
+                <span class="text-xs font-bold text-yellow-400 uppercase tracking-wider">Account Creation</span>
+                <div class="w-12"></div>
+            </div>
+
+            <div class="w-full max-w-md bg-neutral-950 border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-4 shadow-xl">
+                <div class="text-center">
+                    <h2 class="text-2xl font-black tracking-tight text-white">Create Your <span class="text-yellow-400">Account</span></h2>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Company / Business Name</label>
+                    <input type="text" id="reg-company" placeholder="Exoservices LLC" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 transition">
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Driver / Full Name</label>
+                    <input type="text" id="reg-name" placeholder="Julius Lamar Jones" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 transition">
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Email Address *</label>
+                    <input type="email" id="reg-email" placeholder="name@company.com" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 transition">
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-neutral-300 mb-1">Password *</label>
+                    <div class="relative">
+                        <input type="password" id="password-input" placeholder="••••••••" class="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 transition pr-10">
+                        <button type="button" id="toggle-password-btn" onclick="togglePassword()" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400 hover:text-white cursor-pointer">👁️</button>
+                    </div>
+                </div>
+                <button onclick="handleRegister()" class="w-full bg-yellow-400 hover:bg-yellow-300 active:scale-95 text-black font-black text-xs py-3 rounded-xl transition shadow-md text-center cursor-pointer">Create Account & Continue →</button>
+            </div>
+        </div>
+
+        <!-- GUIDE VIEW -->
+        <div id="guide-view" class="w-full flex flex-col items-center text-center gap-3 hidden">
+            <div class="w-full flex items-center justify-between mb-1">
+                <button onclick="switchView('landing')" class="text-xs text-neutral-400 hover:text-white flex items-center gap-1 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-xl cursor-pointer">← Back</button>
+                <span class="text-xs font-bold text-yellow-400 uppercase tracking-wider">User Guide</span>
+                <div class="w-12"></div>
+            </div>
+
+            <div class="w-full max-w-md bg-neutral-950 border border-neutral-800 p-6 rounded-3xl text-left flex flex-col gap-4 shadow-xl">
+                <h2 class="text-2xl font-black text-white">How <span class="text-yellow-400">SeeMyDriver</span> Works</h2>
+                <div class="space-y-3 text-xs text-neutral-300">
+                    <div class="p-3 bg-neutral-900 rounded-2xl border border-neutral-800">
+                        <strong class="text-yellow-400 block mb-1">1. Enter Job & Destination</strong>
+                        Input your client name and address to generate a live secure broadcast link.
+                    </div>
+                    <div class="p-3 bg-neutral-900 rounded-2xl border border-neutral-800">
+                        <strong class="text-yellow-400 block mb-1">2. Copy & Text Customer</strong>
+                        Send the link directly via SMS. No app download is required for your client to view your live GPS.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="w-full max-w-4xl mx-auto px-4 py-3 text-center text-[10px] text-neutral-500 border-t border-neutral-900">
+        SeeMyDriver Real-Time Live Tracking SaaS • Zero Friction Dispatch & Telemetry.
+    </footer>
+</body>
+</html>
