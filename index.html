@@ -170,13 +170,13 @@
                 <div class="absolute top-0 right-0 bg-amber-400/10 text-amber-400 text-[10px] font-black uppercase tracking-widest px-3 sm:px-4 py-1.5 rounded-bl-2xl border-l border-b border-amber-400/20 z-30">Live Simulation Preview</div>
                 <div class="flex flex-col md:flex-row items-center justify-between gap-6">
                     <div class="flex flex-col gap-3 max-w-md">
-                        <div class="inline-block bg-emerald-500/10 text-emerald-400 text-xs font-bold py-1 px-3 rounded-full w-fit border border-emerald-500/20">● Live GPS Broadcast Active</div>
+                        <div class="inline-block bg-emerald-500/10 text-emerald-400 text-xs font-bold py-1 px-3 rounded-full w-fit border border-emerald-500/20">●  Live GPS Broadcast Active</div>
                         <h3 class="text-xl sm:text-2xl font-bold text-white">Real-Time Client Telemetry</h3>
                         <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed">Your customers get a secure, clean web link showing your exact moving position, route distance, and live ETA without downloading a single app.</p>
                     </div>
                     <div class="w-full md:w-80 bg-black/80 border border-neutral-800 rounded-2xl p-3 flex flex-col gap-2.5 shadow-inner">
                         <div class="flex items-center justify-between text-[11px] text-neutral-400 px-1 font-mono">
-                            <span class="text-emerald-400 animate-pulse">● LIVE ROUTE TELEMETRY</span>
+                            <span class="text-emerald-400 animate-pulse">●  LIVE ROUTE TELEMETRY</span>
                             <span id="preview-speed" class="text-amber-400 font-bold">45 mph</span>
                         </div>
                         <div id="landing-preview-map" class="w-full h-48 bg-neutral-900 rounded-xl border border-neutral-800 relative overflow-hidden z-10 shadow-inner"></div>
@@ -229,7 +229,7 @@
             </div>
             <div class="w-full bg-[#12141c] border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col gap-6 text-left">
                 <div class="flex items-center justify-between">
-                    <span class="bg-amber-400/10 border border-amber-400/20 text-amber-300 font-bold text-xs py-1.5 px-4 rounded-full">📝 STEP 1 OF 2: JOB SETUP</span>
+                    <span class="bg-amber-400/10 border border-amber-400/20 text-amber-300 font-bold text-xs py-1.5 px-4 rounded-full">📝  STEP 1 OF 2: JOB SETUP</span>
                     <button onclick="window.handleSignOut()" class="text-xs text-neutral-400 hover:text-amber-400 font-bold cursor-pointer">Sign Out 🚪</button>
                 </div>
                 <div class="flex flex-col gap-4">
@@ -320,7 +320,7 @@
 
     <script>window.__smdLandingVisible=function(){var l=document.getElementById("landing-view");return !!(l&&l.offsetParent!==null);};</script>
     <script src="js/app.js?v=77"></script>
-    <script src="js/tracker.js?v=78"></script>
+    <script src="js/tracker.js?v=79"></script>
 <script>
 window.soloRecenterMap = function() {
   try {
@@ -452,8 +452,13 @@ window.soloFitBoth = function() {
   }
 })();
 </script>
-<script id="smd-landing-preview-upgrade">
+<script id="smd-landing-preview-clean">
 (function() {
+  const DEFAULT_TOKEN = window.MAPBOX_TOKEN || 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
+  const START_LNG_LAT = [-95.3498, 29.9979];
+  const END_LNG_LAT = [-95.4446, 29.9854];
+  let previewInitialized = false;
+
   function hasGarbledChars(str) {
     for (let i = 0; i < str.length; i++) {
       const code = str.charCodeAt(i);
@@ -470,7 +475,9 @@ window.soloFitBoth = function() {
       let node;
       while ((node = walker.nextNode())) {
         const txt = node.nodeValue || '';
-        if (txt.indexOf('30-Day Free Trial') !== -1 || txt.indexOf('Solo Free Forever') !== -1) { node.nodeValue = 'Solo Free Forever \u2014 Fleet Command $49/mo'; } else if (hasGarbledChars(txt)) {
+        if (txt.indexOf('30-Day Free Trial') !== -1 || txt.indexOf('Solo Free Forever') !== -1) {
+          node.nodeValue = 'Solo Free Forever \u2014 Fleet Command $49/mo';
+        } else if (hasGarbledChars(txt)) {
           node.nodeValue = txt
             .replace(/ðŸ[^s]*/g, '')
             .replace(/â€”/g, '—')
@@ -500,113 +507,144 @@ window.soloFitBoth = function() {
     } catch (e) {}
   }
 
-  function makeBlackTruckSvg() {
-    return '<div style="width:34px;height:46px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 6px 10px rgba(0,0,0,0.45));">' +
-      '<svg viewBox="0 0 40 56" width="34" height="46" xmlns="http://www.w3.org/2000/svg">' +
-        '<rect x="7" y="6" width="26" height="44" rx="7" fill="#0b0d12" stroke="#f59e0b" stroke-width="2.2"/>' +
-        '<rect x="10" y="12" width="20" height="10" rx="2.5" fill="#1f2937"/>' +
-        '<rect x="10" y="34" width="20" height="8" rx="2" fill="#18181b"/>' +
-        '<circle cx="11" cy="8" r="2.2" fill="#fde68a"/>' +
-        '<circle cx="29" cy="8" r="2.2" fill="#fde68a"/>' +
-      '</svg></div>';
+  function createBigWheelTruckElement() {
+    const el = document.createElement('div');
+    el.className = 'pro-vehicle-marker';
+    el.style.cssText = 'width:46px;height:68px;filter:drop-shadow(0px 8px 12px rgba(0,0,0,0.55));pointer-events:none;display:flex;align-items:center;justify-content:center;';
+    el.innerHTML = `<svg viewBox="0 0 24 36" width="46" height="68" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0.2" y="7" width="4.8" height="9.5" rx="1.6" fill="#030712" stroke="#fbbf24" stroke-width="0.85"/>
+  <rect x="19.0" y="7" width="4.8" height="9.5" rx="1.6" fill="#030712" stroke="#fbbf24" stroke-width="0.85"/>
+  <rect x="0.2" y="23.5" width="4.8" height="9.5" rx="1.6" fill="#030712" stroke="#fbbf24" stroke-width="0.85"/>
+  <rect x="19.0" y="23.5" width="4.8" height="9.5" rx="1.6" fill="#030712" stroke="#fbbf24" stroke-width="0.85"/>
+  <rect x="3.5" y="11" width="17" height="22" rx="3" fill="#1f2937" stroke="#fbbf24" stroke-width="1.25"/>
+  <rect x="3.5" y="20" width="17" height="4" fill="#f59e0b"/>
+  <line x1="3.5" y1="22" x2="20.5" y2="22" stroke="#ffffff" stroke-width="1" opacity="0.9"/>
+  <path d="M5.5 11H18.5V5C18.5 3.34315 17.1569 2 15.5 2H8.5C6.84315 2 5.5 3.34315 5.5 5V11Z" fill="#111827" stroke="#374151" stroke-width="1.25"/>
+  <path d="M7 7.5H17L16 4H8L7 7.5Z" fill="#38bdf8" fill-opacity="0.95" stroke="#bae6fd" stroke-width="0.75"/>
+  <circle cx="6.5" cy="3" r="1.25" fill="#fbbf24"/>
+  <circle cx="17.5" cy="3" r="1.25" fill="#fbbf24"/>
+</svg>`;
+    return el;
   }
 
-  function renderRoadHuggingPreview() {
-    try {
-      const previewLabel = Array.from(document.querySelectorAll('*')).find((el) => el.children.length === 0 && el.textContent && el.textContent.trim() === 'LIVE SIMULATION PREVIEW');
-      const card = previewLabel && (previewLabel.closest('div[class*="rounded"]') || (previewLabel.parentElement && previewLabel.parentElement.parentElement));
-      if (!card) return;
-      let stage = card.querySelector('#smd-light-road-map');
-      if (!stage) {
-        const darkBlank = Array.from(card.querySelectorAll('div')).find((d) => {
-          const r = d.getBoundingClientRect();
-          return r.height > 140 && r.width > 180 && d.id !== 'smd-light-road-map';
-        });
-        stage = document.createElement('div');
-        stage.id = 'smd-light-road-map';
-        stage.style.cssText = 'position:relative;width:100%;height:250px;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.12);background:#eef2f6;margin-top:8px;';
-        if (darkBlank && darkBlank.parentElement) {
-          darkBlank.replaceWith(stage);
-        } else {
-          card.appendChild(stage);
+  async function fetchRoadCoords(token) {
+    const pair = START_LNG_LAT[0] + ',' + START_LNG_LAT[1] + ';' + END_LNG_LAT[0] + ',' + END_LNG_LAT[1];
+    if (token) {
+      try {
+        const mbUrl = 'https://api.mapbox.com/directions/v5/mapbox/driving/' + pair +
+          '?geometries=geojson&overview=full&access_token=' + encodeURIComponent(token);
+        const res = await fetch(mbUrl);
+        if (res.ok) {
+          const json = await res.json();
+          const coords = json && json.routes && json.routes[0] && json.routes[0].geometry && json.routes[0].geometry.coordinates;
+          if (Array.isArray(coords) && coords.length > 2) return coords;
         }
-      }
-      if (stage.dataset.smdMapReady === '1') return;
-      stage.dataset.smdMapReady = '1';
-
-      const start = [-95.3498, 29.9979];
-      const end = [-95.4446, 29.9854];
-      const token = window.MAPBOX_TOKEN || (window.mapboxgl && window.mapboxgl.accessToken) || '';
-
-      if (typeof mapboxgl !== 'undefined' && token) {
-        mapboxgl.accessToken = token;
-        const m = new mapboxgl.Map({
-          container: stage,
-          style: 'mapbox://styles/mapbox/streets-v12',
-          center: [-95.397, 29.991],
-          zoom: 11.4,
-          interactive: true
-        });
-        m.on('load', async () => {
-          let coords = [start, end];
-          try {
-            const url = 'https://api.mapbox.com/directions/v5/mapbox/driving/' +
-              start[0] + ',' + start[1] + ';' + end[0] + ',' + end[1] +
-              '?geometries=geojson&overview=full&access_token=' + encodeURIComponent(token);
-            const resp = await fetch(url);
-            const data = await resp.json();
-            if (data && data.routes && data.routes[0] && data.routes[0].geometry && Array.isArray(data.routes[0].geometry.coordinates)) {
-              coords = data.routes[0].geometry.coordinates;
-            }
-          } catch (e) {}
-
-          m.addSource('smd-road-route', {
-            type: 'geojson',
-            data: {
-              type: 'Feature',
-              properties: {},
-              geometry: { type: 'LineString', coordinates: coords }
-            }
-          });
-          m.addLayer({
-            id: 'smd-road-route-casing',
-            type: 'line',
-            source: 'smd-road-route',
-            layout: { 'line-join': 'round', 'line-cap': 'round' },
-            paint: { 'line-color': '#111827', 'line-width': 7, 'line-opacity': 0.85 }
-          });
-          m.addLayer({
-            id: 'smd-road-route-line',
-            type: 'line',
-            source: 'smd-road-route',
-            layout: { 'line-join': 'round', 'line-cap': 'round' },
-            paint: { 'line-color': '#f59e0b', 'line-width': 4 }
-          });
-
-          const truckEl = document.createElement('div');
-          truckEl.innerHTML = makeBlackTruckSvg();
-          new mapboxgl.Marker({ element: truckEl.firstChild })
-            .setLngLat(coords[Math.floor(coords.length * 0.45)] || start)
-            .addTo(m);
-        });
-      } else {
-        stage.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#111827;font-weight:700;font-size:13px;">Loading light road map...</div>';
+      } catch (e) {}
+    }
+    try {
+      const osrmUrl = 'https://router.project-osrm.org/route/v1/driving/' + pair +
+        '?geometries=geojson&overview=full';
+      const res = await fetch(osrmUrl);
+      if (res.ok) {
+        const json = await res.json();
+        const coords = json && json.routes && json.routes[0] && json.routes[0].geometry && json.routes[0].geometry.coordinates;
+        if (Array.isArray(coords) && coords.length > 2) return coords;
       }
     } catch (e) {}
+    return [START_LNG_LAT, END_LNG_LAT];
   }
 
-  function runAll() {
+  function bearingBetween(a, b) {
+    const toRad = (d) => d * Math.PI / 180;
+    const toDeg = (r) => r * 180 / Math.PI;
+    const dx = (b[0] - a[0]) * Math.cos(toRad((a[1] + b[1]) / 2));
+    const dy = b[1] - a[1];
+    return ((toDeg(Math.atan2(dx, dy)) % 360) + 360) % 360;
+  }
+
+  async function mountCleanPreview() {
     fixMojibakeNodes();
     enhanceTelemetryCopy();
-    renderRoadHuggingPreview();
+    if (previewInitialized || typeof mapboxgl === 'undefined') return;
+    const container = document.getElementById('landing-preview-map');
+    if (!container) return;
+
+    previewInitialized = true;
+    container.style.minHeight = '260px';
+    container.style.height = '260px';
+    container.style.width = '100%';
+
+    mapboxgl.accessToken = window.MAPBOX_TOKEN || DEFAULT_TOKEN;
+    const map = new mapboxgl.Map({
+      container: container,
+      style: 'mapbox://styles/mapbox/streets-v12',
+      center: [-95.397, 29.991],
+      zoom: 12.2,
+      interactive: true
+    });
+    window.__smdPreviewMap = map;
+
+    const coords = await fetchRoadCoords(mapboxgl.accessToken);
+
+    map.on('load', () => {
+      if (!map.getSource('smd-preview-route')) {
+        map.addSource('smd-preview-route', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: coords }
+          }
+        });
+      }
+      if (!map.getLayer('smd-preview-route-casing')) {
+        map.addLayer({
+          id: 'smd-preview-route-casing',
+          type: 'line',
+          source: 'smd-preview-route',
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: { 'line-color': '#1e3a8a', 'line-width': 8.5, 'line-opacity': 0.88 }
+        });
+      }
+      if (!map.getLayer('smd-preview-route-line')) {
+        map.addLayer({
+          id: 'smd-preview-route-line',
+          type: 'line',
+          source: 'smd-preview-route',
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: { 'line-color': '#2563eb', 'line-width': 5, 'line-opacity': 0.96 }
+        });
+      }
+
+      const idx = Math.min(coords.length - 2, Math.max(0, Math.floor(coords.length * 0.45)));
+      const truckPos = coords[idx] || START_LNG_LAT;
+      const nextPos = coords[idx + 1] || END_LNG_LAT;
+      const heading = bearingBetween(truckPos, nextPos);
+
+      const marker = new mapboxgl.Marker({
+        element: createBigWheelTruckElement(),
+        rotationAlignment: 'map',
+        pitchAlignment: 'map'
+      })
+        .setLngLat(truckPos)
+        .setRotation(heading)
+        .addTo(map);
+
+      map.jumpTo({ center: truckPos, zoom: 13.5 });
+      map.resize();
+    });
   }
 
-  setInterval(function(){ if (window.__smdLandingVisible()) runAll(); }, 900);
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', runAll);
+    document.addEventListener('DOMContentLoaded', mountCleanPreview);
   } else {
-    runAll();
+    mountCleanPreview();
   }
+  setInterval(() => {
+    if (!previewInitialized && typeof window.__smdLandingVisible === 'function' && window.__smdLandingVisible()) {
+      mountCleanPreview();
+    }
+  }, 800);
 })();
 </script>
 <script id="smd-landing-default-boot">
@@ -658,425 +696,6 @@ window.soloFitBoth = function() {
   window.addEventListener('load', showLandingDefault);
 })();
 </script>
-<script id="smd-landing-road-preview-v2">
-(function() {
-  const DEFAULT_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
-  const START_LNG_LAT = [-95.3498, 29.9979];
-  const END_LNG_LAT = [-95.4446, 29.9854];
-
-  function ensureMapboxAssets(cb) {
-    if (typeof mapboxgl !== 'undefined') {
-      if (!document.getElementById('smd-mapbox-css')) {
-        const link = document.createElement('link');
-        link.id = 'smd-mapbox-css';
-        link.rel = 'stylesheet';
-        link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css';
-        document.head.appendChild(link);
-      }
-      return cb();
-    }
-    if (!document.getElementById('smd-mapbox-css')) {
-      const link = document.createElement('link');
-      link.id = 'smd-mapbox-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css';
-      document.head.appendChild(link);
-    }
-    if (!document.getElementById('smd-mapbox-js')) {
-      const script = document.createElement('script');
-      script.id = 'smd-mapbox-js';
-      script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js';
-      script.onload = cb;
-      script.onerror = cb;
-      document.head.appendChild(script);
-    } else {
-      setTimeout(cb, 300);
-    }
-  }
-
-  async function fetchRoadRoute(token) {
-    const pair = START_LNG_LAT[0] + ',' + START_LNG_LAT[1] + ';' + END_LNG_LAT[0] + ',' + END_LNG_LAT[1];
-    if (token) {
-      try {
-        const mbUrl = 'https://api.mapbox.com/directions/v5/mapbox/driving/' + pair +
-          '?geometries=geojson&overview=full&access_token=' + encodeURIComponent(token);
-        const res = await fetch(mbUrl);
-        if (res.ok) {
-          const json = await res.json();
-          const coords = json && json.routes && json.routes[0] && json.routes[0].geometry && json.routes[0].geometry.coordinates;
-          if (Array.isArray(coords) && coords.length > 2) return coords;
-        }
-      } catch (e) {}
-    }
-    try {
-      const osrmUrl = 'https://router.project-osrm.org/route/v1/driving/' + pair +
-        '?geometries=geojson&overview=full';
-      const res = await fetch(osrmUrl);
-      if (res.ok) {
-        const json = await res.json();
-        const coords = json && json.routes && json.routes[0] && json.routes[0].geometry && json.routes[0].geometry.coordinates;
-        if (Array.isArray(coords) && coords.length > 2) return coords;
-      }
-    } catch (e) {}
-    return [START_LNG_LAT, END_LNG_LAT];
-  }
-
-  function createCustomBlackTruckEl() {
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'width:40px;height:52px;display:flex;align-items:center;justify-content:center;cursor:pointer;filter:drop-shadow(0 8px 12px rgba(0,0,0,0.45));';
-    wrap.innerHTML = [
-      '<svg viewBox="0 0 44 58" width="40" height="52" xmlns="http://www.w3.org/2000/svg">',
-        '<rect x="8" y="5" width="28" height="48" rx="8" fill="#090b10" stroke="#fbbf24" stroke-width="2.4"/>',
-        '<rect x="11" y="11" width="22" height="11" rx="3" fill="#1e293b"/>',
-        '<rect x="11" y="25" width="22" height="14" rx="2" fill="#111827"/>',
-        '<rect x="11" y="42" width="22" height="7" rx="2" fill="#18181b"/>',
-        '<circle cx="12" cy="7" r="2.2" fill="#fde047"/>',
-        '<circle cx="32" cy="7" r="2.2" fill="#fde047"/>',
-        '<rect x="10" y="51" width="6" height="3" rx="1" fill="#ef4444"/>',
-        '<rect x="28" y="51" width="6" height="3" rx="1" fill="#ef4444"/>',
-      '</svg>'
-    ].join('');
-    return wrap;
-  }
-
-  function findTargetContainer() {
-    let el = document.getElementById('landing-preview-map');
-    if (el) return el;
-    const label = Array.from(document.querySelectorAll('*')).find(
-      (n) => n.children.length === 0 && n.textContent && n.textContent.trim() === 'LIVE ROUTE TELEMETRY'
-    );
-    const card = label && (label.closest('div[class*="rounded"]') || (label.parentElement && label.parentElement.parentElement));
-    if (!card) return null;
-    const existing = card.querySelector('#smd-landing-preview-stage');
-    if (existing) return existing;
-    const blank = Array.from(card.querySelectorAll('div')).find((d) => {
-      const r = d.getBoundingClientRect();
-      return r.height > 120 && r.width > 150;
-    });
-    const stage = document.createElement('div');
-    stage.id = 'smd-landing-preview-stage';
-    if (blank && blank.parentElement) {
-      blank.replaceWith(stage);
-    } else {
-      card.appendChild(stage);
-    }
-    return stage;
-  }
-
-  function mountPreviewMap() {
-    try {
-      const container = findTargetContainer();
-      if (!container) return;
-      container.style.minHeight = '260px';
-      container.style.height = '260px';
-      container.style.width = '100%';
-      container.style.position = 'relative';
-      container.style.borderRadius = '14px';
-      container.style.overflow = 'hidden';
-      container.style.backgroundColor = '#e5e7eb';
-
-      if (container.dataset.smdRendered === '1') return;
-      container.dataset.smdRendered = '1';
-
-      ensureMapboxAssets(async () => {
-        if (typeof mapboxgl === 'undefined') { container.dataset.smdRendered = '0'; return; }
-        const token = window.MAPBOX_TOKEN || DEFAULT_TOKEN;
-        mapboxgl.accessToken = token;
-
-        const map = new mapboxgl.Map({
-          container: container,
-          style: 'mapbox://styles/mapbox/streets-v12',
-          center: [-95.397, 29.991],
-          zoom: 11.3,
-          interactive: true
-        });
-
-        const coords = await fetchRoadRoute(token);
-
-        map.on('load', () => {
-          if (!map.getSource('smd-landing-route')) {
-            map.addSource('smd-landing-route', {
-              type: 'geojson',
-              data: {
-                type: 'Feature',
-                properties: {},
-                geometry: { type: 'LineString', coordinates: coords }
-              }
-            });
-          }
-          if (!map.getLayer('smd-landing-route-border')) {
-            map.addLayer({
-              id: 'smd-landing-route-border',
-              type: 'line',
-              source: 'smd-landing-route',
-              layout: { 'line-join': 'round', 'line-cap': 'round' },
-              paint: { 'line-color': '#0f172a', 'line-width': 7.5, 'line-opacity': 0.9 }
-            });
-          }
-          if (!map.getLayer('smd-landing-route-core')) {
-            map.addLayer({
-              id: 'smd-landing-route-core',
-              type: 'line',
-              source: 'smd-landing-route',
-              layout: { 'line-join': 'round', 'line-cap': 'round' },
-              paint: { 'line-color': '#f59e0b', 'line-width': 4.2 }
-            });
-          }
-
-          const truckPos = coords[Math.floor(coords.length * 0.45)] || START_LNG_LAT;
-          new mapboxgl.Marker({ element: createCustomBlackTruckEl() })
-            .setLngLat(truckPos)
-            .addTo(map);
-        });
-      });
-    } catch (e) {}
-  }
-
-  setInterval(function(){ if (window.__smdLandingVisible()) mountPreviewMap(); }, 1000);
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(mountPreviewMap, 250));
-  } else {
-    setTimeout(mountPreviewMap, 250);
-  }
-})();
-</script>
-<script id="smd-landing-live-gps-preview">
-(function() {
-  const DEFAULT_TOKEN = 'pk.eyJ1Ijoic29ubnlqb25lczIwMTQiLCJhIjoiY212NHExMmxjMTBmODJ3cHh5cmcxbmZyZSJ9.wq8EANp8vooYz3gE2o4Krg';
-  const FALLBACK_START = [-95.3498, 29.9979];
-  const FALLBACK_DEST = [-95.4446, 29.9854];
-
-  function ensureMapbox(cb) {
-    if (typeof mapboxgl !== 'undefined') return cb();
-    if (!document.getElementById('smd-mapbox-css')) {
-      const link = document.createElement('link');
-      link.id = 'smd-mapbox-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css';
-      document.head.appendChild(link);
-    }
-    if (!document.getElementById('smd-mapbox-js')) {
-      const script = document.createElement('script');
-      script.id = 'smd-mapbox-js';
-      script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js';
-      script.onload = cb;
-      script.onerror = cb;
-      document.head.appendChild(script);
-    } else {
-      setTimeout(cb, 250);
-    }
-  }
-
-  function getViewerLocation() {
-    return new Promise((resolve) => {
-      if (window.__smdGps && window.__smdGps.last && isFinite(window.__smdGps.last.lat) && isFinite(window.__smdGps.last.lng)) {
-        return resolve({ lng: Number(window.__smdGps.last.lng), lat: Number(window.__smdGps.last.lat), live: true });
-      }
-      if (!navigator.geolocation) {
-        return resolve({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false });
-      }
-      let done = false;
-      const finish = (payload) => {
-        if (done) return;
-        done = true;
-        resolve(payload);
-      };
-      setTimeout(() => finish({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false }), 4500);
-      try {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            if (pos && pos.coords && isFinite(pos.coords.latitude) && isFinite(pos.coords.longitude)) {
-              finish({ lng: Number(pos.coords.longitude), lat: Number(pos.coords.latitude), live: true });
-            } else {
-              finish({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false });
-            }
-          },
-          () => finish({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false }),
-          { enableHighAccuracy: true, maximumAge: 10000, timeout: 4000 }
-        );
-      } catch (e) {
-        finish({ lng: FALLBACK_START[0], lat: FALLBACK_START[1], live: false });
-      }
-    });
-  }
-
-  async function fetchRoadCoords(startLngLat, endLngLat, token) {
-    const pair = startLngLat[0] + ',' + startLngLat[1] + ';' + endLngLat[0] + ',' + endLngLat[1];
-    if (token) {
-      try {
-        const mbUrl = 'https://api.mapbox.com/directions/v5/mapbox/driving/' + pair +
-          '?geometries=geojson&overview=full&access_token=' + encodeURIComponent(token);
-        const res = await fetch(mbUrl);
-        if (res.ok) {
-          const json = await res.json();
-          const coords = json && json.routes && json.routes[0] && json.routes[0].geometry && json.routes[0].geometry.coordinates;
-          if (Array.isArray(coords) && coords.length > 2) return coords;
-        }
-      } catch (e) {}
-    }
-    try {
-      const osrmUrl = 'https://router.project-osrm.org/route/v1/driving/' + pair +
-        '?geometries=geojson&overview=full';
-      const res = await fetch(osrmUrl);
-      if (res.ok) {
-        const json = await res.json();
-        const coords = json && json.routes && json.routes[0] && json.routes[0].geometry && json.routes[0].geometry.coordinates;
-        if (Array.isArray(coords) && coords.length > 2) return coords;
-      }
-    } catch (e) {}
-    return [startLngLat, endLngLat];
-  }
-
-  function buildTruckEl(headingDeg, labelText) {
-    const deg = Number(headingDeg) || 0;
-    const wrap = document.createElement('div');
-    wrap.className = 'pro-vehicle-marker';
-    wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:none;filter:drop-shadow(0 8px 14px rgba(0,0,0,0.55));';
-    if (labelText) {
-      const tag = document.createElement('div');
-      tag.textContent = String(labelText).toUpperCase();
-      tag.style.cssText = 'font-size:10px;font-weight:900;color:#fff;background:rgba(0,0,0,0.82);padding:2px 7px;border-radius:6px;margin-bottom:3px;white-space:nowrap;letter-spacing:0.06em;border:1px solid rgba(251,191,36,0.55);';
-      wrap.appendChild(tag);
-    }
-    const rot = document.createElement('div');
-    rot.style.cssText = 'transform:rotate(' + deg.toFixed(1) + 'deg);transform-origin:50% 50%;width:44px;height:58px;display:flex;align-items:center;justify-content:center;';
-    rot.innerHTML = '<svg viewBox="0 0 24 36" width="38" height="56" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="1" y="8" width="4" height="8" rx="1.5" fill="#030712" stroke="#fbbf24" stroke-width="0.75"/>
-  <rect x="19" y="8" width="4" height="8" rx="1.5" fill="#030712" stroke="#fbbf24" stroke-width="0.75"/>
-  <rect x="1" y="24" width="4" height="8" rx="1.5" fill="#030712" stroke="#fbbf24" stroke-width="0.75"/>
-  <rect x="19" y="24" width="4" height="8" rx="1.5" fill="#030712" stroke="#fbbf24" stroke-width="0.75"/>
-  <rect x="3.5" y="11" width="17" height="22" rx="3" fill="#1f2937" stroke="#fbbf24" stroke-width="1.25"/>
-  <rect x="3.5" y="20" width="17" height="4" fill="#f59e0b"/>
-  <line x1="3.5" y1="22" x2="20.5" y2="22" stroke="#ffffff" stroke-width="1" opacity="0.9"/>
-  <path d="M5.5 11H18.5V5C18.5 3.34315 17.1569 2 15.5 2H8.5C6.84315 2 5.5 3.34315 5.5 5V11Z" fill="#111827" stroke="#374151" stroke-width="1.25"/>
-  <path d="M7 7.5H17L16 4H8L7 7.5Z" fill="#38bdf8" fill-opacity="0.95" stroke="#bae6fd" stroke-width="0.75"/>
-  <circle cx="6.5" cy="3" r="1.25" fill="#fbbf24"/>
-  <circle cx="17.5" cy="3" r="1.25" fill="#fbbf24"/>
-</svg>';
-    wrap.appendChild(rot);
-    return wrap;
-  }
-
-  function getPreviewHost() {
-    let el = document.getElementById('landing-preview-map') || document.getElementById('smd-landing-preview-stage');
-    if (el) return el;
-    const label = Array.from(document.querySelectorAll('*')).find(
-      (n) => n.children.length === 0 && n.textContent && n.textContent.trim() === 'LIVE ROUTE TELEMETRY'
-    );
-    const card = label && (label.closest('div[class*="rounded"]') || (label.parentElement && label.parentElement.parentElement));
-    if (!card) return null;
-    const blank = Array.from(card.querySelectorAll('div')).find((d) => {
-      const r = d.getBoundingClientRect();
-      return r.height > 120 && r.width > 150;
-    });
-    const stage = document.createElement('div');
-    stage.id = 'smd-landing-preview-stage';
-    if (blank && blank.parentElement) {
-      blank.replaceWith(stage);
-    } else {
-      card.appendChild(stage);
-    }
-    return stage;
-  }
-
-  async function initLivePreview() {
-    try {
-      const host = getPreviewHost();
-      if (!host || host.dataset.smdLiveReady === '1') return;
-      host.dataset.smdLiveReady = '1';
-      host.style.minHeight = '260px';
-      host.style.height = '260px';
-      host.style.width = '100%';
-      host.style.position = 'relative';
-      host.style.borderRadius = '14px';
-      host.style.overflow = 'hidden';
-
-      const loc = await getViewerLocation();
-      const startPt = [loc.lng, loc.lat];
-      const destPt = loc.live ? [loc.lng - 0.055, loc.lat + 0.018] : FALLBACK_DEST;
-
-      ensureMapbox(async () => {
-        if (typeof mapboxgl === 'undefined') {
-          host.dataset.smdLiveReady = '0';
-          return;
-        }
-        const token = window.MAPBOX_TOKEN || DEFAULT_TOKEN;
-        mapboxgl.accessToken = token;
-
-        const map = new mapboxgl.Map({
-          container: host,
-          style: 'mapbox://styles/mapbox/streets-v12',
-          center: startPt,
-          zoom: 13.5,
-          interactive: true
-        });
-
-        const coords = await fetchRoadCoords(startPt, destPt, token);
-        const spawnPt = (Array.isArray(coords) && coords.length > 0) ? coords[0] : startPt;
-
-        map.on('load', () => {
-          map.jumpTo({ center: spawnPt, zoom: 13.5 });
-          if (!map.getSource('smd-landing-live-route')) {
-            map.addSource('smd-landing-live-route', {
-              type: 'geojson',
-              data: {
-                type: 'Feature',
-                properties: {},
-                geometry: { type: 'LineString', coordinates: coords }
-              }
-            });
-          }
-          if (!map.getLayer('smd-landing-live-route-casing')) {
-            map.addLayer({
-              id: 'smd-landing-live-route-casing',
-              type: 'line',
-              source: 'smd-landing-live-route',
-              layout: { 'line-join': 'round', 'line-cap': 'round' },
-              paint: { 'line-color': '#0f172a', 'line-width': 7.5, 'line-opacity': 0.9 }
-            });
-          }
-          if (!map.getLayer('smd-landing-live-route-line')) {
-            map.addLayer({
-              id: 'smd-landing-live-route-line',
-              type: 'line',
-              source: 'smd-landing-live-route',
-              layout: { 'line-join': 'round', 'line-cap': 'round' },
-              paint: { 'line-color': '#2563eb', 'line-width': 4.2 }
-            });
-          }
-
-          const marker = new mapboxgl.Marker({ element: buildTruckEl(0, 'LIVE DRIVER') })
-            .setLngLat(spawnPt)
-            .addTo(map);
-
-          if (loc.live && navigator.geolocation && navigator.geolocation.watchPosition) {
-            navigator.geolocation.watchPosition(
-              (pos) => {
-                if (!pos || !pos.coords) return;
-                const pLng = Number(pos.coords.longitude);
-                const pLat = Number(pos.coords.latitude);
-                if (isFinite(pLng) && isFinite(pLat)) {
-                  marker.setLngLat([pLng, pLat]);
-                  map.panTo([pLng, pLat], { duration: 400 });
-                }
-              },
-              () => {},
-              { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-            );
-          }
-        });
-      });
-    } catch (e) {}
-  }
-
-  setInterval(function(){ if (window.__smdLandingVisible()) initLivePreview(); }, 1000);
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(initLivePreview, 200));
-  } else {
-    setTimeout(initLivePreview, 200);
-  }
-})();
-</script>
 <script id="smd-landing-3d-buildings-layer">
 (function() {
   function applyLanding3D(map) {
@@ -1118,6 +737,7 @@ window.soloFitBoth = function() {
       const host = document.getElementById('landing-preview-map') || document.getElementById('smd-landing-preview-stage');
       if (!host) return;
       const maps = [];
+      if (window.__smdPreviewMap) maps.push(window.__smdPreviewMap);
       if (window.__smdSoloMap) maps.push(window.__smdSoloMap);
       if (Array.isArray(window.__smdSoloMaps)) {
         window.__smdSoloMaps.forEach((m) => { if (m && maps.indexOf(m) === -1) maps.push(m); });
@@ -1625,6 +1245,188 @@ window.soloFitBoth = function() {
   bindInput();
   setInterval(bindInput, 600);
   document.addEventListener('DOMContentLoaded', bindInput);
+})();
+</script>
+<script id="smd-fleet-access-gate">
+(function() {
+  function getAuth() {
+    return (window.firebase && typeof firebase.auth === 'function') ? firebase.auth() : null;
+  }
+  function getDb() {
+    return (window.firebase && typeof firebase.database === 'function') ? firebase.database() : null;
+  }
+
+  function ensureModal() {
+    let modal = document.getElementById('smd-fleet-gate-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'smd-fleet-gate-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.82);padding:16px;';
+    modal.innerHTML = `
+      <div style="width:100%;max-width:420px;background:#12141c;border:1px solid #2a2f3d;border-radius:16px;padding:22px;color:#fff;font-family:system-ui,-apple-system,sans-serif;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <span style="font-weight:900;font-size:16px;color:#fbbf24;">Fleet Command   $49/mo</span>
+          <button type="button" id="smd-fg-close" style="background:none;border:none;color:#9ca3af;font-size:20px;cursor:pointer;">&times;</button>
+        </div>
+        <p style="font-size:13px;color:#d1d5db;margin:0 0 14px;">Solo remains free forever. Fleet Command requires a verified email and an active $49/mo subscription.</p>
+        <div id="smd-fg-step-auth">
+          <input id="smd-fg-email" type="email" placeholder="Work email address" style="width:100%;box-sizing:border-box;padding:10px 12px;margin-bottom:8px;border-radius:10px;border:1px solid #374151;background:#0b0d12;color:#fff;font-size:13px;" />
+          <input id="smd-fg-pass" type="password" placeholder="Password (min 6 chars)" style="width:100%;box-sizing:border-box;padding:10px 12px;margin-bottom:10px;border-radius:10px;border:1px solid #374151;background:#0b0d12;color:#fff;font-size:13px;" />
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <button type="button" id="smd-fg-signin" style="flex:1;padding:10px;border-radius:10px;border:none;background:#f59e0b;color:#000;font-weight:800;font-size:13px;cursor:pointer;">Sign In</button>
+            <button type="button" id="smd-fg-signup" style="flex:1;padding:10px;border-radius:10px;border:1px solid #f59e0b;background:transparent;color:#fbbf24;font-weight:800;font-size:13px;cursor:pointer;">Create Account</button>
+          </div>
+          <button type="button" id="smd-fg-google" style="width:100%;padding:10px;border-radius:10px;border:1px solid #374151;background:#1b1f2b;color:#fff;font-weight:700;font-size:13px;cursor:pointer;">Continue with Google</button>
+        </div>
+        <div id="smd-fg-step-verify" style="display:none;">
+          <p id="smd-fg-verify-msg" style="font-size:13px;color:#fde68a;margin:0 0 12px;">Verify your email address before continuing to Fleet billing.</p>
+          <div style="display:flex;gap:8px;">
+            <button type="button" id="smd-fg-resend" style="flex:1;padding:10px;border-radius:10px;border:1px solid #f59e0b;background:transparent;color:#fbbf24;font-weight:800;font-size:12px;cursor:pointer;">Resend Email</button>
+            <button type="button" id="smd-fg-recheck" style="flex:1;padding:10px;border-radius:10px;border:none;background:#f59e0b;color:#000;font-weight:800;font-size:12px;cursor:pointer;">I've Verified</button>
+          </div>
+        </div>
+        <div id="smd-fg-step-pay" style="display:none;">
+          <p style="font-size:13px;color:#e5e7eb;margin:0 0 12px;">Email verified. Subscribe to <strong>Fleet Command ($49/mo)</strong> to unlock multi-driver dispatch.</p>
+          <button type="button" id="smd-fg-checkout" style="width:100%;padding:11px;border-radius:10px;border:none;background:#f59e0b;color:#000;font-weight:900;font-size:13px;cursor:pointer;">Subscribe   $49/mo</button>
+        </div>
+        <div id="smd-fg-status" style="margin-top:10px;font-size:12px;color:#9ca3af;min-height:16px;"></div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('smd-fg-close').onclick = () => { modal.style.display = 'none'; };
+
+    const setStatus = (msg, isErr) => {
+      const el = document.getElementById('smd-fg-status');
+      if (el) { el.textContent = msg || ''; el.style.color = isErr ? '#f87171' : '#9ca3af'; }
+    };
+
+    const showStep = (step) => {
+      document.getElementById('smd-fg-step-auth').style.display = step === 'auth' ? 'block' : 'none';
+      document.getElementById('smd-fg-step-verify').style.display = step === 'verify' ? 'block' : 'none';
+      document.getElementById('smd-fg-step-pay').style.display = step === 'pay' ? 'block' : 'none';
+    };
+
+    modal._setStatus = setStatus;
+    modal._showStep = showStep;
+
+    document.getElementById('smd-fg-signin').onclick = async () => {
+      const auth = getAuth();
+      const email = (document.getElementById('smd-fg-email').value || '').trim();
+      const pass = document.getElementById('smd-fg-pass').value || '';
+      if (!auth || !email || !pass) return setStatus('Enter email and password.', true);
+      setStatus('Signing in...');
+      try {
+        await auth.signInWithEmailAndPassword(email, pass);
+        await window.checkFleetAccessAndSwitch(null, true);
+      } catch (e) { setStatus(e.message || 'Sign-in failed.', true); }
+    };
+
+    document.getElementById('smd-fg-signup').onclick = async () => {
+      const auth = getAuth();
+      const email = (document.getElementById('smd-fg-email').value || '').trim();
+      const pass = document.getElementById('smd-fg-pass').value || '';
+      if (!auth || !email || pass.length < 6) return setStatus('Enter valid email and 6+ char password.', true);
+      setStatus('Creating account...');
+      try {
+        const cred = await auth.createUserWithEmailAndPassword(email, pass);
+        if (cred.user && !cred.user.emailVerified) {
+          await cred.user.sendEmailVerification();
+        }
+        await window.checkFleetAccessAndSwitch(null, true);
+      } catch (e) { setStatus(e.message || 'Sign-up failed.', true); }
+    };
+
+    document.getElementById('smd-fg-google').onclick = async () => {
+      const auth = getAuth();
+      if (!auth || !firebase.auth.GoogleAuthProvider) return setStatus('Google sign-in unavailable.', true);
+      setStatus('Opening Google sign-in...');
+      try {
+        await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+        await window.checkFleetAccessAndSwitch(null, true);
+      } catch (e) { setStatus(e.message || 'Google sign-in failed.', true); }
+    };
+
+    document.getElementById('smd-fg-resend').onclick = async () => {
+      const u = getAuth() && getAuth().currentUser;
+      if (!u) return showStep('auth');
+      try {
+        await u.sendEmailVerification();
+        setStatus('Verification email sent. Check inbox & spam.');
+      } catch (e) { setStatus(e.message || 'Could not send email.', true); }
+    };
+
+    document.getElementById('smd-fg-recheck').onclick = async () => {
+      const u = getAuth() && getAuth().currentUser;
+      if (!u) return showStep('auth');
+      setStatus('Checking verification status...');
+      await u.reload();
+      await window.checkFleetAccessAndSwitch(null, true);
+    };
+
+    document.getElementById('smd-fg-checkout').onclick = async () => {
+      const u = getAuth() && getAuth().currentUser;
+      if (!u || u.isAnonymous || !u.emailVerified) return setStatus('Verified email required first.', true);
+      setStatus('Starting Stripe Checkout ($49/mo)...');
+      try {
+        const idToken = await u.getIdToken(true);
+        const resp = await fetch('/api/create-checkout-session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + idToken
+          },
+          body: JSON.stringify({ uid: u.uid, email: u.email })
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.url) throw new Error(data.error || 'Checkout failed');
+        window.location.href = data.url;
+      } catch (e) { setStatus(e.message || 'Checkout failed.', true); }
+    };
+
+    return modal;
+  }
+
+  window.checkFleetAccessAndSwitch = async function(e, openModal) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    const modal = ensureModal();
+    if (openModal !== false) modal.style.display = 'flex';
+    modal._setStatus('');
+
+    const auth = getAuth();
+    const db = getDb();
+    const user = auth ? auth.currentUser : null;
+
+    if (!user || user.isAnonymous) {
+      modal._showStep('auth');
+      return false;
+    }
+
+    if (!user.emailVerified) {
+      document.getElementById('smd-fg-verify-msg').textContent =
+        'Please verify ' + (user.email || 'your email') + ' before accessing Fleet Command.';
+      modal._showStep('verify');
+      return false;
+    }
+
+    try {
+      let validUntil = 0;
+      if (db) {
+        const snap = await db.ref('entitlements/' + user.uid + '/validUntil').once('value');
+        validUntil = Number(snap.val() || 0);
+      }
+      if (validUntil > Date.now()) {
+        modal.style.display = 'none';
+        window.location.href = 'fleet.html';
+        return true;
+      }
+    } catch (err) {
+      modal._setStatus('Could not verify subscription status.', true);
+    }
+
+    modal._showStep('pay');
+    return false;
+  };
 })();
 </script>
 </body>
